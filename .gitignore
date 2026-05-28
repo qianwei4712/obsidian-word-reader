@@ -1,0 +1,6 @@
+node_modules/
+.npm-cache/
+main.js
+dist/
+*.map
+.DS_Store
