@@ -28,7 +28,11 @@ export class WordView extends FileView {
   private documentEl: HTMLElement | null = null;
   private zoomInputEl: HTMLInputElement | null = null;
   private searchInputEl: HTMLInputElement | null = null;
+  private searchPreviousButtonEl: HTMLButtonElement | null = null;
+  private searchNextButtonEl: HTMLButtonElement | null = null;
   private searchCountEl: HTMLElement | null = null;
+  private searchMatchEls: HTMLElement[] = [];
+  private currentSearchIndex = -1;
   private buffer: ArrayBuffer | null = null;
   private renderToken = 0;
   private zoom = 1;
@@ -64,7 +68,10 @@ export class WordView extends FileView {
 
   async onUnloadFile(): Promise<void> {
     this.buffer = null;
+    this.searchMatchEls = [];
+    this.currentSearchIndex = -1;
     this.documentEl?.empty();
+    this.updateSearchState();
     this.setStatus("");
   }
 
@@ -146,11 +153,38 @@ export class WordView extends FileView {
       this.searchQuery = this.searchInputEl?.value ?? "";
       this.updateSearchHighlights();
     });
+    this.searchInputEl.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      this.navigateSearch(event.shiftKey ? -1 : 1);
+    });
+
+    this.searchPreviousButtonEl = this.createIconButton(
+      toolbarEl,
+      "chevron-up",
+      "Previous search result",
+      () => {
+        this.navigateSearch(-1);
+      },
+    );
+
+    this.searchNextButtonEl = this.createIconButton(
+      toolbarEl,
+      "chevron-down",
+      "Next search result",
+      () => {
+        this.navigateSearch(1);
+      },
+    );
 
     this.searchCountEl = toolbarEl.createSpan({
       cls: "word-reader-search-count",
       text: "0",
     });
+    this.updateSearchState();
 
     this.createIconButton(toolbarEl, "copy", "Copy text", () => {
       void this.copyText();
@@ -386,15 +420,65 @@ export class WordView extends FileView {
     }
 
     clearSearchHighlights(this.documentEl);
+    this.searchMatchEls = [];
+    this.currentSearchIndex = -1;
 
     const query = this.searchQuery.trim();
     if (!query) {
-      this.searchCountEl?.setText("0");
+      this.updateSearchState();
       return;
     }
 
-    const count = highlightText(this.documentEl, query);
-    this.searchCountEl?.setText(String(count));
+    this.searchMatchEls = highlightText(this.documentEl, query);
+    if (this.searchMatchEls.length > 0) {
+      this.currentSearchIndex = 0;
+    }
+
+    this.updateSearchState({ scrollToCurrent: this.currentSearchIndex >= 0 });
+  }
+
+  private navigateSearch(direction: number): void {
+    const matchCount = this.searchMatchEls.length;
+    if (matchCount === 0) {
+      this.updateSearchHighlights();
+      return;
+    }
+
+    this.currentSearchIndex =
+      this.currentSearchIndex < 0
+        ? 0
+        : (this.currentSearchIndex + direction + matchCount) % matchCount;
+    this.updateSearchState({ scrollToCurrent: true });
+  }
+
+  private updateSearchState(options?: { scrollToCurrent?: boolean }): void {
+    const matchCount = this.searchMatchEls.length;
+
+    for (const [index, matchEl] of this.searchMatchEls.entries()) {
+      matchEl.toggleClass(
+        "is-current",
+        index === this.currentSearchIndex && matchCount > 0,
+      );
+    }
+
+    if (matchCount === 0) {
+      this.searchCountEl?.setText("0");
+    } else {
+      this.searchCountEl?.setText(
+        `${this.currentSearchIndex + 1} / ${matchCount}`,
+      );
+    }
+
+    const hasMatches = matchCount > 0;
+    this.searchPreviousButtonEl?.toggleAttribute("disabled", !hasMatches);
+    this.searchNextButtonEl?.toggleAttribute("disabled", !hasMatches);
+
+    if (options?.scrollToCurrent && this.currentSearchIndex >= 0) {
+      this.searchMatchEls[this.currentSearchIndex]?.scrollIntoView({
+        block: "center",
+        inline: "nearest",
+      });
+    }
   }
 }
 
@@ -417,7 +501,7 @@ function clearSearchHighlights(rootEl: HTMLElement): void {
   }
 }
 
-function highlightText(rootEl: HTMLElement, query: string): number {
+function highlightText(rootEl: HTMLElement, query: string): HTMLElement[] {
   const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parentEl = node.parentElement;
@@ -438,7 +522,7 @@ function highlightText(rootEl: HTMLElement, query: string): number {
     textNodes.push(walker.currentNode as Text);
   }
 
-  let count = 0;
+  const matches: HTMLElement[] = [];
   const escapedQuery = escapeRegExp(query);
   const regex = new RegExp(escapedQuery, "gi");
 
@@ -457,8 +541,8 @@ function highlightText(rootEl: HTMLElement, query: string): number {
       markEl.className = "word-reader-highlight";
       markEl.textContent = match[0];
       fragment.appendChild(markEl);
+      matches.push(markEl);
 
-      count += 1;
       lastIndex = match.index + match[0].length;
     }
 
@@ -469,7 +553,7 @@ function highlightText(rootEl: HTMLElement, query: string): number {
     textNode.replaceWith(fragment);
   }
 
-  return count;
+  return matches;
 }
 
 function escapeRegExp(value: string): string {

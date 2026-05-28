@@ -15,7 +15,7 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 - Zoom continuously with the toolbar percentage input or `Ctrl` + mouse wheel.
 - Fit the rendered document to the pane width.
 - Click rendered images to preview them in a larger modal.
-- Search rendered text in the current document.
+- Search rendered text in the current document with previous/next navigation.
 - Copy selected rendered text, or extract and copy plain text from the whole document.
 - Open the source file with the system default Word/WPS-compatible application.
 - Create or open a same-name Markdown summary note linked back to the source `.docx`.
@@ -43,6 +43,13 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 ### Image Preview
 
 Click an image rendered from the Word document to open a larger preview modal. Press `Esc` or close the modal to return to the document.
+
+### Search
+
+- Type in the search field to highlight matching rendered text.
+- Use the up and down buttons to move between results.
+- Press `Enter` for the next result or `Shift` + `Enter` for the previous result.
+- The result counter shows the current result and total matches.
 
 ## Settings
 

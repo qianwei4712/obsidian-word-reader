@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 - 2026-05-28
+
+### Added
+
+- Added previous and next controls for rendered text search results.
+- Added `Enter` and `Shift` + `Enter` keyboard navigation in the search input.
+- Added current search result highlighting.
+
+### Changed
+
+- Search result counts now show the current result and total result count.
+- Search navigation now scrolls the active result into view.
+
 ## 0.4.0 - 2026-05-28
 
 ### Added

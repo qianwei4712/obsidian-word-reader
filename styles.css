@@ -137,6 +137,12 @@
   border-radius: 2px;
 }
 
+.word-reader-highlight.is-current {
+  background: #ff9800;
+  color: #111;
+  outline: 2px solid rgb(0 0 0 / 35%);
+}
+
 .word-reader-empty {
   padding: 32px;
   color: var(--text-muted);
