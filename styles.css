@@ -103,7 +103,7 @@
   max-width: 100%;
 }
 
-.word-reader-document img {
+.word-reader-document.can-preview-images img {
   cursor: zoom-in;
 }
 

@@ -1,7 +1,7 @@
 {
   "id": "obsidian-word-reader",
   "name": "Obsidian Word Reader",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "minAppVersion": "1.5.0",
   "description": "Open .docx files inside Obsidian as safe, read-only documents.",
   "author": "qianw",

@@ -44,6 +44,18 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 
 Click an image rendered from the Word document to open a larger preview modal. Press `Esc` or close the modal to return to the document.
 
+## Settings
+
+Open Obsidian settings, then go to `Community plugins` -> `Obsidian Word Reader`.
+
+Available settings:
+
+- Default zoom percentage for newly opened Word previews.
+- Whether newly opened Word previews should fit the pane width by default.
+- Whether rendered images can be clicked for larger preview.
+- Large file warning threshold in MB.
+- External opening note. The plugin uses the operating system default application for `.docx` files.
+
 ### Summary Notes
 
 The summary note action creates a same-name Markdown file next to the Word document.

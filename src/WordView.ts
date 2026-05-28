@@ -38,6 +38,8 @@ export class WordView extends FileView {
   constructor(leaf: WorkspaceLeaf, plugin: WordReaderPlugin) {
     super(leaf);
     this.plugin = plugin;
+    this.zoom = plugin.settings.defaultZoomPercent / 100;
+    this.fitWidth = plugin.settings.defaultFitWidth;
   }
 
   getViewType(): string {
@@ -186,7 +188,9 @@ export class WordView extends FileView {
     this.documentEl?.empty();
     this.setStatus(`Loading ${file.name}...`);
 
-    if (file.stat.size > 25 * 1024 * 1024) {
+    const largeFileWarningBytes =
+      this.plugin.settings.largeFileWarningMb * 1024 * 1024;
+    if (file.stat.size > largeFileWarningBytes) {
       new Notice("Large Word document. Rendering may take a while.");
     }
 
@@ -259,6 +263,10 @@ export class WordView extends FileView {
 
     this.documentEl.style.setProperty("--word-reader-zoom", String(this.zoom));
     this.documentEl.toggleClass("is-fit-width", this.fitWidth);
+    this.documentEl.toggleClass(
+      "can-preview-images",
+      this.plugin.settings.enableImagePreview,
+    );
     this.updateZoomControl();
   }
 
@@ -305,6 +313,10 @@ export class WordView extends FileView {
   }
 
   private handleDocumentClick(event: MouseEvent): void {
+    if (!this.plugin.settings.enableImagePreview) {
+      return;
+    }
+
     if (!(event.target instanceof Element)) {
       return;
     }

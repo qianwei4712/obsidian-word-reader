@@ -3,9 +3,20 @@ import { Plugin } from "obsidian";
 import { openExternalDocx } from "./commands/openExternal";
 import { createNoteFromDocx } from "./commands/createNoteFromDocx";
 import { WordView, VIEW_TYPE_WORD_READER } from "./WordView";
+import {
+  DEFAULT_SETTINGS,
+  WordReaderSettingTab,
+  type WordReaderSettings,
+  normalizeSettings,
+} from "./settings";
 
 export default class WordReaderPlugin extends Plugin {
+  settings: WordReaderSettings = DEFAULT_SETTINGS;
+
   async onload(): Promise<void> {
+    await this.loadSettings();
+    this.addSettingTab(new WordReaderSettingTab(this.app, this));
+
     this.registerView(
       VIEW_TYPE_WORD_READER,
       (leaf) => new WordView(leaf, this),
@@ -84,5 +95,14 @@ export default class WordReaderPlugin extends Plugin {
 
   private getActiveWordView(): WordView | null {
     return this.app.workspace.getActiveViewOfType(WordView);
+  }
+
+  async loadSettings(): Promise<void> {
+    this.settings = normalizeSettings(await this.loadData());
+  }
+
+  async saveSettings(): Promise<void> {
+    this.settings = normalizeSettings(this.settings);
+    await this.saveData(this.settings);
   }
 }
