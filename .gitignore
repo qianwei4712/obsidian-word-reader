@@ -4,3 +4,4 @@ main.js
 dist/
 *.map
 .DS_Store
+ITERATION_PLAN.local.md

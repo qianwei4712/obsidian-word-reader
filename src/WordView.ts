@@ -1,5 +1,7 @@
 import {
+  App,
   FileView,
+  Modal,
   Notice,
   TFile,
   WorkspaceLeaf,
@@ -14,12 +16,9 @@ import { extractPlainText } from "./renderer/textExtractor";
 
 export const VIEW_TYPE_WORD_READER = "word-reader-view";
 
-const ZOOM_LEVELS = [
-  { label: "80%", value: 0.8 },
-  { label: "100%", value: 1 },
-  { label: "125%", value: 1.25 },
-  { label: "150%", value: 1.5 },
-];
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 4;
+const ZOOM_STEP = 0.05;
 
 export class WordView extends FileView {
   private readonly plugin: WordReaderPlugin;
@@ -27,6 +26,7 @@ export class WordView extends FileView {
   private statusEl: HTMLElement | null = null;
   private scrollEl: HTMLElement | null = null;
   private documentEl: HTMLElement | null = null;
+  private zoomInputEl: HTMLInputElement | null = null;
   private searchInputEl: HTMLInputElement | null = null;
   private searchCountEl: HTMLElement | null = null;
   private buffer: ArrayBuffer | null = null;
@@ -107,19 +107,20 @@ export class WordView extends FileView {
       void this.reload();
     });
 
-    const zoomSelectEl = toolbarEl.createEl("select", {
-      attr: { "aria-label": "Zoom" },
+    this.zoomInputEl = toolbarEl.createEl("input", {
+      cls: "word-reader-zoom",
+      attr: {
+        type: "number",
+        min: String(Math.round(MIN_ZOOM * 100)),
+        max: String(Math.round(MAX_ZOOM * 100)),
+        step: String(Math.round(ZOOM_STEP * 100)),
+        "aria-label": "Zoom percentage",
+        title: "Zoom percentage",
+      },
     });
-    for (const zoomLevel of ZOOM_LEVELS) {
-      zoomSelectEl.createEl("option", {
-        text: zoomLevel.label,
-        value: String(zoomLevel.value),
-      });
-    }
-    zoomSelectEl.value = String(this.zoom);
-    zoomSelectEl.addEventListener("change", () => {
-      this.zoom = Number(zoomSelectEl.value);
-      this.applyDocumentOptions();
+    this.updateZoomControl();
+    this.zoomInputEl.addEventListener("change", () => {
+      this.setZoom(Number(this.zoomInputEl?.value) / 100);
     });
 
     this.createIconButton(toolbarEl, "panel-top-open", "Fit width", () => {
@@ -167,7 +168,13 @@ export class WordView extends FileView {
 
     this.statusEl = this.rootEl.createDiv({ cls: "word-reader-status" });
     this.scrollEl = this.rootEl.createDiv({ cls: "word-reader-scroll" });
+    this.scrollEl.addEventListener("wheel", (event) => {
+      this.handleCtrlWheelZoom(event);
+    });
     this.documentEl = this.scrollEl.createDiv({ cls: "word-reader-document" });
+    this.documentEl.addEventListener("click", (event) => {
+      this.handleDocumentClick(event);
+    });
     this.applyDocumentOptions();
   }
 
@@ -252,6 +259,74 @@ export class WordView extends FileView {
 
     this.documentEl.style.setProperty("--word-reader-zoom", String(this.zoom));
     this.documentEl.toggleClass("is-fit-width", this.fitWidth);
+    this.updateZoomControl();
+  }
+
+  private handleCtrlWheelZoom(event: WheelEvent): void {
+    if (!event.ctrlKey) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const scrollEl = this.scrollEl;
+    const scrollRect = scrollEl?.getBoundingClientRect();
+    const offsetX = scrollRect ? event.clientX - scrollRect.left : 0;
+    const offsetY = scrollRect ? event.clientY - scrollRect.top : 0;
+    const contentX = scrollEl ? (scrollEl.scrollLeft + offsetX) / this.zoom : 0;
+    const contentY = scrollEl ? (scrollEl.scrollTop + offsetY) / this.zoom : 0;
+    const direction = event.deltaY < 0 ? 1 : -1;
+
+    this.setZoom(this.zoom + direction * ZOOM_STEP);
+
+    if (scrollEl) {
+      scrollEl.scrollLeft = contentX * this.zoom - offsetX;
+      scrollEl.scrollTop = contentY * this.zoom - offsetY;
+    }
+  }
+
+  private setZoom(value: number): void {
+    if (!Number.isFinite(value)) {
+      this.updateZoomControl();
+      return;
+    }
+
+    this.zoom = clamp(roundToStep(value, ZOOM_STEP), MIN_ZOOM, MAX_ZOOM);
+    this.applyDocumentOptions();
+  }
+
+  private updateZoomControl(): void {
+    if (!this.zoomInputEl) {
+      return;
+    }
+
+    this.zoomInputEl.value = String(Math.round(this.zoom * 100));
+  }
+
+  private handleDocumentClick(event: MouseEvent): void {
+    if (!(event.target instanceof Element)) {
+      return;
+    }
+
+    const imageEl = event.target.closest("img");
+    if (!(imageEl instanceof HTMLImageElement)) {
+      return;
+    }
+
+    const src = imageEl.currentSrc || imageEl.src;
+    if (!src) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    new ImagePreviewModal(
+      this.app,
+      src,
+      imageEl.alt || this.file?.name || "Word document image",
+    ).open();
   }
 
   private setStatus(message: string, isError = false): void {
@@ -387,4 +462,41 @@ function highlightText(rootEl: HTMLElement, query: string): number {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function roundToStep(value: number, step: number): number {
+  return Math.round(value / step) * step;
+}
+
+class ImagePreviewModal extends Modal {
+  constructor(
+    app: App,
+    private readonly src: string,
+    private readonly alt: string,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("word-reader-image-modal-container");
+    this.contentEl.empty();
+    this.titleEl.setText(this.alt);
+    this.contentEl.addClass("word-reader-image-modal");
+
+    this.contentEl.createEl("img", {
+      cls: "word-reader-image-preview",
+      attr: {
+        src: this.src,
+        alt: this.alt,
+      },
+    });
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
 }
