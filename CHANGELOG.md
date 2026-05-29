@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0 - 2026-05-29
+
+### English
+
+#### Added
+
+- Added clearer reading and rendering status messages for large documents.
+
+#### Changed
+
+- Improved render cancellation by rendering into a temporary buffer and only replacing the visible preview when the latest render is still current.
+- Avoided duplicate rendering when the same file state and layout mode are already displayed.
+- Debounced search highlighting to reduce repeated work while typing in large documents.
+- Improved unload cleanup for render state, search timers, search matches, and buffered document data.
+
+### 中文
+
+#### 新增
+
+- 为大文档增加更清晰的读取和渲染状态提示。
+
+#### 变更
+
+- 优化渲染取消机制：先渲染到临时缓冲区，只有最新渲染仍然有效时才替换可见预览。
+- 避免同一文件状态和同一布局模式已经显示时重复渲染。
+- 对搜索高亮进行防抖处理，减少在大文档中输入搜索词时的重复计算。
+- 改进卸载清理，释放渲染状态、搜索定时器、搜索结果和文档缓冲数据。
+
 ## 0.7.0 - 2026-05-29
 
 ### English

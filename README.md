@@ -20,6 +20,7 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 - Open the source file with the system default Word/WPS-compatible application.
 - Show a clear fallback page for legacy `.doc` files with external-open and conversion guidance.
 - Show clearer messages for encrypted, damaged, or unsupported Word documents.
+- Avoid stale render results when switching or reloading documents.
 - Create or open a same-name Markdown summary note linked back to the source `.docx`.
 
 ## Supported Files
@@ -80,6 +81,14 @@ Available settings:
 - Encrypted or password-protected documents show a dedicated encrypted document message.
 - Damaged or invalid `.docx` files show a damaged document message with next-step guidance.
 - Large file warnings include the file size and use the configured threshold from settings.
+
+## Performance and Stability
+
+- Rendering work is guarded by a cancellation token so stale results are discarded.
+- Word content is rendered into a temporary buffer before replacing the visible preview.
+- The current rendered file state is tracked to avoid unnecessary repeated renders.
+- Search highlighting is debounced while typing to reduce work on large documents.
+- Closing or unloading a file releases document buffers, search timers, and search result references.
 
 ### Summary Notes
 

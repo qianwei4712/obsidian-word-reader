@@ -60,6 +60,10 @@
   color: var(--text-error);
 }
 
+.word-reader-status.is-loading {
+  color: var(--text-accent);
+}
+
 .word-reader-scroll {
   flex: 1;
   overflow: auto;

@@ -22,6 +22,7 @@ const ZOOM_STEP = 0.05;
 const MIN_IMAGE_ZOOM = 0.1;
 const MAX_IMAGE_ZOOM = 8;
 const IMAGE_ZOOM_STEP = 1.1;
+const SEARCH_DEBOUNCE_MS = 150;
 
 export class WordView extends FileView {
   private readonly plugin: WordReaderPlugin;
@@ -36,8 +37,11 @@ export class WordView extends FileView {
   private searchCountEl: HTMLElement | null = null;
   private searchMatchEls: HTMLElement[] = [];
   private currentSearchIndex = -1;
+  private searchHighlightTimer: number | null = null;
   private buffer: ArrayBuffer | null = null;
   private renderToken = 0;
+  private renderedDocumentKey: string | null = null;
+  private pendingRenderKey: string | null = null;
   private zoom = 1;
   private fitWidth = false;
   private searchQuery = "";
@@ -70,9 +74,9 @@ export class WordView extends FileView {
   }
 
   async onUnloadFile(): Promise<void> {
-    this.buffer = null;
-    this.searchMatchEls = [];
-    this.currentSearchIndex = -1;
+    this.renderToken += 1;
+    this.clearSearchTimer();
+    this.releaseDocumentState();
     this.documentEl?.empty();
     this.updateSearchState();
     this.setStatus("");
@@ -83,7 +87,7 @@ export class WordView extends FileView {
       return;
     }
 
-    await this.loadDocx(this.file);
+    await this.loadDocx(this.file, { force: true });
   }
 
   async copyText(): Promise<void> {
@@ -142,8 +146,11 @@ export class WordView extends FileView {
 
     this.createIconButton(toolbarEl, "panel-top-open", "Fit width", () => {
       this.fitWidth = !this.fitWidth;
-      if (this.buffer) {
-        void this.renderCurrentBuffer(++this.renderToken);
+      if (this.buffer && this.file) {
+        void this.renderCurrentBuffer(
+          ++this.renderToken,
+          this.getRenderKey(this.file),
+        );
       } else {
         this.applyDocumentOptions();
       }
@@ -159,7 +166,7 @@ export class WordView extends FileView {
     });
     this.searchInputEl.addEventListener("input", () => {
       this.searchQuery = this.searchInputEl?.value ?? "";
-      this.updateSearchHighlights();
+      this.scheduleSearchHighlights();
     });
     this.searchInputEl.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") {
@@ -222,22 +229,40 @@ export class WordView extends FileView {
     this.applyDocumentOptions();
   }
 
-  private async loadDocx(file: TFile): Promise<void> {
+  private async loadDocx(
+    file: TFile,
+    options: { force?: boolean } = {},
+  ): Promise<void> {
     this.ensureLayout();
 
     const token = ++this.renderToken;
-    this.buffer = null;
-    this.documentEl?.empty();
-    this.searchMatchEls = [];
-    this.currentSearchIndex = -1;
+    this.clearSearchTimer();
+    this.clearSearchHighlightsState();
     this.updateSearchState();
 
     if (this.isLegacyDocFile(file)) {
+      this.releaseDocumentState();
       this.showLegacyDocMessage(file);
       return;
     }
 
-    this.setStatus(`Loading ${file.name}...`);
+    const renderKey = this.getRenderKey(file);
+    if (
+      !options.force &&
+      this.buffer &&
+      this.renderedDocumentKey === renderKey &&
+      this.documentEl?.hasChildNodes()
+    ) {
+      this.applyDocumentOptions();
+      this.scheduleSearchHighlights();
+      this.setStatus(`Read-only preview: ${file.name}`);
+      return;
+    }
+
+    this.documentEl?.empty();
+    this.pendingRenderKey = renderKey;
+    this.renderedDocumentKey = null;
+    this.setStatus(`Reading ${file.name}...`, false, true);
 
     const largeFileWarningBytes =
       this.plugin.settings.largeFileWarningMb * 1024 * 1024;
@@ -248,6 +273,8 @@ export class WordView extends FileView {
       );
       this.setStatus(
         `Large document detected (${fileSizeMb} MB). Rendering may take a while...`,
+        false,
+        true,
       );
     }
 
@@ -258,25 +285,41 @@ export class WordView extends FileView {
       }
 
       this.buffer = buffer;
-      await this.renderCurrentBuffer(token);
+      await this.renderCurrentBuffer(token, renderKey);
     } catch (error) {
       if (token !== this.renderToken) {
         return;
       }
 
+      this.releaseDocumentState();
       this.showError(error, file);
     }
   }
 
-  private async renderCurrentBuffer(token: number): Promise<void> {
+  private async renderCurrentBuffer(
+    token: number,
+    renderKey: string,
+  ): Promise<void> {
     if (!this.buffer || !this.documentEl || !this.file) {
       return;
     }
 
-    this.documentEl.empty();
-    this.setStatus(`Rendering ${this.file.name}...`);
+    if (
+      this.renderedDocumentKey === renderKey &&
+      this.documentEl.hasChildNodes()
+    ) {
+      this.applyDocumentOptions();
+      this.scheduleSearchHighlights();
+      this.setStatus(`Read-only preview: ${this.file.name}`);
+      return;
+    }
 
-    await renderDocx(this.buffer, this.documentEl, {
+    this.setStatus(`Rendering ${this.file.name}...`, false, true);
+
+    const renderTargetEl = document.createElement("div");
+    renderTargetEl.className = "word-reader-render-buffer";
+
+    await renderDocx(this.buffer, renderTargetEl, {
       fitWidth: this.fitWidth,
     });
 
@@ -284,8 +327,15 @@ export class WordView extends FileView {
       return;
     }
 
+    this.documentEl.empty();
+    while (renderTargetEl.firstChild) {
+      this.documentEl.appendChild(renderTargetEl.firstChild);
+    }
+
+    this.renderedDocumentKey = renderKey;
+    this.pendingRenderKey = null;
     this.applyDocumentOptions();
-    this.updateSearchHighlights();
+    this.scheduleSearchHighlights();
     this.setStatus(`Read-only preview: ${this.file.name}`);
   }
 
@@ -399,13 +449,18 @@ export class WordView extends FileView {
     ).open();
   }
 
-  private setStatus(message: string, isError = false): void {
+  private setStatus(
+    message: string,
+    isError = false,
+    isLoading = false,
+  ): void {
     if (!this.statusEl) {
       return;
     }
 
     this.statusEl.setText(message);
     this.statusEl.toggleClass("is-error", isError);
+    this.statusEl.toggleClass("is-loading", isLoading);
   }
 
   private showLegacyDocMessage(file: TFile): void {
@@ -482,14 +537,30 @@ export class WordView extends FileView {
     return "";
   }
 
+  private scheduleSearchHighlights(): void {
+    this.clearSearchTimer();
+    this.searchHighlightTimer = window.setTimeout(() => {
+      this.searchHighlightTimer = null;
+      this.updateSearchHighlights();
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  private clearSearchTimer(): void {
+    if (this.searchHighlightTimer === null) {
+      return;
+    }
+
+    window.clearTimeout(this.searchHighlightTimer);
+    this.searchHighlightTimer = null;
+  }
+
   private updateSearchHighlights(): void {
     if (!this.documentEl) {
       return;
     }
 
     clearSearchHighlights(this.documentEl);
-    this.searchMatchEls = [];
-    this.currentSearchIndex = -1;
+    this.clearSearchHighlightsState();
 
     const query = this.searchQuery.trim();
     if (!query) {
@@ -551,6 +622,28 @@ export class WordView extends FileView {
 
   private isLegacyDocFile(file: TFile): boolean {
     return file.extension.toLowerCase() === "doc";
+  }
+
+  private clearSearchHighlightsState(): void {
+    this.searchMatchEls = [];
+    this.currentSearchIndex = -1;
+  }
+
+  private releaseDocumentState(): void {
+    this.clearSearchTimer();
+    this.buffer = null;
+    this.renderedDocumentKey = null;
+    this.pendingRenderKey = null;
+    this.clearSearchHighlightsState();
+  }
+
+  private getRenderKey(file: TFile): string {
+    return [
+      file.path,
+      file.stat.mtime,
+      file.stat.size,
+      this.fitWidth ? "fit" : "page",
+    ].join(":");
   }
 }
 
