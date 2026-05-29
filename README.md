@@ -44,6 +44,14 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 
 Click an image rendered from the Word document to open a larger preview modal. Press `Esc` or close the modal to return to the document.
 
+Inside the image preview:
+
+- Use the mouse wheel to zoom.
+- Drag the image to pan.
+- Double-click to fit the image back into the preview.
+- Use the toolbar to fit to window, view actual size, copy the image, or save the image.
+- The toolbar shows the original image dimensions and current zoom.
+
 ### Search
 
 - Type in the search field to highlight matching rendered text.
@@ -57,6 +65,7 @@ Open Obsidian settings, then go to `Community plugins` -> `Obsidian Word Reader`
 
 Available settings:
 
+- Settings page language.
 - Default zoom percentage for newly opened Word previews.
 - Whether newly opened Word previews should fit the pane width by default.
 - Whether rendered images can be clicked for larger preview.

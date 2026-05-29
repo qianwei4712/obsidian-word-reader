@@ -19,6 +19,9 @@ export const VIEW_TYPE_WORD_READER = "word-reader-view";
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.05;
+const MIN_IMAGE_ZOOM = 0.1;
+const MAX_IMAGE_ZOOM = 8;
+const IMAGE_ZOOM_STEP = 1.1;
 
 export class WordView extends FileView {
   private readonly plugin: WordReaderPlugin;
@@ -372,6 +375,7 @@ export class WordView extends FileView {
       this.app,
       src,
       imageEl.alt || this.file?.name || "Word document image",
+      this.file?.basename || "word-image",
     ).open();
   }
 
@@ -569,10 +573,25 @@ function roundToStep(value: number, step: number): number {
 }
 
 class ImagePreviewModal extends Modal {
+  private viewportEl: HTMLElement | null = null;
+  private imageEl: HTMLImageElement | null = null;
+  private statusEl: HTMLElement | null = null;
+  private scale = 1;
+  private translateX = 0;
+  private translateY = 0;
+  private naturalWidth = 0;
+  private naturalHeight = 0;
+  private isDragging = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private dragStartTranslateX = 0;
+  private dragStartTranslateY = 0;
+
   constructor(
     app: App,
     private readonly src: string,
     private readonly alt: string,
+    private readonly suggestedName: string,
   ) {
     super(app);
   }
@@ -583,16 +602,436 @@ class ImagePreviewModal extends Modal {
     this.titleEl.setText(this.alt);
     this.contentEl.addClass("word-reader-image-modal");
 
-    this.contentEl.createEl("img", {
+    const toolbarEl = this.contentEl.createDiv({
+      cls: "word-reader-image-toolbar",
+    });
+    this.createToolbarButton(toolbarEl, "maximize", "Fit to window", () => {
+      this.resetView();
+    });
+    this.createToolbarButton(toolbarEl, "scan", "Actual size", () => {
+      this.showActualSize();
+    });
+    this.createToolbarButton(toolbarEl, "copy", "Copy image", () => {
+      void this.copyImage();
+    });
+    this.createToolbarButton(toolbarEl, "download", "Save image as", () => {
+      void this.saveImageAs();
+    });
+    this.statusEl = toolbarEl.createSpan({
+      cls: "word-reader-image-status",
+      text: "Loading image...",
+    });
+
+    this.viewportEl = this.contentEl.createDiv({
+      cls: "word-reader-image-viewport",
+    });
+    this.viewportEl.addEventListener("wheel", (event) => {
+      this.handleWheel(event);
+    });
+    this.viewportEl.addEventListener("pointerdown", (event) => {
+      this.handlePointerDown(event);
+    });
+    this.viewportEl.addEventListener("pointermove", (event) => {
+      this.handlePointerMove(event);
+    });
+    this.viewportEl.addEventListener("pointerup", (event) => {
+      this.handlePointerUp(event);
+    });
+    this.viewportEl.addEventListener("pointercancel", (event) => {
+      this.handlePointerUp(event);
+    });
+    this.viewportEl.addEventListener("dblclick", () => {
+      this.resetView();
+    });
+
+    this.imageEl = this.viewportEl.createEl("img", {
       cls: "word-reader-image-preview",
       attr: {
         src: this.src,
         alt: this.alt,
       },
     });
+    this.imageEl.draggable = false;
+    this.imageEl.addEventListener("load", () => {
+      this.naturalWidth = this.imageEl?.naturalWidth ?? 0;
+      this.naturalHeight = this.imageEl?.naturalHeight ?? 0;
+      this.applyNaturalSize();
+      this.resetView();
+    });
+    this.imageEl.addEventListener("error", () => {
+      this.statusEl?.setText("Image could not be loaded");
+    });
   }
 
   onClose(): void {
     this.contentEl.empty();
   }
+
+  private createToolbarButton(
+    parentEl: HTMLElement,
+    icon: string,
+    label: string,
+    onClick: () => void,
+  ): HTMLButtonElement {
+    const buttonEl = parentEl.createEl("button", {
+      attr: {
+        type: "button",
+        "aria-label": label,
+        title: label,
+      },
+    });
+    setIcon(buttonEl, icon);
+    buttonEl.addEventListener("click", onClick);
+    return buttonEl;
+  }
+
+  private handleWheel(event: WheelEvent): void {
+    if (!this.viewportEl || !this.imageEl) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const rect = this.viewportEl.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left - rect.width / 2;
+    const pointerY = event.clientY - rect.top - rect.height / 2;
+    const nextScale = clamp(
+      this.scale * (event.deltaY < 0 ? IMAGE_ZOOM_STEP : 1 / IMAGE_ZOOM_STEP),
+      MIN_IMAGE_ZOOM,
+      MAX_IMAGE_ZOOM,
+    );
+
+    this.zoomAroundPoint(nextScale, pointerX, pointerY);
+  }
+
+  private handlePointerDown(event: PointerEvent): void {
+    if (!this.viewportEl || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    this.isDragging = true;
+    this.dragStartX = event.clientX;
+    this.dragStartY = event.clientY;
+    this.dragStartTranslateX = this.translateX;
+    this.dragStartTranslateY = this.translateY;
+    this.viewportEl.addClass("is-dragging");
+    this.viewportEl.setPointerCapture(event.pointerId);
+  }
+
+  private handlePointerMove(event: PointerEvent): void {
+    if (!this.isDragging) {
+      return;
+    }
+
+    this.translateX =
+      this.dragStartTranslateX + event.clientX - this.dragStartX;
+    this.translateY =
+      this.dragStartTranslateY + event.clientY - this.dragStartY;
+    this.applyTransform();
+  }
+
+  private handlePointerUp(event: PointerEvent): void {
+    if (!this.viewportEl || !this.isDragging) {
+      return;
+    }
+
+    this.isDragging = false;
+    this.viewportEl.removeClass("is-dragging");
+    if (this.viewportEl.hasPointerCapture(event.pointerId)) {
+      this.viewportEl.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  private resetView(): void {
+    if (!this.viewportEl || !this.naturalWidth || !this.naturalHeight) {
+      return;
+    }
+
+    const rect = this.viewportEl.getBoundingClientRect();
+    const fitScale =
+      rect.width > 0 && rect.height > 0
+        ? Math.min(
+            1,
+            rect.width / this.naturalWidth,
+            rect.height / this.naturalHeight,
+          )
+        : 1;
+    this.scale = clamp(fitScale, MIN_IMAGE_ZOOM, 1);
+    this.translateX = 0;
+    this.translateY = 0;
+    this.applyTransform();
+  }
+
+  private showActualSize(): void {
+    this.scale = 1;
+    this.translateX = 0;
+    this.translateY = 0;
+    this.applyTransform();
+  }
+
+  private zoomAroundPoint(
+    nextScale: number,
+    pointerX: number,
+    pointerY: number,
+  ): void {
+    const imagePointX = (pointerX - this.translateX) / this.scale;
+    const imagePointY = (pointerY - this.translateY) / this.scale;
+    this.scale = nextScale;
+    this.translateX = pointerX - imagePointX * this.scale;
+    this.translateY = pointerY - imagePointY * this.scale;
+    this.applyTransform();
+  }
+
+  private applyNaturalSize(): void {
+    if (!this.imageEl || !this.naturalWidth || !this.naturalHeight) {
+      return;
+    }
+
+    this.imageEl.style.width = `${this.naturalWidth}px`;
+    this.imageEl.style.height = `${this.naturalHeight}px`;
+  }
+
+  private applyTransform(): void {
+    if (!this.imageEl) {
+      return;
+    }
+
+    this.imageEl.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+    this.updateStatus();
+  }
+
+  private updateStatus(): void {
+    if (!this.statusEl) {
+      return;
+    }
+
+    const dimensions =
+      this.naturalWidth && this.naturalHeight
+        ? `${this.naturalWidth} x ${this.naturalHeight}px`
+        : "Unknown size";
+    this.statusEl.setText(
+      `${dimensions} · ${Math.round(this.scale * 100)}%`,
+    );
+  }
+
+  private async copyImage(): Promise<void> {
+    try {
+      const clipboard = getElectronClipboard();
+      if (clipboard) {
+        const image = await this.loadElectronImage();
+        clipboard.writeImage(image);
+      } else {
+        await copyImageWithWebClipboard(await loadImageData(this.src));
+      }
+
+      new Notice("Copied image");
+    } catch (error) {
+      new Notice(`Could not copy image: ${getErrorMessage(error)}`);
+    }
+  }
+
+  private async saveImageAs(): Promise<void> {
+    try {
+      const imageData = await loadImageData(this.src);
+      const fileName = `${sanitizeFileName(this.suggestedName)}.${imageData.extension}`;
+      const dialog = getElectronDialog();
+      if (!dialog) {
+        downloadImageData(imageData, fileName);
+        new Notice("Started image download");
+        return;
+      }
+
+      try {
+        const result = await dialog.showSaveDialog({
+          title: "Save image as",
+          defaultPath: fileName,
+          filters: [
+            {
+              name: `${imageData.extension.toUpperCase()} image`,
+              extensions: [imageData.extension],
+            },
+            { name: "All files", extensions: ["*"] },
+          ],
+        });
+
+        if (result.canceled || !result.filePath) {
+          return;
+        }
+
+        await getNodeFsPromises().writeFile(result.filePath, imageData.bytes);
+        new Notice("Saved image");
+      } catch {
+        downloadImageData(imageData, fileName);
+        new Notice("Started image download");
+      }
+    } catch (error) {
+      new Notice(`Could not save image: ${getErrorMessage(error)}`);
+    }
+  }
+
+  private async loadElectronImage(): Promise<ElectronNativeImage> {
+    const nativeImage = getElectronNativeImage();
+    if (this.src.startsWith("data:")) {
+      const image = nativeImage.createFromDataURL(this.src);
+      if (!image.isEmpty?.()) {
+        return image;
+      }
+    }
+
+    const imageData = await loadImageData(this.src);
+    return nativeImage.createFromBuffer(Buffer.from(imageData.bytes));
+  }
+}
+
+interface ElectronNativeImage {
+  isEmpty?(): boolean;
+}
+
+interface ElectronNativeImageModule {
+  createFromBuffer(buffer: Uint8Array): ElectronNativeImage;
+  createFromDataURL(dataUrl: string): ElectronNativeImage;
+}
+
+interface ElectronClipboard {
+  writeImage(image: ElectronNativeImage): void;
+}
+
+interface ElectronDialog {
+  showSaveDialog(options: {
+    title: string;
+    defaultPath: string;
+    filters: Array<{
+      name: string;
+      extensions: string[];
+    }>;
+  }): Promise<{
+    canceled: boolean;
+    filePath?: string;
+  }>;
+}
+
+interface NodeFsPromises {
+  writeFile(path: string, data: Uint8Array): Promise<void>;
+}
+
+interface ImageData {
+  bytes: Uint8Array;
+  extension: string;
+}
+
+async function loadImageData(src: string): Promise<ImageData> {
+  const response = await fetch(src);
+  if (!response.ok) {
+    throw new Error(`Image request failed: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return {
+    bytes,
+    extension: getImageExtension(blob.type),
+  };
+}
+
+function getImageExtension(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/gif":
+      return "gif";
+    case "image/webp":
+      return "webp";
+    case "image/bmp":
+      return "bmp";
+    case "image/svg+xml":
+      return "svg";
+    case "image/png":
+    default:
+      return "png";
+  }
+}
+
+function getImageMimeType(extension: string): string {
+  switch (extension) {
+    case "jpg":
+      return "image/jpeg";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    case "bmp":
+      return "image/bmp";
+    case "svg":
+      return "image/svg+xml";
+    case "png":
+    default:
+      return "image/png";
+  }
+}
+
+function createImageBlob(imageData: ImageData): Blob {
+  const buffer = imageData.bytes.buffer.slice(
+    imageData.bytes.byteOffset,
+    imageData.bytes.byteOffset + imageData.bytes.byteLength,
+  ) as ArrayBuffer;
+  return new Blob([buffer], {
+    type: getImageMimeType(imageData.extension),
+  });
+}
+
+async function copyImageWithWebClipboard(imageData: ImageData): Promise<void> {
+  if (!window.ClipboardItem || !navigator.clipboard?.write) {
+    throw new Error("Clipboard image writing is unavailable");
+  }
+
+  const blob = createImageBlob(imageData);
+  await navigator.clipboard.write([
+    new window.ClipboardItem({
+      [blob.type]: blob,
+    }),
+  ]);
+}
+
+function downloadImageData(imageData: ImageData, fileName: string): void {
+  const blob = createImageBlob(imageData);
+  const url = URL.createObjectURL(blob);
+  const linkEl = document.createElement("a");
+  linkEl.href = url;
+  linkEl.download = fileName;
+  linkEl.click();
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+function sanitizeFileName(value: string): string {
+  const sanitized = value.replace(/[<>:"/\\|?*\x00-\x1f]/g, "-").trim();
+  return sanitized || "word-image";
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getElectronClipboard(): ElectronClipboard | null {
+  const electron = require("electron") as { clipboard?: ElectronClipboard };
+  return electron.clipboard ?? null;
+}
+
+function getElectronDialog(): ElectronDialog | null {
+  const electron = require("electron") as { dialog?: ElectronDialog };
+  return electron.dialog ?? null;
+}
+
+function getElectronNativeImage(): ElectronNativeImageModule {
+  const electron = require("electron") as {
+    nativeImage: ElectronNativeImageModule;
+  };
+  return electron.nativeImage;
+}
+
+function getNodeFsPromises(): NodeFsPromises {
+  return require("fs/promises") as NodeFsPromises;
 }
