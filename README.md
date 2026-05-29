@@ -18,6 +18,8 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 - Search rendered text in the current document with previous/next navigation.
 - Copy selected rendered text, or extract and copy plain text from the whole document.
 - Open the source file with the system default Word/WPS-compatible application.
+- Show a clear fallback page for legacy `.doc` files with external-open and conversion guidance.
+- Show clearer messages for encrypted, damaged, or unsupported Word documents.
 - Create or open a same-name Markdown summary note linked back to the source `.docx`.
 
 ## Supported Files
@@ -25,7 +27,7 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 | Extension | Status | Notes |
 | --- | --- | --- |
 | `.docx` | Supported | Rendered inside Obsidian through `docx-preview`. |
-| `.doc` | Not rendered directly | Convert to `.docx`, or open with Word, WPS, or another external application. |
+| `.doc` | Guidance page | Shown inside Obsidian with external-open and `.docx` conversion guidance. |
 
 ## Usage
 
@@ -71,6 +73,13 @@ Available settings:
 - Whether rendered images can be clicked for larger preview.
 - Large file warning threshold in MB.
 - External opening note. The plugin uses the operating system default application for `.docx` files.
+
+## Compatibility and Errors
+
+- Legacy `.doc` files open to an explanation page instead of being rendered directly.
+- Encrypted or password-protected documents show a dedicated encrypted document message.
+- Damaged or invalid `.docx` files show a damaged document message with next-step guidance.
+- Large file warnings include the file size and use the configured threshold from settings.
 
 ### Summary Notes
 
@@ -169,7 +178,7 @@ E:\DevelopHelper\nvm\v18.20.8\node.exe
 
 - This is not a Word editor.
 - The plugin never saves changes back to `.docx`.
-- Legacy `.doc` files are not rendered directly.
+- Legacy `.doc` files are not rendered directly, but the plugin shows external-open and conversion guidance.
 - Complex Word layouts may not render exactly like Microsoft Word.
 - Very large files or files with many images may render slowly.
 - Mobile support is not included in this version.

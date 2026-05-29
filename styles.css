@@ -189,3 +189,40 @@
   padding: 32px;
   color: var(--text-muted);
 }
+
+.word-reader-message-title {
+  padding: 32px 32px 8px;
+  color: #111;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.word-reader-message-body {
+  max-width: 720px;
+  padding: 0 32px 12px;
+  color: #333;
+  line-height: 1.5;
+}
+
+.word-reader-message-list {
+  max-width: 720px;
+  margin: 0;
+  padding: 0 32px 16px 56px;
+  color: #333;
+  line-height: 1.5;
+}
+
+.word-reader-message-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 32px 32px;
+}
+
+.word-reader-message-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+}

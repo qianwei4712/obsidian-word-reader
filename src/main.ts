@@ -22,7 +22,7 @@ export default class WordReaderPlugin extends Plugin {
       (leaf) => new WordView(leaf, this),
     );
 
-    this.registerExtensions(["docx"], VIEW_TYPE_WORD_READER);
+    this.registerExtensions(["docx", "doc"], VIEW_TYPE_WORD_READER);
 
     this.addCommand({
       id: "word-reader-reload",

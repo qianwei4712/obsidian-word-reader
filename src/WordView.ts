@@ -91,6 +91,11 @@ export class WordView extends FileView {
       return;
     }
 
+    if (this.isLegacyDocFile(this.file)) {
+      new Notice("Legacy .doc files are not readable inside Obsidian. Open the file externally or convert it to .docx.");
+      return;
+    }
+
     const selectedText = this.getSelectedRenderedText();
     if (selectedText.length > 0) {
       await navigator.clipboard.writeText(selectedText);
@@ -223,12 +228,27 @@ export class WordView extends FileView {
     const token = ++this.renderToken;
     this.buffer = null;
     this.documentEl?.empty();
+    this.searchMatchEls = [];
+    this.currentSearchIndex = -1;
+    this.updateSearchState();
+
+    if (this.isLegacyDocFile(file)) {
+      this.showLegacyDocMessage(file);
+      return;
+    }
+
     this.setStatus(`Loading ${file.name}...`);
 
     const largeFileWarningBytes =
       this.plugin.settings.largeFileWarningMb * 1024 * 1024;
     if (file.stat.size > largeFileWarningBytes) {
-      new Notice("Large Word document. Rendering may take a while.");
+      const fileSizeMb = formatFileSizeMb(file.stat.size);
+      new Notice(
+        `Large Word document (${fileSizeMb} MB). Rendering may take a while.`,
+      );
+      this.setStatus(
+        `Large document detected (${fileSizeMb} MB). Rendering may take a while...`,
+      );
     }
 
     try {
@@ -244,7 +264,7 @@ export class WordView extends FileView {
         return;
       }
 
-      this.showError(error);
+      this.showError(error, file);
     }
   }
 
@@ -388,14 +408,58 @@ export class WordView extends FileView {
     this.statusEl.toggleClass("is-error", isError);
   }
 
-  private showError(error: unknown): void {
+  private showLegacyDocMessage(file: TFile): void {
+    if (!this.documentEl) {
+      return;
+    }
+
+    this.documentEl.empty();
+    this.documentEl.createDiv({
+      cls: "word-reader-message-title",
+      text: "Legacy .doc file",
+    });
+    this.documentEl.createDiv({
+      cls: "word-reader-message-body",
+      text: "This plugin renders .docx files directly in Obsidian. The older .doc format is a different binary Word format, so it cannot be rendered safely here.",
+    });
+    this.documentEl.createEl("ul", {
+      cls: "word-reader-message-list",
+    }).append(
+      createMessageListItem("Open the file with Word, WPS, or your system default editor."),
+      createMessageListItem("Convert or save the file as .docx, then open the converted file in Obsidian."),
+    );
+    const actionsEl = this.documentEl.createDiv({
+      cls: "word-reader-message-actions",
+    });
+    this.createIconButton(actionsEl, "external-link", "Open externally", () => {
+      void openExternalDocx(this.app, file);
+    });
+    this.setStatus(`Legacy .doc file: ${file.name}`);
+  }
+
+  private showError(error: unknown, file: TFile): void {
     const message = error instanceof Error ? error.message : String(error);
+    const errorInfo = classifyWordError(message);
     this.documentEl?.empty();
     this.documentEl?.createDiv({
-      cls: "word-reader-empty",
-      text: "This Word document could not be rendered. Use the external open button to view it in Word or WPS.",
+      cls: "word-reader-message-title",
+      text: errorInfo.title,
     });
-    this.setStatus(`Failed to open Word document: ${message}`, true);
+    this.documentEl?.createDiv({
+      cls: "word-reader-message-body",
+      text: errorInfo.body,
+    });
+
+    const actionsEl = this.documentEl?.createDiv({
+      cls: "word-reader-message-actions",
+    });
+    if (actionsEl) {
+      this.createIconButton(actionsEl, "external-link", "Open externally", () => {
+        void openExternalDocx(this.app, file);
+      });
+    }
+
+    this.setStatus(`${errorInfo.status}: ${message}`, true);
   }
 
   private getSelectedRenderedText(): string {
@@ -484,6 +548,10 @@ export class WordView extends FileView {
       });
     }
   }
+
+  private isLegacyDocFile(file: TFile): boolean {
+    return file.extension.toLowerCase() === "doc";
+  }
 }
 
 function clearSearchHighlights(rootEl: HTMLElement): void {
@@ -503,6 +571,59 @@ function clearSearchHighlights(rootEl: HTMLElement): void {
     parentEl.removeChild(highlightEl);
     parentEl.normalize();
   }
+}
+
+interface WordErrorInfo {
+  title: string;
+  body: string;
+  status: string;
+}
+
+function classifyWordError(message: string): WordErrorInfo {
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes("password") ||
+    normalizedMessage.includes("encrypt") ||
+    normalizedMessage.includes("protected")
+  ) {
+    return {
+      title: "Encrypted Word document",
+      body: "This document appears to be encrypted or password protected. Obsidian Word Reader cannot unlock it. Open it in Word or WPS, remove the password if appropriate, then save a readable .docx copy.",
+      status: "Encrypted Word document",
+    };
+  }
+
+  if (
+    normalizedMessage.includes("corrupt") ||
+    normalizedMessage.includes("invalid") ||
+    normalizedMessage.includes("malformed") ||
+    normalizedMessage.includes("zip") ||
+    normalizedMessage.includes("central directory") ||
+    normalizedMessage.includes("xml")
+  ) {
+    return {
+      title: "Damaged or unsupported Word document",
+      body: "This document could not be parsed as a valid .docx file. It may be damaged, incomplete, or saved in a format that looks like .docx but is not readable by the renderer. Try opening it in Word or WPS and saving a fresh .docx copy.",
+      status: "Damaged Word document",
+    };
+  }
+
+  return {
+    title: "Word document could not be rendered",
+    body: "This Word document could not be rendered inside Obsidian. Open it externally to inspect the file, then try saving a fresh .docx copy if the problem continues.",
+    status: "Failed to open Word document",
+  };
+}
+
+function createMessageListItem(text: string): HTMLLIElement {
+  const itemEl = document.createElement("li");
+  itemEl.textContent = text;
+  return itemEl;
+}
+
+function formatFileSizeMb(sizeBytes: number): string {
+  return (sizeBytes / 1024 / 1024).toFixed(1);
 }
 
 function highlightText(rootEl: HTMLElement, query: string): HTMLElement[] {
@@ -811,9 +932,7 @@ class ImagePreviewModal extends Modal {
       this.naturalWidth && this.naturalHeight
         ? `${this.naturalWidth} x ${this.naturalHeight}px`
         : "Unknown size";
-    this.statusEl.setText(
-      `${dimensions} · ${Math.round(this.scale * 100)}%`,
-    );
+    this.statusEl.setText(`${dimensions} - ${Math.round(this.scale * 100)}%`);
   }
 
   private async copyImage(): Promise<void> {

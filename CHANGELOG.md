@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.7.0 - 2026-05-29
+
+### English
+
+#### Added
+
+- Added legacy `.doc` file registration with an in-view guidance page.
+- Added external-open and `.docx` conversion guidance for `.doc` files.
+- Added dedicated messages for encrypted or password-protected Word documents.
+- Added dedicated messages for damaged or invalid Word documents.
+
+#### Changed
+
+- Large file warnings now include the file size and use the configured threshold.
+- Generic render failures now include clearer next-step guidance and an external-open action.
+
+### 中文
+
+#### 新增
+
+- 增加旧版 `.doc` 文件注册，并在视图中显示说明页面。
+- 为 `.doc` 文件增加外部打开和转换为 `.docx` 的说明。
+- 为加密或受密码保护的 Word 文档增加专门提示。
+- 为损坏或无效的 Word 文档增加专门提示。
+
+#### 变更
+
+- 大文件提醒现在会显示文件大小，并使用设置中的提醒阈值。
+- 通用渲染失败现在会显示更清晰的下一步建议，并提供外部打开操作。
+
 ## 0.6.0 - 2026-05-29
 
 ### English
