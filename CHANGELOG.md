@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.1.0 - 2026-05-29
+
+### English
+
+#### Added
+
+- Added Markdown copy for selected rendered content and whole `.docx` documents.
+- Added a clickable outline panel based on rendered document headings.
+- Added full Chinese and English interface text for toolbar labels, notices, statuses, errors, image preview, settings, commands, and summary note templates.
+- Added a setting for showing the outline by default.
+
+#### Changed
+
+- Summary note templates now follow the selected plugin language.
+
+### 中文
+
+#### 新增
+
+- 增加选中渲染内容和整篇 `.docx` 文档的 Markdown 复制能力。
+- 增加基于渲染标题的可点击大纲面板。
+- 为工具栏、通知、状态、错误、图片预览、设置、命令和摘要笔记模板补齐中文与英文界面文本。
+- 增加默认显示大纲的设置项。
+
+#### 变更
+
+- 摘要笔记模板现在会跟随插件选择的界面语言。
+
+## 1.0.0 - 2026-05-29
+
+### English
+
+#### Added
+
+- Added a stable release checklist, support boundaries, and long-term maintenance strategy.
+
+#### Changed
+
+- Froze the core reader scope for the stable line.
+
+### 中文
+
+#### 新增
+
+- 增加稳定版发布检查清单、支持边界和长期维护策略。
+
+#### 变更
+
+- 冻结稳定线的核心阅读器范围。
+
 ## 0.9.0 - 2026-05-29
 
 ### English

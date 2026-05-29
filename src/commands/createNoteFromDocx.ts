@@ -1,6 +1,11 @@
 import { App, Notice, TFile, normalizePath } from "obsidian";
+import { getWordReaderText, type WordReaderText } from "../i18n";
 
-export async function createNoteFromDocx(app: App, file: TFile): Promise<void> {
+export async function createNoteFromDocx(
+  app: App,
+  file: TFile,
+  text: WordReaderText = getWordReaderText("zh-CN"),
+): Promise<void> {
   const notePath = normalizePath(
     file.path.replace(/\.docx$/i, ".md"),
   );
@@ -8,19 +13,20 @@ export async function createNoteFromDocx(app: App, file: TFile): Promise<void> {
   const existing = app.vault.getAbstractFileByPath(notePath);
   if (existing instanceof TFile) {
     await app.workspace.getLeaf(true).openFile(existing);
-    new Notice("Opened existing summary note");
+    new Notice(text.notices.openedExistingSummaryNote);
     return;
   }
 
-  const content = buildSummaryNote(file);
+  const content = buildSummaryNote(file, text);
   const created = await app.vault.create(notePath, content);
   await app.workspace.getLeaf(true).openFile(created);
-  new Notice("Created summary note");
+  new Notice(text.notices.createdSummaryNote);
 }
 
-function buildSummaryNote(file: TFile): string {
+function buildSummaryNote(file: TFile, text: WordReaderText): string {
   const title = file.basename;
   const sourcePath = file.path;
+  const noteText = text.summaryNote;
 
   return [
     "---",
@@ -31,15 +37,15 @@ function buildSummaryNote(file: TFile): string {
     "",
     `# ${title}`,
     "",
-    `原文：[[${sourcePath}]]`,
+    `${noteText.sourceLabel}: [[${sourcePath}]]`,
     "",
-    "## 摘要",
+    `## ${noteText.summaryHeading}`,
     "",
-    "## 关键结论",
+    `## ${noteText.keyFindingsHeading}`,
     "",
-    "## 待处理",
+    `## ${noteText.followUpsHeading}`,
     "",
-    "## 引用摘录",
+    `## ${noteText.quotesHeading}`,
     "",
   ].join("\n");
 }

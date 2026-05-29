@@ -12,7 +12,8 @@ import type WordReaderPlugin from "./main";
 import { createNoteFromDocx } from "./commands/createNoteFromDocx";
 import { openExternalDocx } from "./commands/openExternal";
 import { renderDocx } from "./renderer/docxRenderer";
-import { extractPlainText } from "./renderer/textExtractor";
+import { extractMarkdown, extractPlainText } from "./renderer/textExtractor";
+import type { WordReaderText } from "./i18n";
 
 export const VIEW_TYPE_WORD_READER = "word-reader-view";
 
@@ -28,10 +29,14 @@ export class WordView extends FileView {
   private readonly plugin: WordReaderPlugin;
   private rootEl: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
+  private bodyEl: HTMLElement | null = null;
+  private outlineEl: HTMLElement | null = null;
+  private outlineListEl: HTMLElement | null = null;
   private scrollEl: HTMLElement | null = null;
   private documentEl: HTMLElement | null = null;
   private zoomInputEl: HTMLInputElement | null = null;
   private searchInputEl: HTMLInputElement | null = null;
+  private outlineToggleButtonEl: HTMLButtonElement | null = null;
   private searchPreviousButtonEl: HTMLButtonElement | null = null;
   private searchNextButtonEl: HTMLButtonElement | null = null;
   private searchCountEl: HTMLElement | null = null;
@@ -44,6 +49,7 @@ export class WordView extends FileView {
   private pendingRenderKey: string | null = null;
   private zoom = 1;
   private fitWidth = false;
+  private outlineVisible = false;
   private searchQuery = "";
 
   constructor(leaf: WorkspaceLeaf, plugin: WordReaderPlugin) {
@@ -51,6 +57,7 @@ export class WordView extends FileView {
     this.plugin = plugin;
     this.zoom = plugin.settings.defaultZoomPercent / 100;
     this.fitWidth = plugin.settings.defaultFitWidth;
+    this.outlineVisible = plugin.settings.showOutlineByDefault;
   }
 
   getViewType(): string {
@@ -63,6 +70,10 @@ export class WordView extends FileView {
 
   getIcon(): string {
     return "file-text";
+  }
+
+  private get text(): WordReaderText {
+    return this.plugin.text;
   }
 
   async onOpen(): Promise<void> {
@@ -78,6 +89,7 @@ export class WordView extends FileView {
     this.clearSearchTimer();
     this.releaseDocumentState();
     this.documentEl?.empty();
+    this.outlineListEl?.empty();
     this.updateSearchState();
     this.setStatus("");
   }
@@ -91,19 +103,20 @@ export class WordView extends FileView {
   }
 
   async copyText(): Promise<void> {
+    const text = this.text;
     if (!this.file) {
       return;
     }
 
     if (this.isLegacyDocFile(this.file)) {
-      new Notice("Legacy .doc files are not readable inside Obsidian. Open the file externally or convert it to .docx.");
+      new Notice(text.notices.legacyDoc);
       return;
     }
 
     const selectedText = this.getSelectedRenderedText();
     if (selectedText.length > 0) {
       await navigator.clipboard.writeText(selectedText);
-      new Notice("Copied selected text");
+      new Notice(text.notices.copiedSelectedText);
       return;
     }
 
@@ -111,20 +124,58 @@ export class WordView extends FileView {
       this.buffer = await this.app.vault.readBinary(this.file);
     }
 
-    this.setStatus("Extracting plain text...");
-    const text = await extractPlainText(this.buffer);
-    await navigator.clipboard.writeText(text);
-    this.setStatus(`Copied plain text from ${this.file.name}`);
-    new Notice("Copied plain text");
+    this.setStatus(text.status.extractingPlainText);
+    const plainText = await extractPlainText(this.buffer);
+    await navigator.clipboard.writeText(plainText);
+    this.setStatus(this.text.status.copiedPlainTextFrom(this.file.name));
+    new Notice(this.text.notices.copiedPlainText);
+  }
+
+  async copyMarkdown(): Promise<void> {
+    const text = this.text;
+    if (!this.file) {
+      return;
+    }
+
+    if (this.isLegacyDocFile(this.file)) {
+      new Notice(text.notices.legacyDoc);
+      return;
+    }
+
+    const selectedMarkdown = this.getSelectedRenderedMarkdown();
+    if (selectedMarkdown.length > 0) {
+      await navigator.clipboard.writeText(selectedMarkdown);
+      new Notice(text.notices.copiedSelectedMarkdown);
+      return;
+    }
+
+    if (!this.buffer) {
+      this.buffer = await this.app.vault.readBinary(this.file);
+    }
+
+    this.setStatus(text.status.extractingMarkdown);
+    const markdown = await extractMarkdown(this.buffer);
+    await navigator.clipboard.writeText(markdown);
+    this.setStatus(text.status.copiedMarkdownFrom(this.file.name));
+    new Notice(text.notices.copiedMarkdown);
+  }
+
+  refreshInterfaceLanguage(): void {
+    const file = this.file;
+    this.buildLayout();
+    if (file) {
+      void this.loadDocx(file, { force: true });
+    }
   }
 
   private buildLayout(): void {
     this.contentEl.empty();
+    const text = this.text;
 
     this.rootEl = this.contentEl.createDiv({ cls: "word-reader-root" });
     const toolbarEl = this.rootEl.createDiv({ cls: "word-reader-toolbar" });
 
-    this.createIconButton(toolbarEl, "refresh-cw", "Reload", () => {
+    this.createIconButton(toolbarEl, "refresh-cw", text.toolbar.reload, () => {
       void this.reload();
     });
 
@@ -135,8 +186,8 @@ export class WordView extends FileView {
         min: String(Math.round(MIN_ZOOM * 100)),
         max: String(Math.round(MAX_ZOOM * 100)),
         step: String(Math.round(ZOOM_STEP * 100)),
-        "aria-label": "Zoom percentage",
-        title: "Zoom percentage",
+        "aria-label": text.toolbar.zoomPercentage,
+        title: text.toolbar.zoomPercentage,
       },
     });
     this.updateZoomControl();
@@ -144,7 +195,7 @@ export class WordView extends FileView {
       this.setZoom(Number(this.zoomInputEl?.value) / 100);
     });
 
-    this.createIconButton(toolbarEl, "panel-top-open", "Fit width", () => {
+    this.createIconButton(toolbarEl, "panel-top-open", text.toolbar.fitWidth, () => {
       this.fitWidth = !this.fitWidth;
       if (this.buffer && this.file) {
         void this.renderCurrentBuffer(
@@ -156,14 +207,25 @@ export class WordView extends FileView {
       }
     });
 
+    this.outlineToggleButtonEl = this.createIconButton(
+      toolbarEl,
+      "list-tree",
+      this.outlineVisible ? text.toolbar.hideOutline : text.toolbar.showOutline,
+      () => {
+        this.outlineVisible = !this.outlineVisible;
+        this.applyOutlineVisibility();
+      },
+    );
+
     this.searchInputEl = toolbarEl.createEl("input", {
       cls: "word-reader-search",
       attr: {
         type: "search",
-        placeholder: "Search",
-        "aria-label": "Search document",
+        placeholder: text.toolbar.searchPlaceholder,
+        "aria-label": text.toolbar.searchDocument,
       },
     });
+    this.searchInputEl.value = this.searchQuery;
     this.searchInputEl.addEventListener("input", () => {
       this.searchQuery = this.searchInputEl?.value ?? "";
       this.scheduleSearchHighlights();
@@ -180,7 +242,7 @@ export class WordView extends FileView {
     this.searchPreviousButtonEl = this.createIconButton(
       toolbarEl,
       "chevron-up",
-      "Previous search result",
+      text.toolbar.previousSearchResult,
       () => {
         this.navigateSearch(-1);
       },
@@ -189,7 +251,7 @@ export class WordView extends FileView {
     this.searchNextButtonEl = this.createIconButton(
       toolbarEl,
       "chevron-down",
-      "Next search result",
+      text.toolbar.nextSearchResult,
       () => {
         this.navigateSearch(1);
       },
@@ -201,24 +263,37 @@ export class WordView extends FileView {
     });
     this.updateSearchState();
 
-    this.createIconButton(toolbarEl, "copy", "Copy text", () => {
+    this.createIconButton(toolbarEl, "copy", text.toolbar.copyText, () => {
       void this.copyText();
     });
 
-    this.createIconButton(toolbarEl, "file-plus", "Create summary note", () => {
+    this.createIconButton(toolbarEl, "clipboard-copy", text.toolbar.copyMarkdown, () => {
+      void this.copyMarkdown();
+    });
+
+    this.createIconButton(toolbarEl, "file-plus", text.toolbar.createSummaryNote, () => {
       if (this.file) {
-        void createNoteFromDocx(this.app, this.file);
+        void createNoteFromDocx(this.app, this.file, this.text);
       }
     });
 
-    this.createIconButton(toolbarEl, "external-link", "Open externally", () => {
+    this.createIconButton(toolbarEl, "external-link", text.toolbar.openExternally, () => {
       if (this.file) {
-        void openExternalDocx(this.app, this.file);
+        void openExternalDocx(this.app, this.file, this.text);
       }
     });
 
     this.statusEl = this.rootEl.createDiv({ cls: "word-reader-status" });
-    this.scrollEl = this.rootEl.createDiv({ cls: "word-reader-scroll" });
+    this.bodyEl = this.rootEl.createDiv({ cls: "word-reader-body" });
+    this.outlineEl = this.bodyEl.createDiv({ cls: "word-reader-outline" });
+    this.outlineEl.createDiv({
+      cls: "word-reader-outline-title",
+      text: text.outline.title,
+    });
+    this.outlineListEl = this.outlineEl.createDiv({
+      cls: "word-reader-outline-list",
+    });
+    this.scrollEl = this.bodyEl.createDiv({ cls: "word-reader-scroll" });
     this.scrollEl.addEventListener("wheel", (event) => {
       this.handleCtrlWheelZoom(event);
     });
@@ -227,6 +302,7 @@ export class WordView extends FileView {
       this.handleDocumentClick(event);
     });
     this.applyDocumentOptions();
+    this.applyOutlineVisibility();
   }
 
   private async loadDocx(
@@ -254,25 +330,25 @@ export class WordView extends FileView {
       this.documentEl?.hasChildNodes()
     ) {
       this.applyDocumentOptions();
+      this.updateOutline();
       this.scheduleSearchHighlights();
-      this.setStatus(`Read-only preview: ${file.name}`);
+      this.setStatus(this.text.status.preview(file.name));
       return;
     }
 
     this.documentEl?.empty();
+    this.outlineListEl?.empty();
     this.pendingRenderKey = renderKey;
     this.renderedDocumentKey = null;
-    this.setStatus(`Reading ${file.name}...`, false, true);
+    this.setStatus(this.text.status.reading(file.name), false, true);
 
     const largeFileWarningBytes =
       this.plugin.settings.largeFileWarningMb * 1024 * 1024;
     if (file.stat.size > largeFileWarningBytes) {
       const fileSizeMb = formatFileSizeMb(file.stat.size);
-      new Notice(
-        `Large Word document (${fileSizeMb} MB). Rendering may take a while.`,
-      );
+      new Notice(this.text.notices.largeDocument(fileSizeMb));
       this.setStatus(
-        `Large document detected (${fileSizeMb} MB). Rendering may take a while...`,
+        this.text.status.largeDocument(fileSizeMb),
         false,
         true,
       );
@@ -309,12 +385,13 @@ export class WordView extends FileView {
       this.documentEl.hasChildNodes()
     ) {
       this.applyDocumentOptions();
+      this.updateOutline();
       this.scheduleSearchHighlights();
-      this.setStatus(`Read-only preview: ${this.file.name}`);
+      this.setStatus(this.text.status.preview(this.file.name));
       return;
     }
 
-    this.setStatus(`Rendering ${this.file.name}...`, false, true);
+    this.setStatus(this.text.status.rendering(this.file.name), false, true);
 
     const renderTargetEl = document.createElement("div");
     renderTargetEl.className = "word-reader-render-buffer";
@@ -328,6 +405,7 @@ export class WordView extends FileView {
     }
 
     this.documentEl.empty();
+    this.outlineListEl?.empty();
     while (renderTargetEl.firstChild) {
       this.documentEl.appendChild(renderTargetEl.firstChild);
     }
@@ -335,8 +413,9 @@ export class WordView extends FileView {
     this.renderedDocumentKey = renderKey;
     this.pendingRenderKey = null;
     this.applyDocumentOptions();
+    this.updateOutline();
     this.scheduleSearchHighlights();
-    this.setStatus(`Read-only preview: ${this.file.name}`);
+    this.setStatus(this.text.status.preview(this.file.name));
   }
 
   private ensureLayout(): void {
@@ -375,6 +454,51 @@ export class WordView extends FileView {
       this.plugin.settings.enableImagePreview,
     );
     this.updateZoomControl();
+  }
+
+  private applyOutlineVisibility(): void {
+    this.bodyEl?.toggleClass("is-outline-visible", this.outlineVisible);
+    const label = this.outlineVisible
+      ? this.text.toolbar.hideOutline
+      : this.text.toolbar.showOutline;
+    if (this.outlineToggleButtonEl) {
+      this.outlineToggleButtonEl.setAttribute("aria-label", label);
+      this.outlineToggleButtonEl.setAttribute("title", label);
+    }
+  }
+
+  private updateOutline(): void {
+    if (!this.documentEl || !this.outlineListEl) {
+      return;
+    }
+
+    this.outlineListEl.empty();
+    const headings = getDocumentHeadings(this.documentEl);
+
+    if (headings.length === 0) {
+      this.outlineListEl.createDiv({
+        cls: "word-reader-outline-empty",
+        text: this.text.outline.empty,
+      });
+      return;
+    }
+
+    for (const heading of headings) {
+      const buttonEl = this.outlineListEl.createEl("button", {
+        cls: `word-reader-outline-item level-${heading.level}`,
+        attr: {
+          type: "button",
+          title: heading.text,
+        },
+      });
+      buttonEl.setText(heading.text);
+      buttonEl.addEventListener("click", () => {
+        heading.element.scrollIntoView({
+          block: "start",
+          inline: "nearest",
+        });
+      });
+    }
   }
 
   private handleCtrlWheelZoom(event: WheelEvent): void {
@@ -446,6 +570,7 @@ export class WordView extends FileView {
       src,
       imageEl.alt || this.file?.name || "Word document image",
       this.file?.basename || "word-image",
+      this.text,
     ).open();
   }
 
@@ -471,30 +596,30 @@ export class WordView extends FileView {
     this.documentEl.empty();
     this.documentEl.createDiv({
       cls: "word-reader-message-title",
-      text: "Legacy .doc file",
+      text: this.text.legacyDoc.title,
     });
     this.documentEl.createDiv({
       cls: "word-reader-message-body",
-      text: "This plugin renders .docx files directly in Obsidian. The older .doc format is a different binary Word format, so it cannot be rendered safely here.",
+      text: this.text.legacyDoc.body,
     });
     this.documentEl.createEl("ul", {
       cls: "word-reader-message-list",
     }).append(
-      createMessageListItem("Open the file with Word, WPS, or your system default editor."),
-      createMessageListItem("Convert or save the file as .docx, then open the converted file in Obsidian."),
+      createMessageListItem(this.text.legacyDoc.openExternally),
+      createMessageListItem(this.text.legacyDoc.convertToDocx),
     );
     const actionsEl = this.documentEl.createDiv({
       cls: "word-reader-message-actions",
     });
-    this.createIconButton(actionsEl, "external-link", "Open externally", () => {
-      void openExternalDocx(this.app, file);
+    this.createIconButton(actionsEl, "external-link", this.text.toolbar.openExternally, () => {
+      void openExternalDocx(this.app, file, this.text);
     });
-    this.setStatus(`Legacy .doc file: ${file.name}`);
+    this.setStatus(this.text.status.legacyDoc(file.name));
   }
 
   private showError(error: unknown, file: TFile): void {
     const message = error instanceof Error ? error.message : String(error);
-    const errorInfo = classifyWordError(message);
+    const errorInfo = classifyWordError(message, this.text);
     this.documentEl?.empty();
     this.documentEl?.createDiv({
       cls: "word-reader-message-title",
@@ -509,8 +634,8 @@ export class WordView extends FileView {
       cls: "word-reader-message-actions",
     });
     if (actionsEl) {
-      this.createIconButton(actionsEl, "external-link", "Open externally", () => {
-        void openExternalDocx(this.app, file);
+      this.createIconButton(actionsEl, "external-link", this.text.toolbar.openExternally, () => {
+        void openExternalDocx(this.app, file, this.text);
       });
     }
 
@@ -535,6 +660,31 @@ export class WordView extends FileView {
     }
 
     return "";
+  }
+
+  private getSelectedRenderedMarkdown(): string {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !this.documentEl) {
+      return "";
+    }
+
+    const anchorNode = selection.anchorNode;
+    const focusNode = selection.focusNode;
+    if (
+      !anchorNode ||
+      !focusNode ||
+      !this.documentEl.contains(anchorNode) ||
+      !this.documentEl.contains(focusNode)
+    ) {
+      return "";
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+      fragment.appendChild(selection.getRangeAt(index).cloneContents());
+    }
+
+    return htmlFragmentToMarkdown(fragment).trim();
   }
 
   private scheduleSearchHighlights(): void {
@@ -672,7 +822,7 @@ interface WordErrorInfo {
   status: string;
 }
 
-function classifyWordError(message: string): WordErrorInfo {
+function classifyWordError(message: string, text: WordReaderText): WordErrorInfo {
   const normalizedMessage = message.toLowerCase();
 
   if (
@@ -681,9 +831,9 @@ function classifyWordError(message: string): WordErrorInfo {
     normalizedMessage.includes("protected")
   ) {
     return {
-      title: "Encrypted Word document",
-      body: "This document appears to be encrypted or password protected. Obsidian Word Reader cannot unlock it. Open it in Word or WPS, remove the password if appropriate, then save a readable .docx copy.",
-      status: "Encrypted Word document",
+      title: text.errors.encryptedTitle,
+      body: text.errors.encryptedBody,
+      status: text.errors.encryptedStatus,
     };
   }
 
@@ -696,16 +846,16 @@ function classifyWordError(message: string): WordErrorInfo {
     normalizedMessage.includes("xml")
   ) {
     return {
-      title: "Damaged or unsupported Word document",
-      body: "This document could not be parsed as a valid .docx file. It may be damaged, incomplete, or saved in a format that looks like .docx but is not readable by the renderer. Try opening it in Word or WPS and saving a fresh .docx copy.",
-      status: "Damaged Word document",
+      title: text.errors.damagedTitle,
+      body: text.errors.damagedBody,
+      status: text.errors.damagedStatus,
     };
   }
 
   return {
-    title: "Word document could not be rendered",
-    body: "This Word document could not be rendered inside Obsidian. Open it externally to inspect the file, then try saving a fresh .docx copy if the problem continues.",
-    status: "Failed to open Word document",
+    title: text.errors.genericTitle,
+    body: text.errors.genericBody,
+    status: text.errors.genericStatus,
   };
 }
 
@@ -774,6 +924,148 @@ function highlightText(rootEl: HTMLElement, query: string): HTMLElement[] {
   return matches;
 }
 
+interface OutlineHeading {
+  element: HTMLElement;
+  level: number;
+  text: string;
+}
+
+function getDocumentHeadings(rootEl: HTMLElement): OutlineHeading[] {
+  const headingEls = Array.from(
+    rootEl.querySelectorAll<HTMLElement>(
+      "h1, h2, h3, h4, h5, h6, [class*='Heading'], [class*='heading']",
+    ),
+  );
+  const seen = new Set<HTMLElement>();
+  const headings: OutlineHeading[] = [];
+
+  for (const headingEl of headingEls) {
+    if (seen.has(headingEl)) {
+      continue;
+    }
+    seen.add(headingEl);
+
+    const text = normalizeWhitespace(headingEl.textContent ?? "");
+    if (!text) {
+      continue;
+    }
+
+    headings.push({
+      element: headingEl,
+      level: getHeadingLevel(headingEl),
+      text,
+    });
+  }
+
+  return headings;
+}
+
+function getHeadingLevel(element: HTMLElement): number {
+  const tagMatch = /^H([1-6])$/.exec(element.tagName);
+  if (tagMatch) {
+    return Number(tagMatch[1]);
+  }
+
+  const classText = Array.from(element.classList).join(" ");
+  const classMatch = /heading[-_ ]?([1-6])/i.exec(classText);
+  return classMatch ? Number(classMatch[1]) : 2;
+}
+
+function htmlFragmentToMarkdown(fragment: DocumentFragment): string {
+  return markdownForChildNodes(fragment).replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function markdownForChildNodes(parent: Node): string {
+  return Array.from(parent.childNodes).map(markdownForNode).join("");
+}
+
+function markdownForNode(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent ?? "";
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return markdownForChildNodes(node);
+  }
+
+  const tagName = node.tagName.toLowerCase();
+  const content = markdownForChildNodes(node).trim();
+
+  switch (tagName) {
+    case "h1":
+    case "h2":
+    case "h3":
+    case "h4":
+    case "h5":
+    case "h6":
+      return `${"#".repeat(Number(tagName.slice(1)))} ${content}\n\n`;
+    case "p":
+    case "div":
+      return content ? `${content}\n\n` : "";
+    case "strong":
+    case "b":
+      return content ? `**${content}**` : "";
+    case "em":
+    case "i":
+      return content ? `*${content}*` : "";
+    case "code":
+      return content ? `\`${content.replace(/`/g, "\\`")}\`` : "";
+    case "br":
+      return "\n";
+    case "a": {
+      const href = node.getAttribute("href");
+      return href && content ? `[${content}](${href})` : content;
+    }
+    case "ul":
+      return `${markdownForList(node, "-")}\n`;
+    case "ol":
+      return `${markdownForList(node, "1.")}\n`;
+    case "li":
+      return content;
+    case "table":
+      return `${markdownForTable(node)}\n\n`;
+    case "tr":
+    case "tbody":
+    case "thead":
+    case "span":
+    default:
+      return markdownForChildNodes(node);
+  }
+}
+
+function markdownForList(listEl: HTMLElement, marker: string): string {
+  return Array.from(listEl.children)
+    .filter((child): child is HTMLElement => child instanceof HTMLElement)
+    .filter((child) => child.tagName.toLowerCase() === "li")
+    .map((itemEl) => `${marker} ${markdownForChildNodes(itemEl).trim()}`)
+    .join("\n");
+}
+
+function markdownForTable(tableEl: HTMLElement): string {
+  const rows = Array.from(tableEl.querySelectorAll("tr"))
+    .map((rowEl) =>
+      Array.from(rowEl.children).map((cellEl) =>
+        normalizeWhitespace(cellEl.textContent ?? "").replace(/\|/g, "\\|"),
+      ),
+    )
+    .filter((row) => row.length > 0);
+
+  if (rows.length === 0) {
+    return "";
+  }
+
+  const header = rows[0];
+  const divider = header.map(() => "---");
+  const body = rows.slice(1);
+  return [header, divider, ...body]
+    .map((row) => `| ${row.join(" | ")} |`)
+    .join("\n");
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -806,6 +1098,7 @@ class ImagePreviewModal extends Modal {
     private readonly src: string,
     private readonly alt: string,
     private readonly suggestedName: string,
+    private readonly text: WordReaderText,
   ) {
     super(app);
   }
@@ -819,21 +1112,21 @@ class ImagePreviewModal extends Modal {
     const toolbarEl = this.contentEl.createDiv({
       cls: "word-reader-image-toolbar",
     });
-    this.createToolbarButton(toolbarEl, "maximize", "Fit to window", () => {
+    this.createToolbarButton(toolbarEl, "maximize", this.text.imagePreview.fitToWindow, () => {
       this.resetView();
     });
-    this.createToolbarButton(toolbarEl, "scan", "Actual size", () => {
+    this.createToolbarButton(toolbarEl, "scan", this.text.imagePreview.actualSize, () => {
       this.showActualSize();
     });
-    this.createToolbarButton(toolbarEl, "copy", "Copy image", () => {
+    this.createToolbarButton(toolbarEl, "copy", this.text.imagePreview.copyImage, () => {
       void this.copyImage();
     });
-    this.createToolbarButton(toolbarEl, "download", "Save image as", () => {
+    this.createToolbarButton(toolbarEl, "download", this.text.imagePreview.saveImageAs, () => {
       void this.saveImageAs();
     });
     this.statusEl = toolbarEl.createSpan({
       cls: "word-reader-image-status",
-      text: "Loading image...",
+      text: this.text.imagePreview.loading,
     });
 
     this.viewportEl = this.contentEl.createDiv({
@@ -873,7 +1166,7 @@ class ImagePreviewModal extends Modal {
       this.resetView();
     });
     this.imageEl.addEventListener("error", () => {
-      this.statusEl?.setText("Image could not be loaded");
+      this.statusEl?.setText(this.text.imagePreview.loadFailed);
     });
   }
 
@@ -1024,7 +1317,7 @@ class ImagePreviewModal extends Modal {
     const dimensions =
       this.naturalWidth && this.naturalHeight
         ? `${this.naturalWidth} x ${this.naturalHeight}px`
-        : "Unknown size";
+        : this.text.imagePreview.unknownSize;
     this.statusEl.setText(`${dimensions} - ${Math.round(this.scale * 100)}%`);
   }
 
@@ -1038,9 +1331,9 @@ class ImagePreviewModal extends Modal {
         await copyImageWithWebClipboard(await loadImageData(this.src));
       }
 
-      new Notice("Copied image");
+      new Notice(this.text.notices.copiedImage);
     } catch (error) {
-      new Notice(`Could not copy image: ${getErrorMessage(error)}`);
+      new Notice(this.text.notices.couldNotCopyImage(getErrorMessage(error)));
     }
   }
 
@@ -1051,20 +1344,22 @@ class ImagePreviewModal extends Modal {
       const dialog = getElectronDialog();
       if (!dialog) {
         downloadImageData(imageData, fileName);
-        new Notice("Started image download");
+        new Notice(this.text.notices.startedImageDownload);
         return;
       }
 
       try {
         const result = await dialog.showSaveDialog({
-          title: "Save image as",
+          title: this.text.imagePreview.saveDialogTitle,
           defaultPath: fileName,
           filters: [
             {
-              name: `${imageData.extension.toUpperCase()} image`,
+              name: this.text.imagePreview.imageFilterName(
+                imageData.extension,
+              ),
               extensions: [imageData.extension],
             },
-            { name: "All files", extensions: ["*"] },
+            { name: this.text.imagePreview.allFiles, extensions: ["*"] },
           ],
         });
 
@@ -1073,13 +1368,13 @@ class ImagePreviewModal extends Modal {
         }
 
         await getNodeFsPromises().writeFile(result.filePath, imageData.bytes);
-        new Notice("Saved image");
+        new Notice(this.text.notices.savedImage);
       } catch {
         downloadImageData(imageData, fileName);
-        new Notice("Started image download");
+        new Notice(this.text.notices.startedImageDownload);
       }
     } catch (error) {
-      new Notice(`Could not save image: ${getErrorMessage(error)}`);
+      new Notice(this.text.notices.couldNotSaveImage(getErrorMessage(error)));
     }
   }
 

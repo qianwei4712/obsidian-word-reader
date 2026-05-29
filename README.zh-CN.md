@@ -16,7 +16,9 @@ Obsidian Word Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内
 - 支持适配当前窗格宽度。
 - 支持点击渲染内容中的图片，在弹窗中放大预览。
 - 支持在当前渲染内容中搜索，并在搜索结果间前后跳转。
-- 支持复制选中文本，或提取并复制整篇纯文本。
+- 支持复制选中文本、整篇纯文本、选中内容 Markdown 或整篇 Markdown。
+- 支持通过可点击大纲在渲染标题之间跳转。
+- 支持插件界面在中文和英文之间切换。
 - 支持用系统默认程序打开原始 Word 文件。
 - 旧版 `.doc` 文件会显示说明页面，提供外部打开和转换建议。
 - 加密、损坏或不受支持的 Word 文档会显示更明确的错误提示。
@@ -35,7 +37,7 @@ Obsidian Word Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内
 1. 将 `.docx` 文件放入 Obsidian vault。
 2. 在文件列表中点击该 `.docx`。
 3. 插件会在 Obsidian 标签页中打开只读预览。
-4. 使用顶部工具栏进行刷新、缩放、适配宽度、搜索、复制文本、创建摘要笔记或外部打开。
+4. 使用顶部工具栏进行刷新、缩放、适配宽度、显示大纲、搜索、复制文本、复制 Markdown、创建摘要笔记或外部打开。
 
 ### 缩放
 
@@ -62,15 +64,29 @@ Obsidian Word Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内
 - 按 `Enter` 跳转到下一个结果，按 `Shift` + `Enter` 跳转到上一个结果。
 - 结果计数会显示当前结果序号和总匹配数量。
 
+### 大纲
+
+- 使用大纲按钮显示或隐藏标题大纲。
+- 点击大纲条目会滚动到对应的渲染标题。
+- 大纲来自 Word 文档渲染结果中的标题结构。
+
+### 复制
+
+- 可以将选中的渲染文本复制为纯文本。
+- 没有选区时，可以复制整篇文档纯文本。
+- 可以将选中的渲染内容复制为 Markdown。
+- 没有选区时，可以将整篇 `.docx` 转换并复制为 Markdown。
+
 ## 设置
 
 打开 Obsidian 设置，然后进入 `第三方插件` -> `Obsidian Word Reader`。
 
 当前支持的设置：
 
-- 设置页面语言。
+- 插件界面语言。
 - 新打开 Word 预览时使用的默认缩放比例。
 - 新打开 Word 预览时是否默认适配当前窗格宽度。
+- 是否默认显示大纲。
 - 是否允许点击渲染出的图片进行放大预览。
 - 大文件提醒阈值，单位为 MB。
 - 外部打开说明。插件会使用操作系统为 `.docx` 配置的默认应用。
@@ -89,6 +105,10 @@ Obsidian Word Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内
 - 插件会跟踪当前已渲染的文件状态，避免不必要的重复渲染。
 - 搜索高亮在输入时会进行防抖处理，减少大文档中的重复计算。
 - 关闭或卸载文件时会释放文档缓冲、搜索定时器和搜索结果引用。
+
+## 稳定性与支持边界
+
+稳定版核心范围、手动测试清单、支持边界和长期维护策略见 [STABILITY.md](STABILITY.md)。
 
 ### 摘要笔记
 
@@ -182,8 +202,8 @@ npm run release
 预期输出：
 
 ```text
-release/obsidian-word-reader-v0.9.0.zip
-release/CHANGELOG-0.9.0.md
+release/obsidian-word-reader-v1.1.0.zip
+release/CHANGELOG-1.1.0.md
 ```
 
 zip 根目录只包含 Obsidian 需要的文件：
@@ -201,11 +221,11 @@ styles.css
 推送版本 tag 后，GitHub Actions 会自动创建 release：
 
 ```bash
-git tag v0.9.0
-git push origin v0.9.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
-workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，然后构建插件、生成 `release/obsidian-word-reader-v0.9.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并上传 zip 到 GitHub Release。
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，然后构建插件、生成 `release/obsidian-word-reader-v1.1.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并上传 zip 到 GitHub Release。
 
 ## 开发
 

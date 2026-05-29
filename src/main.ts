@@ -9,6 +9,7 @@ import {
   type WordReaderSettings,
   normalizeSettings,
 } from "./settings";
+import { getWordReaderText, type WordReaderText } from "./i18n";
 
 export default class WordReaderPlugin extends Plugin {
   settings: WordReaderSettings = DEFAULT_SETTINGS;
@@ -16,6 +17,7 @@ export default class WordReaderPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.addSettingTab(new WordReaderSettingTab(this.app, this));
+    const text = this.text;
 
     this.registerView(
       VIEW_TYPE_WORD_READER,
@@ -26,7 +28,7 @@ export default class WordReaderPlugin extends Plugin {
 
     this.addCommand({
       id: "word-reader-reload",
-      name: "Reload current Word document",
+      name: text.commands.reload,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
         if (!view?.file) {
@@ -43,7 +45,7 @@ export default class WordReaderPlugin extends Plugin {
 
     this.addCommand({
       id: "word-reader-copy-text",
-      name: "Copy text from current Word document",
+      name: text.commands.copyText,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
         if (!view?.file) {
@@ -59,8 +61,8 @@ export default class WordReaderPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "word-reader-create-note",
-      name: "Create summary note for current Word document",
+      id: "word-reader-copy-markdown",
+      name: text.commands.copyMarkdown,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
         if (!view?.file) {
@@ -68,7 +70,24 @@ export default class WordReaderPlugin extends Plugin {
         }
 
         if (!checking) {
-          void createNoteFromDocx(this.app, view.file);
+          void view.copyMarkdown();
+        }
+
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: "word-reader-create-note",
+      name: text.commands.createNote,
+      checkCallback: (checking) => {
+        const view = this.getActiveWordView();
+        if (!view?.file) {
+          return false;
+        }
+
+        if (!checking) {
+          void createNoteFromDocx(this.app, view.file, this.text);
         }
 
         return true;
@@ -77,7 +96,7 @@ export default class WordReaderPlugin extends Plugin {
 
     this.addCommand({
       id: "word-reader-open-external",
-      name: "Open current Word document externally",
+      name: text.commands.openExternal,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
         if (!view?.file) {
@@ -85,7 +104,7 @@ export default class WordReaderPlugin extends Plugin {
         }
 
         if (!checking) {
-          void openExternalDocx(this.app, view.file);
+          void openExternalDocx(this.app, view.file, this.text);
         }
 
         return true;
@@ -95,6 +114,18 @@ export default class WordReaderPlugin extends Plugin {
 
   private getActiveWordView(): WordView | null {
     return this.app.workspace.getActiveViewOfType(WordView);
+  }
+
+  get text(): WordReaderText {
+    return getWordReaderText(this.settings.language);
+  }
+
+  refreshWordReaderViews(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_WORD_READER)) {
+      if (leaf.view instanceof WordView) {
+        leaf.view.refreshInterfaceLanguage();
+      }
+    }
   }
 
   async loadSettings(): Promise<void> {

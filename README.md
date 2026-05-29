@@ -16,7 +16,9 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 - Fit the rendered document to the pane width.
 - Click rendered images to preview them in a larger modal.
 - Search rendered text in the current document with previous/next navigation.
-- Copy selected rendered text, or extract and copy plain text from the whole document.
+- Copy selected rendered text, whole-document plain text, selected Markdown, or whole-document Markdown.
+- Use the clickable outline panel to jump between rendered headings.
+- Switch the plugin interface between Chinese and English.
 - Open the source file with the system default Word/WPS-compatible application.
 - Show a clear fallback page for legacy `.doc` files with external-open and conversion guidance.
 - Show clearer messages for encrypted, damaged, or unsupported Word documents.
@@ -35,7 +37,7 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 1. Put a `.docx` file into your Obsidian vault.
 2. Click the `.docx` file in the file explorer.
 3. Read the document in the Obsidian tab opened by the plugin.
-4. Use the toolbar to reload, zoom, fit width, search, copy text, create a summary note, or open the file externally.
+4. Use the toolbar to reload, zoom, fit width, show the outline, search, copy text, copy Markdown, create a summary note, or open the file externally.
 
 ### Zoom
 
@@ -62,15 +64,29 @@ Inside the image preview:
 - Press `Enter` for the next result or `Shift` + `Enter` for the previous result.
 - The result counter shows the current result and total matches.
 
+### Outline
+
+- Use the outline button to show or hide the heading outline.
+- Click an outline item to scroll the rendered document to that heading.
+- The outline is built from headings found in the rendered Word document.
+
+### Copy
+
+- Copy selected rendered text as plain text.
+- Copy the whole document as plain text when no selection is active.
+- Copy selected rendered content as Markdown.
+- Copy the whole `.docx` as Markdown when no selection is active.
+
 ## Settings
 
 Open Obsidian settings, then go to `Community plugins` -> `Obsidian Word Reader`.
 
 Available settings:
 
-- Settings page language.
+- Plugin interface language.
 - Default zoom percentage for newly opened Word previews.
 - Whether newly opened Word previews should fit the pane width by default.
+- Whether the outline is visible by default.
 - Whether rendered images can be clicked for larger preview.
 - Large file warning threshold in MB.
 - External opening note. The plugin uses the operating system default application for `.docx` files.
@@ -89,6 +105,10 @@ Available settings:
 - The current rendered file state is tracked to avoid unnecessary repeated renders.
 - Search highlighting is debounced while typing to reduce work on large documents.
 - Closing or unloading a file releases document buffers, search timers, and search result references.
+
+## Stability and Support
+
+The stable reader scope, manual test checklist, support boundaries, and maintenance strategy are documented in [STABILITY.md](STABILITY.md).
 
 ### Summary Notes
 
@@ -116,11 +136,11 @@ Source: [[Report.docx]]
 
 ## Summary
 
-## Key Points
+## Key findings
 
-## To Do
+## Follow-ups
 
-## Quotes
+## Quoted excerpts
 ```
 
 If the same-name Markdown file already exists, the plugin opens it without overwriting content.
@@ -182,8 +202,8 @@ The release command runs TypeScript checks, builds the plugin, validates version
 Expected output:
 
 ```text
-release/obsidian-word-reader-v0.9.0.zip
-release/CHANGELOG-0.9.0.md
+release/obsidian-word-reader-v1.1.0.zip
+release/CHANGELOG-1.1.0.md
 ```
 
 The zip root contains only the files Obsidian needs:
@@ -201,11 +221,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag is pushed:
 
 ```bash
-git tag v0.9.0
-git push origin v0.9.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-v0.9.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-v1.1.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads the zip to the GitHub Release.
 
 ## Development
 
