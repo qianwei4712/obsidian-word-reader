@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate release
+        run: node scripts/release-check.mjs --tag "$GITHUB_REF_NAME"
+
+      - name: Package release zip
+        run: npm run release:zip
+
+      - name: Extract release notes
+        run: npm run release:notes
+
+      - name: Read package version
+        id: package
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "release/obsidian-word-reader-v${{ steps.package.outputs.version }}.zip" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "release/CHANGELOG-${{ steps.package.outputs.version }}.md" \
+            --verify-tag

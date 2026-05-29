@@ -127,7 +127,27 @@ created: 2026-05-28
 
 ## 安装
 
-用于本地开发或手动安装时：
+### 通过发布 zip 安装
+
+1. 从 GitHub Release 页面下载 `obsidian-word-reader-vX.Y.Z.zip`。
+2. 在 vault 中创建插件目录：
+
+   ```text
+   YourVault/.obsidian/plugins/obsidian-word-reader/
+   ```
+
+3. 将 zip 解压到该目录。文件必须直接位于插件目录根部：
+
+   ```text
+   YourVault/.obsidian/plugins/obsidian-word-reader/main.js
+   YourVault/.obsidian/plugins/obsidian-word-reader/manifest.json
+   YourVault/.obsidian/plugins/obsidian-word-reader/styles.css
+   ```
+
+4. 重启 Obsidian，或重新加载第三方插件。
+5. 在 Obsidian 设置中启用第三方插件，并启用 Obsidian Word Reader。
+
+### 从源码构建
 
 1. 安装依赖：
 
@@ -149,13 +169,43 @@ created: 2026-05-28
    dist/styles.css
    ```
 
-   目标目录示例：
+## 本地发布
 
-   ```text
-   YourVault/.obsidian/plugins/obsidian-word-reader/
-   ```
+创建并校验本地发布包：
 
-4. 在 Obsidian 设置中启用第三方插件，并启用 Obsidian Word Reader。
+```bash
+npm run release
+```
+
+该命令会执行 TypeScript 检查、构建插件、校验版本一致性、生成可安装 zip，并提取当前版本的 changelog 作为 release notes。
+
+预期输出：
+
+```text
+release/obsidian-word-reader-v0.9.0.zip
+release/CHANGELOG-0.9.0.md
+```
+
+zip 根目录只包含 Obsidian 需要的文件：
+
+```text
+main.js
+manifest.json
+styles.css
+```
+
+发布产物会被 Git 忽略，不需要提交。
+
+## GitHub 自动发布
+
+推送版本 tag 后，GitHub Actions 会自动创建 release：
+
+```bash
+git tag v0.9.0
+git push origin v0.9.0
+```
+
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，然后构建插件、生成 `release/obsidian-word-reader-v0.9.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并上传 zip 到 GitHub Release。
 
 ## 开发
 
@@ -175,6 +225,12 @@ npm run build
 
 ```bash
 npm run typecheck
+```
+
+构建后校验发布元数据：
+
+```bash
+npm run release:check
 ```
 
 当前机器指定的 Node.js 路径：

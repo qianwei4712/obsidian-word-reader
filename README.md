@@ -127,7 +127,27 @@ If the same-name Markdown file already exists, the plugin opens it without overw
 
 ## Installation
 
-For local development or manual installation:
+### Install from a release zip
+
+1. Download `obsidian-word-reader-vX.Y.Z.zip` from the GitHub release page.
+2. Create the plugin folder in your vault:
+
+   ```text
+   YourVault/.obsidian/plugins/obsidian-word-reader/
+   ```
+
+3. Extract the zip into that folder. The files must be directly inside the plugin folder:
+
+   ```text
+   YourVault/.obsidian/plugins/obsidian-word-reader/main.js
+   YourVault/.obsidian/plugins/obsidian-word-reader/manifest.json
+   YourVault/.obsidian/plugins/obsidian-word-reader/styles.css
+   ```
+
+4. Restart Obsidian or reload community plugins.
+5. In Obsidian, open Settings, enable Community plugins, then enable Obsidian Word Reader.
+
+### Build from source
 
 1. Install dependencies:
 
@@ -149,13 +169,43 @@ For local development or manual installation:
    dist/styles.css
    ```
 
-   Example target folder:
+## Local Release
 
-   ```text
-   YourVault/.obsidian/plugins/obsidian-word-reader/
-   ```
+Create and validate a local release package:
 
-4. Enable third-party plugins in Obsidian, then enable Obsidian Word Reader.
+```bash
+npm run release
+```
+
+The release command runs TypeScript checks, builds the plugin, validates version consistency, creates the installable zip, and extracts the current changelog section for release notes.
+
+Expected output:
+
+```text
+release/obsidian-word-reader-v0.9.0.zip
+release/CHANGELOG-0.9.0.md
+```
+
+The zip root contains only the files Obsidian needs:
+
+```text
+main.js
+manifest.json
+styles.css
+```
+
+Release artifacts are ignored by Git and should not be committed.
+
+## GitHub Auto Release
+
+GitHub Actions creates a release automatically when a version tag is pushed:
+
+```bash
+git tag v0.9.0
+git push origin v0.9.0
+```
+
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-v0.9.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads the zip to the GitHub Release.
 
 ## Development
 
@@ -175,6 +225,12 @@ Run TypeScript checks:
 
 ```bash
 npm run typecheck
+```
+
+Validate release metadata after building:
+
+```bash
+npm run release:check
 ```
 
 On this workstation, the expected Node.js executable is:

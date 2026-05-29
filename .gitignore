@@ -2,6 +2,7 @@ node_modules/
 .npm-cache/
 main.js
 dist/
+release/
 *.map
 .DS_Store
 ITERATION_PLAN.local.md

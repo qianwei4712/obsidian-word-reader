@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.9.0 - 2026-05-29
+
+### English
+
+#### Added
+
+- Added release validation scripts for version consistency, changelog coverage, and build output checks.
+- Added dependency-free release zip packaging for Obsidian manual installation.
+- Added GitHub Actions release automation for version tags.
+
+#### Changed
+
+- Standardized release artifacts as `release/obsidian-word-reader-vX.Y.Z.zip`.
+- Updated package, manifest, and lockfile versions to `0.9.0`.
+
+#### Docs
+
+- Expanded manual installation, source build, local release, and GitHub auto-release instructions.
+- Normalized the bilingual changelog structure for release notes.
+
+### 中文
+
+#### 新增
+
+- 增加发布校验脚本，用于检查版本一致性、changelog 覆盖和构建产物。
+- 增加无额外依赖的发布 zip 打包能力，便于 Obsidian 手动安装。
+- 增加基于 GitHub tag 的自动发布 workflow。
+
+#### 变更
+
+- 将发布产物统一为 `release/obsidian-word-reader-vX.Y.Z.zip`。
+- 将 package、manifest 和 lockfile 版本更新为 `0.9.0`。
+
+#### 文档
+
+- 补充手动安装、源码构建、本地发布和 GitHub 自动发布说明。
+- 规范中英文双语 changelog 结构，便于生成 release notes。
+
 ## 0.8.0 - 2026-05-29
 
 ### English
