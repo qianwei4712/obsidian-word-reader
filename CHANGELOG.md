@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.3 - 2026-05-30
+
+### English
+
+#### Fixed
+
+- Replaced transitive `immediate` and `setimmediate` packages with local safe shims so release builds no longer inherit dynamic `<script>` creation patterns flagged by marketplace security scans.
+
+### 中文
+
+#### 修复
+
+- 用本地安全 shim 替换传递依赖中的 `immediate` 和 `setimmediate`，使发布产物不再继承会被上架安全扫描标记的动态 `<script>` 创建模式。
+
 ## 1.1.2 - 2026-05-30
 
 ### English

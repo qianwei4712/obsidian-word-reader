@@ -1,0 +1,6 @@
+{
+  "name": "setimmediate",
+  "version": "1.0.5",
+  "main": "setImmediate.js",
+  "license": "MIT"
+}
