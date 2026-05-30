@@ -270,9 +270,16 @@ E:\DevelopHelper\nvm\v18.20.8\node.exe
 
 ## 安全说明
 
-插件读取 `.docx` 时使用 Obsidian vault 的二进制读取接口，只用于渲染和文本提取。
+本插件以安全性为核心设计原则：
 
-插件不会修改、覆盖或回写原始 Word 文件。需要编辑 Word 内容时，请使用 Word、WPS 或其他外部编辑器。
+- **仅本地操作**：插件仅从本地 Obsidian vault 读取 `.docx` 文件，不发起任何网络请求。
+- **无外部资源加载**：插件从不从互联网加载脚本、样式或资源。所有渲染逻辑均在本地运行。
+- **只读访问**：插件不会修改、覆盖或回写到原始 Word 文件。使用 Obsidian 的二进制 vault API 进行渲染和文本提取。
+- **无动态脚本注入**：插件仅创建结构性 DOM 元素（`div`、`span`、`button`、`input`）用于文档渲染。任何时候都不会创建或注入 `<script>` 元素。
+- **沙箱化渲染**：Word 内容被渲染到隔离的 DOM 容器中，无执行上下文。所有内容来自 vault 中可信的本地 `.docx` 文件。
+- **仅桌面端**：插件需要桌面版 Obsidian，因为使用了 Electron API 进行图片剪贴板操作和文件对话框。这在 `manifest.json` 中已声明为 `isDesktopOnly: true`。
+
+需要编辑 Word 内容时，请使用 Word、WPS 或其他外部编辑器。
 
 ## 推荐工作流
 

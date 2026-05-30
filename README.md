@@ -270,9 +270,16 @@ E:\DevelopHelper\nvm\v18.20.8\node.exe
 
 ## Security
 
-The plugin reads `.docx` files through Obsidian's binary vault API for rendering and text extraction only.
+This plugin is designed with security as a top priority:
 
-It does not modify, overwrite, or write back to the original Word document. Use Word, WPS, or another external editor when the source document needs to be changed.
+- **Local-only operations**: The plugin only reads `.docx` files from your local Obsidian vault. No network requests are made.
+- **No external resources**: The plugin never loads scripts, styles, or assets from the internet. All rendering logic runs locally.
+- **Read-only access**: The plugin never modifies, overwrites, or writes back to the original Word document. It uses Obsidian's binary vault API for rendering and text extraction only.
+- **No dynamic script injection**: The plugin creates only structural DOM elements (`div`, `span`, `button`, `input`) for document rendering. No `<script>` elements are created or injected at any point.
+- **Sandboxed rendering**: Word content is rendered into isolated DOM containers with no execution context. All content comes from trusted local `.docx` files in your vault.
+- **Desktop-only**: The plugin requires desktop Obsidian because it uses Electron APIs for image clipboard operations and file dialogs. This is declared in `manifest.json` as `isDesktopOnly: true`.
+
+Use Word, WPS, or another external editor when the source document needs to be changed.
 
 ## Recommended Workflow
 

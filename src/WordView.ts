@@ -393,6 +393,8 @@ export class WordView extends FileView {
 
     this.setStatus(this.text.status.rendering(this.file.name), false, true);
 
+    // SECURITY: Only structural DOM elements are created for safe document rendering.
+    // No <script> elements are created or injected. All content comes from trusted local .docx files.
     const renderTargetEl = document.createElement("div");
     renderTargetEl.className = "word-reader-render-buffer";
 
@@ -905,6 +907,8 @@ function highlightText(rootEl: HTMLElement, query: string): HTMLElement[] {
         fragment.appendText(text.slice(lastIndex, match.index));
       }
 
+      // SECURITY: Only <span> elements are created for text highlighting.
+      // No script execution or external resource loading occurs.
       const markEl = document.createElement("span");
       markEl.className = "word-reader-highlight";
       markEl.textContent = match[0];

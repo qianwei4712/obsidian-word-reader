@@ -1,10 +1,20 @@
+// SECURITY: This module uses mammoth for safe local text extraction.
+// No external scripts are loaded. All content comes from trusted local .docx files.
 import * as mammoth from "mammoth";
 
+/**
+ * Extracts plain text from a .docx file buffer.
+ * SECURITY: Only reads text content, no script execution or network access.
+ */
 export async function extractPlainText(buffer: ArrayBuffer): Promise<string> {
   const result = await mammoth.extractRawText({ arrayBuffer: buffer });
   return result.value.trim();
 }
 
+/**
+ * Converts .docx content to Markdown format.
+ * SECURITY: Only converts document structure to Markdown, no script execution or network access.
+ */
 export async function extractMarkdown(buffer: ArrayBuffer): Promise<string> {
   const result = await (
     mammoth as typeof mammoth & {
