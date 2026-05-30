@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.2 - 2026-05-30
+
+### English
+
+#### Fixed
+
+- Fixed rendered `.docx` content selection by explicitly enabling text selection in the preview area while keeping images non-selectable for image preview interactions.
+
+### 中文
+
+#### 修复
+
+- 修复 `.docx` 渲染预览区文本无法稳定选中的问题，显式启用正文文本选择，同时保持图片不可选中以兼容图片预览交互。
+
 ## 1.1.1 - 2026-05-30
 
 ### English

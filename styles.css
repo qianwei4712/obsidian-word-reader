@@ -176,6 +176,17 @@
   box-shadow: 0 1px 8px rgb(0 0 0 / 18%);
 }
 
+.word-reader-document .docx,
+.word-reader-document .docx * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.word-reader-document .docx img {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .word-reader-document.is-fit-width .docx {
   max-width: 100%;
 }
