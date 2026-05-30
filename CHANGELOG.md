@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1 - 2026-05-30
+
+### English
+
+#### Fixed
+
+- Fixed the GitHub release workflow version export step so tag-triggered releases run correctly on GitHub Actions.
+
+### 中文
+
+#### 修复
+
+- 修复 GitHub Release workflow 中的版本导出步骤，确保 tag 触发的发布流程能在 GitHub Actions 上正常运行。
+
 ## 1.1.0 - 2026-05-29
 
 ### English
