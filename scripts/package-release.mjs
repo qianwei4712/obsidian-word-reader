@@ -6,7 +6,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
 const distDir = path.join(rootDir, "dist");
 const releaseDir = path.join(rootDir, "release");
-const outputPath = path.join(releaseDir, `${pkg.name}-v${pkg.version}.zip`);
+const outputPath = path.join(releaseDir, `${pkg.name}-${pkg.version}.zip`);
 const releaseFiles = ["main.js", "manifest.json", "styles.css"];
 
 const crcTable = new Uint32Array(256);

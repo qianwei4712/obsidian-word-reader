@@ -53,9 +53,9 @@ Run this checklist before publishing a stable release:
   - Confirm settings text, toolbar labels, notices, status messages, errors, and image modal text follow the selected language.
   - Confirm default zoom, default fit width, outline visibility, image preview, and large file warning settings persist after reload.
 - Release automation:
-  - Confirm `node scripts/release-check.mjs --tag vX.Y.Z` passes for the release tag.
-  - Push a `vX.Y.Z` tag in a test release flow.
-  - Confirm GitHub Actions creates a release and uploads the zip.
+  - Confirm `node scripts/release-check.mjs --tag X.Y.Z` passes for the release tag.
+  - Push an `X.Y.Z` tag in a test release flow.
+  - Confirm GitHub Actions creates a release and uploads `main.js`, `manifest.json`, `styles.css`, and the zip.
 
 ## Support Boundaries
 

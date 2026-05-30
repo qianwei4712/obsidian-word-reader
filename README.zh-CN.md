@@ -149,7 +149,7 @@ created: 2026-05-28
 
 ### 通过发布 zip 安装
 
-1. 从 GitHub Release 页面下载 `obsidian-word-reader-vX.Y.Z.zip`。
+1. 从 GitHub Release 页面下载 `obsidian-word-reader-X.Y.Z.zip`。
 2. 在 vault 中创建插件目录：
 
    ```text
@@ -202,8 +202,8 @@ npm run release
 预期输出：
 
 ```text
-release/obsidian-word-reader-v1.1.0.zip
-release/CHANGELOG-1.1.0.md
+release/obsidian-word-reader-1.1.1.zip
+release/CHANGELOG-1.1.1.md
 ```
 
 zip 根目录只包含 Obsidian 需要的文件：
@@ -218,14 +218,14 @@ styles.css
 
 ## GitHub 自动发布
 
-推送版本 tag 后，GitHub Actions 会自动创建 release：
+推送不带 `v` 前缀的版本 tag 后，GitHub Actions 会自动创建 release：
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag 1.1.1
+git push origin 1.1.1
 ```
 
-workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，然后构建插件、生成 `release/obsidian-word-reader-v1.1.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并上传 zip 到 GitHub Release。
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，然后构建插件、生成 `release/obsidian-word-reader-1.1.1.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
 
 ## 开发
 

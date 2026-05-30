@@ -7,12 +7,14 @@
 #### Fixed
 
 - Fixed the GitHub release workflow version export step so tag-triggered releases run correctly on GitHub Actions.
+- Fixed GitHub release automation to publish Obsidian-compatible tags without a `v` prefix and upload `main.js`, `manifest.json`, and `styles.css` with the release.
 
 ### 中文
 
 #### 修复
 
 - 修复 GitHub Release workflow 中的版本导出步骤，确保 tag 触发的发布流程能在 GitHub Actions 上正常运行。
+- 修复 GitHub Release 自动发布流程，改为发布不带 `v` 前缀且兼容 Obsidian 的 tag，并随 release 上传 `main.js`、`manifest.json` 和 `styles.css`。
 
 ## 1.1.0 - 2026-05-29
 
@@ -76,7 +78,7 @@
 
 #### Changed
 
-- Standardized release artifacts as `release/obsidian-word-reader-vX.Y.Z.zip`.
+- Standardized release artifacts as `release/obsidian-word-reader-X.Y.Z.zip`.
 - Updated package, manifest, and lockfile versions to `0.9.0`.
 
 #### Docs
@@ -94,7 +96,7 @@
 
 #### 变更
 
-- 将发布产物统一为 `release/obsidian-word-reader-vX.Y.Z.zip`。
+- 将发布产物统一为 `release/obsidian-word-reader-X.Y.Z.zip`。
 - 将 package、manifest 和 lockfile 版本更新为 `0.9.0`。
 
 #### 文档

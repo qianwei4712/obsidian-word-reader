@@ -149,7 +149,7 @@ If the same-name Markdown file already exists, the plugin opens it without overw
 
 ### Install from a release zip
 
-1. Download `obsidian-word-reader-vX.Y.Z.zip` from the GitHub release page.
+1. Download `obsidian-word-reader-X.Y.Z.zip` from the GitHub release page.
 2. Create the plugin folder in your vault:
 
    ```text
@@ -202,8 +202,8 @@ The release command runs TypeScript checks, builds the plugin, validates version
 Expected output:
 
 ```text
-release/obsidian-word-reader-v1.1.0.zip
-release/CHANGELOG-1.1.0.md
+release/obsidian-word-reader-1.1.1.zip
+release/CHANGELOG-1.1.1.md
 ```
 
 The zip root contains only the files Obsidian needs:
@@ -218,14 +218,14 @@ Release artifacts are ignored by Git and should not be committed.
 
 ## GitHub Auto Release
 
-GitHub Actions creates a release automatically when a version tag is pushed:
+GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag 1.1.1
+git push origin 1.1.1
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-v1.1.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-1.1.1.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 

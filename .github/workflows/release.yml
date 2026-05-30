@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "*.*.*"
 
 permissions:
   contents: write
@@ -51,7 +51,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "release/obsidian-word-reader-v${{ steps.package.outputs.version }}.zip" \
-            --title "$GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/main.js#main.js" \
+            "dist/manifest.json#manifest.json" \
+            "dist/styles.css#styles.css" \
+            "release/obsidian-word-reader-${{ steps.package.outputs.version }}.zip#obsidian-word-reader-${{ steps.package.outputs.version }}.zip" \
+            --title "${{ steps.package.outputs.version }}" \
             --notes-file "release/CHANGELOG-${{ steps.package.outputs.version }}.md" \
             --verify-tag

@@ -42,7 +42,7 @@ expect(
 );
 
 if (tagName !== null) {
-  expect(tagName === `v${pkg.version}`, `Git tag ${tagName || "(empty)"} must match package version v${pkg.version}`);
+  expect(tagName === pkg.version, `Git tag ${tagName || "(empty)"} must match package version ${pkg.version}`);
 }
 
 for (const file of ["dist/main.js", "dist/manifest.json", "dist/styles.css"]) {
@@ -65,4 +65,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Release check passed for ${pkg.name} v${pkg.version}.`);
+console.log(`Release check passed for ${pkg.name} ${pkg.version}.`);
