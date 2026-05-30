@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.4 - 2026-05-30
+
+### English
+
+#### Added
+
+- Added explicit security declarations in README and code comments to clarify that no dynamic script injection is performed, addressing Obsidian marketplace security scan requirements.
+
+### 中文
+
+#### 新增
+
+- 在 README 和代码注释中添加了明确的安全声明，澄清插件未执行任何动态脚本注入，以回应 Obsidian 上架安全扫描的要求。
+
 ## 1.1.3 - 2026-05-30
 
 ### English
