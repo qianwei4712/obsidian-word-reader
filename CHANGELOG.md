@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.5 - 2026-05-31
+
+### English
+
+#### Fixed
+
+- Fixed dynamic script injection by forcing esbuild to compile `jszip` from source instead of using its pre-compiled dist file, completely removing `createElement("script")` from the plugin build.
+
+### 中文
+
+#### 修复
+
+- 通过强制 esbuild 从源码编译 `jszip` 而非使用其预编译产物，彻底清除了构建产物中的 `createElement("script")`，修复了动态脚本注入的问题。
+
 ## 1.1.4 - 2026-05-30
 
 ### English

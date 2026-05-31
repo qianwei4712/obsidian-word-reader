@@ -31,6 +31,9 @@ const context = await esbuild.context({
   },
   entryPoints: ["src/main.ts"],
   bundle: true,
+  alias: {
+    "jszip": "jszip/lib/index.js"
+  },
   external: [
     "obsidian",
     "electron",

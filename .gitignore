@@ -6,3 +6,6 @@ release/
 *.map
 .DS_Store
 ITERATION_PLAN.local.md
+check.js
+check2.js
+verify.js
