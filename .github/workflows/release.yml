@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  attestations: write
+  id-token: write
 
 jobs:
   release:
@@ -46,6 +48,15 @@ jobs:
         run: |
           VERSION=$(node -p 'require("./package.json").version')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/main.js
+            dist/manifest.json
+            dist/styles.css
+            release/obsidian-word-reader-${{ steps.package.outputs.version }}.zip
 
       - name: Create GitHub Release
         env:
