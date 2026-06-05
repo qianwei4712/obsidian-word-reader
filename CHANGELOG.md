@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.6 - 2026-06-05
+
+### English
+
+#### Added
+
+- Added actionable recovery tips for encrypted, damaged, and renderer-incompatible Word documents so users can fix common `.docx` failures more easily.
+
+### 中文
+
+#### 新增
+
+- 为加密、损坏以及渲染器不兼容的 Word 文档增加可操作的修复建议，帮助用户更容易处理常见 `.docx` 打开失败问题。
+
 ## 1.1.5 - 2026-05-31
 
 ### English

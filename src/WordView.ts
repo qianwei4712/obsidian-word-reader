@@ -632,6 +632,17 @@ export class WordView extends FileView {
       text: errorInfo.body,
     });
 
+    if (errorInfo.tips.length > 0) {
+      const listEl = this.documentEl?.createEl("ul", {
+        cls: "word-reader-message-list",
+      });
+      if (listEl) {
+        for (const tip of errorInfo.tips) {
+          listEl.appendChild(createMessageListItem(tip));
+        }
+      }
+    }
+
     const actionsEl = this.documentEl?.createDiv({
       cls: "word-reader-message-actions",
     });
@@ -822,6 +833,7 @@ interface WordErrorInfo {
   title: string;
   body: string;
   status: string;
+  tips: string[];
 }
 
 function classifyWordError(message: string, text: WordReaderText): WordErrorInfo {
@@ -836,6 +848,7 @@ function classifyWordError(message: string, text: WordReaderText): WordErrorInfo
       title: text.errors.encryptedTitle,
       body: text.errors.encryptedBody,
       status: text.errors.encryptedStatus,
+      tips: text.errors.encryptedTips,
     };
   }
 
@@ -851,6 +864,7 @@ function classifyWordError(message: string, text: WordReaderText): WordErrorInfo
       title: text.errors.damagedTitle,
       body: text.errors.damagedBody,
       status: text.errors.damagedStatus,
+      tips: text.errors.damagedTips,
     };
   }
 
@@ -858,6 +872,7 @@ function classifyWordError(message: string, text: WordReaderText): WordErrorInfo
     title: text.errors.genericTitle,
     body: text.errors.genericBody,
     status: text.errors.genericStatus,
+    tips: text.errors.genericTips,
   };
 }
 
