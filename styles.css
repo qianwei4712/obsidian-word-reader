@@ -157,8 +157,8 @@
   min-width: 720px;
   max-width: none;
   margin: 0 auto;
-  color: #111;
-  background: #fff;
+  color: var(--text-normal);
+  background: var(--background-primary);
   zoom: var(--word-reader-zoom);
 }
 
@@ -168,12 +168,29 @@
 }
 
 .word-reader-document .docx-wrapper {
-  background: transparent;
+  background: transparent !important;
   padding: 0;
 }
 
 .word-reader-document .docx {
+  background: var(--background-primary) !important;
+  color: var(--text-normal) !important;
   box-shadow: 0 1px 8px rgb(0 0 0 / 18%);
+}
+
+.word-reader-document .docx section,
+.word-reader-document .docx article,
+.word-reader-document .docx div,
+.word-reader-document .docx p,
+.word-reader-document .docx span,
+.word-reader-document .docx table,
+.word-reader-document .docx td,
+.word-reader-document .docx th {
+  color: inherit;
+}
+
+.theme-dark .word-reader-document .docx {
+  box-shadow: 0 0 0 1px var(--background-modifier-border);
 }
 
 .word-reader-document .docx,
@@ -246,7 +263,7 @@
   justify-content: center;
   min-height: 0;
   overflow: hidden;
-  background: #fff;
+  background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
   cursor: grab;
   touch-action: none;
@@ -285,7 +302,7 @@
 
 .word-reader-message-title {
   padding: 32px 32px 8px;
-  color: #111;
+  color: var(--text-normal);
   font-size: 20px;
   font-weight: 600;
 }
@@ -293,7 +310,7 @@
 .word-reader-message-body {
   max-width: 720px;
   padding: 0 32px 12px;
-  color: #333;
+  color: var(--text-normal);
   line-height: 1.5;
 }
 
@@ -301,7 +318,7 @@
   max-width: 720px;
   margin: 0;
   padding: 0 32px 16px 56px;
-  color: #333;
+  color: var(--text-normal);
   line-height: 1.5;
 }
 

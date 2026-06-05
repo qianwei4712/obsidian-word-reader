@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.0 - 2026-06-05
+
+### English
+
+#### Added
+
+- Added theme-following document and image preview surfaces so Word previews, fallback messages, and image modals blend better with Obsidian dark and light themes.
+- Added `Ctrl`/`Cmd` + `C` image copying while the image preview modal is open.
+- Improved image save defaults with source-document-based names that include image dimensions when available.
+
+### 中文
+
+#### 新增
+
+- 增加跟随 Obsidian 主题的文档和图片预览界面，让 Word 预览、兜底提示和图片弹窗更自然地适配深浅色主题。
+- 增加图片预览弹窗中的 `Ctrl`/`Cmd` + `C` 快捷复制图片。
+- 优化图片另存默认文件名，基于源文档名命名，并在可用时包含图片尺寸。
+
 ## 1.1.6 - 2026-06-05
 
 ### English

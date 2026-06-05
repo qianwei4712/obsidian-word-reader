@@ -1111,6 +1111,20 @@ class ImagePreviewModal extends Modal {
   private dragStartY = 0;
   private dragStartTranslateX = 0;
   private dragStartTranslateY = 0;
+  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (
+      event.key.toLowerCase() !== "c" ||
+      (!event.ctrlKey && !event.metaKey) ||
+      event.altKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    void this.copyImage();
+  };
 
   constructor(
     app: App,
@@ -1127,6 +1141,7 @@ class ImagePreviewModal extends Modal {
     this.contentEl.empty();
     this.titleEl.setText(this.alt);
     this.contentEl.addClass("word-reader-image-modal");
+    document.addEventListener("keydown", this.handleKeyDown);
 
     const toolbarEl = this.contentEl.createDiv({
       cls: "word-reader-image-toolbar",
@@ -1190,6 +1205,7 @@ class ImagePreviewModal extends Modal {
   }
 
   onClose(): void {
+    document.removeEventListener("keydown", this.handleKeyDown);
     this.contentEl.empty();
   }
 
@@ -1359,7 +1375,7 @@ class ImagePreviewModal extends Modal {
   private async saveImageAs(): Promise<void> {
     try {
       const imageData = await loadImageData(this.src);
-      const fileName = `${sanitizeFileName(this.suggestedName)}.${imageData.extension}`;
+      const fileName = this.getImageFileName(imageData.extension);
       const dialog = getElectronDialog();
       if (!dialog) {
         downloadImageData(imageData, fileName);
@@ -1395,6 +1411,15 @@ class ImagePreviewModal extends Modal {
     } catch (error) {
       new Notice(this.text.notices.couldNotSaveImage(getErrorMessage(error)));
     }
+  }
+
+  private getImageFileName(extension: string): string {
+    const baseName = sanitizeFileName(this.suggestedName);
+    const dimensions =
+      this.naturalWidth && this.naturalHeight
+        ? `-${this.naturalWidth}x${this.naturalHeight}`
+        : "";
+    return `${baseName}-image${dimensions}.${extension}`;
   }
 
   private async loadElectronImage(): Promise<ElectronNativeImage> {
