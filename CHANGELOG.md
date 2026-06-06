@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.1 - 2026-06-06
+
+### English
+
+#### Fixed
+
+- Removed `!important` declarations from the Word preview theme overrides and used more specific selectors to satisfy Obsidian's automated CSS review.
+
+### 中文
+
+#### 修复
+
+- 移除 Word 预览主题覆盖样式中的 `!important`，改用更具体的选择器，以通过 Obsidian CSS 自动审核。
+
 ## 1.3.0 - 2026-06-06
 
 ### English

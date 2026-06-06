@@ -168,13 +168,13 @@
 }
 
 .word-reader-document .docx-wrapper {
-  background: transparent !important;
+  background: transparent;
   padding: 0;
 }
 
-.word-reader-document .docx {
-  background: var(--background-primary) !important;
-  color: var(--text-normal) !important;
+.word-reader-document .docx-wrapper > section.docx {
+  background: var(--background-primary);
+  color: var(--text-normal);
   box-shadow: 0 1px 8px rgb(0 0 0 / 18%);
 }
 
@@ -189,7 +189,7 @@
   color: inherit;
 }
 
-.theme-dark .word-reader-document .docx {
+.theme-dark .word-reader-document .docx-wrapper > section.docx {
   box-shadow: 0 0 0 1px var(--background-modifier-border);
 }
 
