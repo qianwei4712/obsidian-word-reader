@@ -1,7 +1,7 @@
 {
   "id": "word-reader",
   "name": "Word Reader",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "minAppVersion": "1.5.0",
   "description": "Open .docx files as safe, read-only documents.",
   "author": "qianw",

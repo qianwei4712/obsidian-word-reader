@@ -1,6 +1,6 @@
 {
   "name": "obsidian-word-reader",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Read .docx files inside Obsidian without modifying the original Word document.",
   "main": "main.js",
   "scripts": {

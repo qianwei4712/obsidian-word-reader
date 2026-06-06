@@ -97,7 +97,9 @@ Available settings:
 
 - Legacy `.doc` files open to an explanation page instead of being rendered directly.
 - Encrypted or password-protected documents show a dedicated encrypted document message.
-- Damaged or invalid `.docx` files show a damaged document message with next-step guidance.
+- Failed `.docx` previews are classified as encrypted, format mismatched, damaged ZIP packages, invalid XML structures, unsupported document structures, or unknown failures where possible.
+- Error pages provide a collapsed diagnostic section and a copy action for issue reports.
+- Copied diagnostics use JSON and include only the error category, file name, size, modification time, and a privacy-safe summary with an error fingerprint. Raw renderer errors, document content, internal XML, and absolute vault paths are excluded.
 - Large file warnings include the file size and use the configured threshold from settings.
 
 ## Performance and Stability

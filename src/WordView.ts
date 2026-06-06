@@ -367,8 +367,8 @@ export class WordView extends FileView {
         return;
       }
 
-      this.releaseDocumentState();
       this.showError(error, file);
+      this.releaseDocumentState();
     }
   }
 
@@ -621,7 +621,8 @@ export class WordView extends FileView {
 
   private showError(error: unknown, file: TFile): void {
     const message = error instanceof Error ? error.message : String(error);
-    const errorInfo = classifyWordError(message, this.text);
+    const errorInfo = classifyWordError(message, this.text, this.buffer);
+    const diagnostics = createWordDiagnostics(errorInfo.kind, message, file);
     this.documentEl?.empty();
     this.documentEl?.createDiv({
       cls: "word-reader-message-title",
@@ -643,16 +644,72 @@ export class WordView extends FileView {
       }
     }
 
+    const detailsEl = this.documentEl?.createEl("details", {
+      cls: "word-reader-diagnostics",
+    });
+    if (detailsEl) {
+      detailsEl.createEl("summary", {
+        text: this.text.errors.diagnosticDetails,
+      });
+      const listEl = detailsEl.createEl("dl", {
+        cls: "word-reader-diagnostics-list",
+      });
+      appendDiagnosticEntry(
+        listEl,
+        this.text.errors.diagnosticCategory,
+        diagnostics.category,
+      );
+      appendDiagnosticEntry(
+        listEl,
+        this.text.errors.diagnosticFileName,
+        diagnostics.fileName,
+      );
+      appendDiagnosticEntry(
+        listEl,
+        this.text.errors.diagnosticFileSize,
+        `${diagnostics.fileSizeBytes} bytes`,
+      );
+      appendDiagnosticEntry(
+        listEl,
+        this.text.errors.diagnosticModified,
+        diagnostics.modifiedAt,
+      );
+      appendDiagnosticEntry(
+        listEl,
+        this.text.errors.diagnosticErrorSummary,
+        diagnostics.errorSummary,
+      );
+    }
+
     const actionsEl = this.documentEl?.createDiv({
       cls: "word-reader-message-actions",
     });
     if (actionsEl) {
+      this.createIconButton(
+        actionsEl,
+        "clipboard-copy",
+        this.text.errors.copyDiagnostics,
+        () => {
+          void this.copyDiagnostics(formatWordDiagnostics(diagnostics));
+        },
+      );
       this.createIconButton(actionsEl, "external-link", this.text.toolbar.openExternally, () => {
         void openExternalDocx(this.app, file, this.text);
       });
     }
 
-    this.setStatus(`${errorInfo.status}: ${message}`, true);
+    this.setStatus(errorInfo.status, true);
+  }
+
+  private async copyDiagnostics(diagnostics: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(diagnostics);
+      new Notice(this.text.notices.copiedDiagnostics);
+    } catch (error) {
+      new Notice(
+        this.text.notices.couldNotCopyDiagnostics(getErrorMessage(error)),
+      );
+    }
   }
 
   private getSelectedRenderedText(): string {
@@ -829,22 +886,45 @@ function clearSearchHighlights(rootEl: HTMLElement): void {
   }
 }
 
+type WordErrorKind =
+  | "encrypted"
+  | "format-mismatch"
+  | "zip-container"
+  | "xml-structure"
+  | "unsupported-structure"
+  | "unknown";
+
 interface WordErrorInfo {
+  kind: WordErrorKind;
   title: string;
   body: string;
   status: string;
   tips: string[];
 }
 
-function classifyWordError(message: string, text: WordReaderText): WordErrorInfo {
+interface WordDiagnostics {
+  category: WordErrorKind;
+  fileName: string;
+  fileSizeBytes: number;
+  modifiedAt: string;
+  errorSummary: string;
+}
+
+function classifyWordError(
+  message: string,
+  text: WordReaderText,
+  buffer: ArrayBuffer | null,
+): WordErrorInfo {
   const normalizedMessage = message.toLowerCase();
 
   if (
     normalizedMessage.includes("password") ||
     normalizedMessage.includes("encrypt") ||
-    normalizedMessage.includes("protected")
+    normalizedMessage.includes("protected") ||
+    (buffer && isEncryptedOfficeBuffer(buffer))
   ) {
     return {
+      kind: "encrypted",
       title: text.errors.encryptedTitle,
       body: text.errors.encryptedBody,
       status: text.errors.encryptedStatus,
@@ -852,28 +932,189 @@ function classifyWordError(message: string, text: WordReaderText): WordErrorInfo
     };
   }
 
+  if (buffer && !hasZipSignature(buffer)) {
+    return {
+      kind: "format-mismatch",
+      title: text.errors.formatMismatchTitle,
+      body: text.errors.formatMismatchBody,
+      status: text.errors.formatMismatchStatus,
+      tips: text.errors.formatMismatchTips,
+    };
+  }
+
   if (
     normalizedMessage.includes("corrupt") ||
-    normalizedMessage.includes("invalid") ||
-    normalizedMessage.includes("malformed") ||
     normalizedMessage.includes("zip") ||
     normalizedMessage.includes("central directory") ||
-    normalizedMessage.includes("xml")
+    normalizedMessage.includes("archive") ||
+    normalizedMessage.includes("crc") ||
+    normalizedMessage.includes("unexpected end")
   ) {
     return {
-      title: text.errors.damagedTitle,
-      body: text.errors.damagedBody,
-      status: text.errors.damagedStatus,
-      tips: text.errors.damagedTips,
+      kind: "zip-container",
+      title: text.errors.zipContainerTitle,
+      body: text.errors.zipContainerBody,
+      status: text.errors.zipContainerStatus,
+      tips: text.errors.zipContainerTips,
+    };
+  }
+
+  if (
+    normalizedMessage.includes("xml") ||
+    normalizedMessage.includes("malformed") ||
+    normalizedMessage.includes("parse error") ||
+    normalizedMessage.includes("invalid character") ||
+    normalizedMessage.includes("unclosed") ||
+    normalizedMessage.includes("namespace")
+  ) {
+    return {
+      kind: "xml-structure",
+      title: text.errors.xmlStructureTitle,
+      body: text.errors.xmlStructureBody,
+      status: text.errors.xmlStructureStatus,
+      tips: text.errors.xmlStructureTips,
+    };
+  }
+
+  if (
+    normalizedMessage.includes("unsupported") ||
+    normalizedMessage.includes("not supported") ||
+    normalizedMessage.includes("not implemented") ||
+    normalizedMessage.includes("smartart") ||
+    normalizedMessage.includes("custom xml") ||
+    normalizedMessage.includes("drawing")
+  ) {
+    return {
+      kind: "unsupported-structure",
+      title: text.errors.unsupportedStructureTitle,
+      body: text.errors.unsupportedStructureBody,
+      status: text.errors.unsupportedStructureStatus,
+      tips: text.errors.unsupportedStructureTips,
     };
   }
 
   return {
+    kind: "unknown",
     title: text.errors.genericTitle,
     body: text.errors.genericBody,
     status: text.errors.genericStatus,
     tips: text.errors.genericTips,
   };
+}
+
+function hasZipSignature(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) {
+    return false;
+  }
+
+  const bytes = new Uint8Array(buffer, 0, 4);
+  return (
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    ((bytes[2] === 0x03 && bytes[3] === 0x04) ||
+      (bytes[2] === 0x05 && bytes[3] === 0x06) ||
+      (bytes[2] === 0x07 && bytes[3] === 0x08))
+  );
+}
+
+function isEncryptedOfficeBuffer(buffer: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(buffer);
+  const oleSignature = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+  if (
+    bytes.length < oleSignature.length ||
+    !oleSignature.every((value, index) => bytes[index] === value)
+  ) {
+    return false;
+  }
+
+  return (
+    containsUtf16LeText(bytes, "EncryptedPackage") ||
+    containsUtf16LeText(bytes, "EncryptionInfo")
+  );
+}
+
+function containsUtf16LeText(bytes: Uint8Array, text: string): boolean {
+  const pattern = Array.from(text).flatMap((character) => [
+    character.charCodeAt(0),
+    0,
+  ]);
+
+  for (let start = 0; start <= bytes.length - pattern.length; start += 1) {
+    let matches = true;
+    for (let offset = 0; offset < pattern.length; offset += 1) {
+      if (bytes[start + offset] !== pattern[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function createWordDiagnostics(
+  category: WordErrorKind,
+  message: string,
+  file: TFile,
+): WordDiagnostics {
+  return {
+    category,
+    fileName: file.name,
+    fileSizeBytes: file.stat.size,
+    modifiedAt: new Date(file.stat.mtime).toISOString(),
+    errorSummary: createSafeDiagnosticSummary(category, message),
+  };
+}
+
+function createSafeDiagnosticSummary(
+  category: WordErrorKind,
+  message: string,
+): string {
+  const summaries: Record<WordErrorKind, string> = {
+    encrypted: "Encrypted or protected Office container detected",
+    "format-mismatch": "File content does not match the .docx container format",
+    "zip-container": "The ZIP-based Office package could not be read",
+    "xml-structure": "An internal document structure could not be parsed",
+    "unsupported-structure": "The renderer reported an unsupported structure",
+    unknown: "The renderer returned an unclassified error",
+  };
+  return `${summaries[category]} (fingerprint: ${fingerprintMessage(message)})`;
+}
+
+function fingerprintMessage(message: string): string {
+  let hash = 0x811c9dc5;
+  for (const character of message) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function formatWordDiagnostics(diagnostics: WordDiagnostics): string {
+  return JSON.stringify(
+    {
+      product: "Obsidian Word Reader",
+      category: diagnostics.category,
+      fileName: diagnostics.fileName,
+      fileSizeBytes: diagnostics.fileSizeBytes,
+      modifiedAt: diagnostics.modifiedAt,
+      errorSummary: diagnostics.errorSummary,
+    },
+    null,
+    2,
+  );
+}
+
+function appendDiagnosticEntry(
+  listEl: HTMLDListElement,
+  label: string,
+  value: string,
+): void {
+  listEl.createEl("dt", { text: label });
+  listEl.createEl("dd", { text: value });
 }
 
 function createMessageListItem(text: string): HTMLLIElement {

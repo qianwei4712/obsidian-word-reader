@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.0 - 2026-06-06
+
+### English
+
+#### Added
+
+- Added structured error categories for encrypted, format-mismatched, damaged ZIP, invalid XML, unsupported structure, and unknown Word document failures.
+- Added collapsible, privacy-conscious diagnostic details with file metadata, a safe category summary, and an error fingerprint.
+- Added one-click diagnostic copying for issue reports without including document content or absolute vault paths.
+
+### 中文
+
+#### 新增
+
+- 为加密、格式不匹配、ZIP 文档包损坏、XML 结构无效、不支持的结构和未知 Word 文档错误增加结构化分类。
+- 增加默认收起且注重隐私的诊断详情，包含文件元数据、隐私安全的分类摘要和错误指纹。
+- 增加一键复制诊断信息，便于提交问题，同时不包含文档正文或 vault 绝对路径。
+
 ## 1.2.1 - 2026-06-06
 
 ### English

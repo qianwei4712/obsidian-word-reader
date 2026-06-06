@@ -33,6 +33,14 @@ Run this checklist before publishing a stable release:
   - Open a legacy `.doc` file.
   - Confirm the guidance page appears.
   - Confirm external open is available on Desktop.
+- Error diagnostics:
+  - Open encrypted, invalid, and damaged test documents where available.
+  - Confirm error pages show an appropriate category and recovery guidance.
+  - Confirm diagnostic details are collapsed by default.
+  - Confirm copied diagnostics are valid JSON.
+  - Confirm copied diagnostics contain file name, size, modification time, category, a privacy-safe summary, and an error fingerprint.
+  - Confirm copied diagnostics do not contain raw renderer errors, document text, internal XML content, or absolute vault paths.
+  - Confirm the external-open action remains available.
 - Navigation and reading:
   - Test toolbar zoom input.
   - Test `Ctrl` + mouse wheel zoom.
