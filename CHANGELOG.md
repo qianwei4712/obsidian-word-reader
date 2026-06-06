@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.1 - 2026-06-06
+
+### English
+
+#### Docs
+
+- Updated README theme and image preview documentation to match the current Obsidian theme-following behavior.
+- Added manual test coverage for light/dark theme rendering, image preview shortcuts, and image save naming.
+
+### 中文
+
+#### 文档
+
+- 更新 README 中的主题和图片预览说明，使其与当前跟随 Obsidian 主题的行为一致。
+- 增加深浅色主题渲染、图片预览快捷键和图片另存命名的手动测试覆盖。
+
 ## 1.2.0 - 2026-06-05
 
 ### English

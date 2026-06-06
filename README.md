@@ -11,7 +11,7 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 - Open `.docx` files in an Obsidian tab.
 - Render headings, paragraphs, lists, tables, images, and page breaks where supported by `docx-preview`.
 - Keep the original Word file unchanged.
-- Use a white document surface so Word content remains readable in dark themes.
+- Follow Obsidian light and dark themes for the Word preview surface. Complex Word documents with explicit colors may still affect the final rendered appearance.
 - Zoom continuously with the toolbar percentage input or `Ctrl` + mouse wheel.
 - Fit the rendered document to the pane width.
 - Click rendered images to preview them in a larger modal.
@@ -55,6 +55,8 @@ Inside the image preview:
 - Drag the image to pan.
 - Double-click to fit the image back into the preview.
 - Use the toolbar to fit to window, view actual size, copy the image, or save the image.
+- Press `Ctrl` + `C` on Windows/Linux or `Cmd` + `C` on macOS while the image preview is open to copy the image.
+- Saved images use a default name based on the source document and image dimensions when available.
 - The toolbar shows the original image dimensions and current zoom.
 
 ### Search
@@ -265,6 +267,7 @@ E:\DevelopHelper\nvm\v18.20.8\node.exe
 - The plugin never saves changes back to `.docx`.
 - Legacy `.doc` files are not rendered directly, but the plugin shows external-open and conversion guidance.
 - Complex Word layouts may not render exactly like Microsoft Word.
+- Word previews follow the current Obsidian theme, but explicit colors stored in the Word document may still influence the rendered result.
 - Very large files or files with many images may render slowly.
 - Mobile support is not included in this version.
 

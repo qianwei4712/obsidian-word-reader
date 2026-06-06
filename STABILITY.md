@@ -48,6 +48,13 @@ Run this checklist before publishing a stable release:
 - Image preview:
   - Click a rendered image.
   - Test image zoom, pan, fit, actual size, copy, and save.
+- 1.2.x theme and image behavior:
+  - Test the Word preview surface in both Obsidian light and dark themes.
+  - Confirm fallback message pages remain readable in both themes.
+  - Confirm the image preview modal remains readable in both themes.
+  - Confirm `Ctrl` + `C` on Windows/Linux or `Cmd` + `C` on macOS copies the current image while the image preview modal is open.
+  - Confirm saved image default names are based on the source document and include image dimensions when available.
+  - Do not include PPTX preview, reading-position restore, or outline folding in the 1.2.x manual test scope.
 - Settings and language:
   - Switch between Chinese and English.
   - Confirm settings text, toolbar labels, notices, status messages, errors, and image modal text follow the selected language.
