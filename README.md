@@ -210,8 +210,8 @@ The release command runs TypeScript checks, builds the plugin, validates version
 Expected output:
 
 ```text
-release/obsidian-word-reader-1.1.1.zip
-release/CHANGELOG-1.1.1.md
+release/obsidian-word-reader-X.Y.Z.zip
+release/CHANGELOG-X.Y.Z.md
 ```
 
 The zip root contains only the files Obsidian needs:
@@ -255,17 +255,36 @@ Run TypeScript checks:
 npm run typecheck
 ```
 
-Validate release metadata after building:
+Run unit and integration tests:
 
 ```bash
+npm test
+```
+
+Run the production security scan after building:
+
+```bash
+npm run build
+npm run security:scan
+```
+
+Run every automated quality gate:
+
+```bash
+npm run check
+```
+
+Validate release metadata and zip contents after packaging:
+
+```bash
+npm run release:zip
 npm run release:check
 ```
 
-On this workstation, the expected Node.js executable is:
+The initial community-directory submission and release review steps are in
+[COMMUNITY_PLUGIN_CHECKLIST.md](COMMUNITY_PLUGIN_CHECKLIST.md).
 
-```text
-E:\DevelopHelper\nvm\v18.20.8\node.exe
-```
+CI and release workflows use Node.js 20.19.0.
 
 ## Known Limits
 

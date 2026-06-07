@@ -7,7 +7,7 @@ import * as mammoth from "mammoth";
  * SECURITY: Only reads text content, no script execution or network access.
  */
 export async function extractPlainText(buffer: ArrayBuffer): Promise<string> {
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+  const result = await mammoth.extractRawText(createMammothInput(buffer));
   return result.value.trim();
 }
 
@@ -21,7 +21,7 @@ export async function extractMarkdown(buffer: ArrayBuffer): Promise<string> {
       convertToMarkdown: typeof mammoth.convertToHtml;
     }
   ).convertToMarkdown(
-    { arrayBuffer: buffer },
+    createMammothInput(buffer),
     {
       styleMap: [
         "p[style-name='Title'] => h1:fresh",
@@ -36,4 +36,14 @@ export async function extractMarkdown(buffer: ArrayBuffer): Promise<string> {
     },
   );
   return result.value.trim();
+}
+
+function createMammothInput(
+  arrayBuffer: ArrayBuffer,
+): { arrayBuffer: ArrayBuffer } | { buffer: Buffer } {
+  if (typeof window === "undefined" && typeof Buffer !== "undefined") {
+    return { buffer: Buffer.from(arrayBuffer) };
+  }
+
+  return { arrayBuffer };
 }

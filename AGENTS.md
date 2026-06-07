@@ -16,7 +16,9 @@ Before completing any source change, run:
 ```bash
 npm run lint
 npm run typecheck
+npm test
 npm run build
+npm run security:scan
 ```
 
 Prefer the combined command:

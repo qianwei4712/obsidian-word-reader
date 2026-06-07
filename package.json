@@ -1,6 +1,6 @@
 {
   "name": "obsidian-word-reader",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Read .docx files inside Obsidian without modifying the original Word document.",
   "main": "main.js",
   "scripts": {
@@ -8,12 +8,14 @@
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
-    "check": "npm run lint && npm run typecheck && npm run build",
+    "test": "node scripts/run-tests.mjs",
+    "security:scan": "node scripts/security-scan.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run security:scan",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "release:check": "node scripts/release-check.mjs",
     "release:notes": "node scripts/extract-changelog.mjs",
     "release:zip": "npm run build && node scripts/package-release.mjs",
-    "release": "npm run typecheck && npm run release:zip && npm run release:check && npm run release:notes"
+    "release": "npm run lint && npm run typecheck && npm test && npm run release:zip && npm run security:scan && npm run release:check && npm run release:notes"
   },
   "keywords": [
     "obsidian",
@@ -36,6 +38,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-obsidianmd": "^0.3.0",
     "globals": "^17.6.0",
+    "jszip": "^3.10.1",
     "jiti": "^2.6.1",
     "obsidian": "^1.13.0",
     "typescript": "^5.7.2",

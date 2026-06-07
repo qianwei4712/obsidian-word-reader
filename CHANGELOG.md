@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.5.0 - 2026-06-07
+
+### English
+
+#### Added
+
+- Added Node.js-based unit tests for settings normalization, localization,
+  summary note generation, Word error classification, and privacy-safe
+  diagnostics.
+- Added a generated minimal DOCX integration test covering plain-text and
+  Markdown extraction.
+- Added an AST-based security scan for dynamic code, script/HTML injection,
+  remote execution, and undisclosed network request primitives, plus
+  production bundle checks.
+- Added `versions.json` and a community plugin submission checklist based on
+  the current Obsidian release requirements.
+
+#### Changed
+
+- CI and release workflows now require tests and the security scan to pass.
+- Release validation now checks community submission metadata, manifest ID and
+  description rules, and `versions.json` compatibility.
+- Extracted settings, summary-note, and Word-error logic into independently
+  testable production modules.
+
+### 中文
+
+#### 新增
+
+- 增加基于 Node.js 的单元测试，覆盖设置归一化、界面语言、摘要笔记生成、
+  Word 错误分类和隐私安全诊断信息。
+- 增加运行时生成最小 DOCX 的集成测试，验证纯文本和 Markdown 提取。
+- 增加基于 AST 的安全扫描，检查动态代码、脚本或 HTML 注入、远程执行和
+  未披露网络请求风险，并检查生产构建产物。
+- 增加 `versions.json` 和依据当前 Obsidian 发布要求整理的社区插件提交清单。
+
+#### 变更
+
+- CI 和发布流程现在必须通过自动化测试与安全扫描。
+- 发布校验新增社区提交元数据、manifest ID、描述规则和 `versions.json`
+  兼容性检查。
+- 将设置、摘要笔记和 Word 错误处理逻辑拆分为可独立测试的生产模块。
+
 ## 1.4.1 - 2026-06-07
 
 ### English

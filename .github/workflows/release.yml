@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20.19.0
           cache: npm
 
       - name: Install dependencies
@@ -33,14 +33,20 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
 
-      - name: Validate release
-        run: node scripts/release-check.mjs --tag "$GITHUB_REF_NAME"
+      - name: Security scan
+        run: npm run security:scan
 
       - name: Package release zip
         run: npm run release:zip
+
+      - name: Validate release
+        run: node scripts/release-check.mjs --tag "$GITHUB_REF_NAME"
 
       - name: Extract release notes
         run: npm run release:notes

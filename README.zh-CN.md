@@ -210,8 +210,8 @@ npm run release
 预期输出：
 
 ```text
-release/obsidian-word-reader-1.1.1.zip
-release/CHANGELOG-1.1.1.md
+release/obsidian-word-reader-X.Y.Z.zip
+release/CHANGELOG-X.Y.Z.md
 ```
 
 zip 根目录只包含 Obsidian 需要的文件：
@@ -255,17 +255,36 @@ npm run build
 npm run typecheck
 ```
 
-构建后校验发布元数据：
+执行单元测试和集成测试：
 
 ```bash
+npm test
+```
+
+构建后执行生产安全扫描：
+
+```bash
+npm run build
+npm run security:scan
+```
+
+执行全部自动化质量门禁：
+
+```bash
+npm run check
+```
+
+打包后校验发布元数据和 zip 内容：
+
+```bash
+npm run release:zip
 npm run release:check
 ```
 
-当前机器指定的 Node.js 路径：
+首次提交社区插件目录和后续发布审查步骤见
+[COMMUNITY_PLUGIN_CHECKLIST.md](COMMUNITY_PLUGIN_CHECKLIST.md)。
 
-```text
-E:\DevelopHelper\nvm\v18.20.8\node.exe
-```
+CI 和发布工作流使用 Node.js 20.19.0。
 
 ## 已知限制
 

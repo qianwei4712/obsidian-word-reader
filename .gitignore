@@ -3,6 +3,7 @@ node_modules/
 main.js
 dist/
 release/
+.test-dist/
 *.map
 .DS_Store
 ITERATION_PLAN.local.md
