@@ -1,4 +1,8 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import {
+  App,
+  PluginSettingTab,
+  type SettingDefinitionItem,
+} from "obsidian";
 
 import type WordReaderPlugin from "./main";
 import {
@@ -33,25 +37,34 @@ const MIN_LARGE_FILE_WARNING_MB = 1;
 const MAX_LARGE_FILE_WARNING_MB = 500;
 
 export function normalizeSettings(
-  settings: Partial<WordReaderSettings> | null | undefined,
+  settings: unknown,
 ): WordReaderSettings {
+  const source = isRecord(settings) ? settings : {};
   return {
-    language: normalizeLanguage(settings?.language),
+    language: normalizeLanguage(source.language),
     defaultZoomPercent: clampInteger(
-      settings?.defaultZoomPercent ?? DEFAULT_SETTINGS.defaultZoomPercent,
+      readNumber(source.defaultZoomPercent, DEFAULT_SETTINGS.defaultZoomPercent),
       MIN_ZOOM_PERCENT,
       MAX_ZOOM_PERCENT,
       DEFAULT_SETTINGS.defaultZoomPercent,
     ),
-    defaultFitWidth:
-      settings?.defaultFitWidth ?? DEFAULT_SETTINGS.defaultFitWidth,
-    showOutlineByDefault:
-      settings?.showOutlineByDefault ??
+    defaultFitWidth: readBoolean(
+      source.defaultFitWidth,
+      DEFAULT_SETTINGS.defaultFitWidth,
+    ),
+    showOutlineByDefault: readBoolean(
+      source.showOutlineByDefault,
       DEFAULT_SETTINGS.showOutlineByDefault,
-    enableImagePreview:
-      settings?.enableImagePreview ?? DEFAULT_SETTINGS.enableImagePreview,
+    ),
+    enableImagePreview: readBoolean(
+      source.enableImagePreview,
+      DEFAULT_SETTINGS.enableImagePreview,
+    ),
     largeFileWarningMb: clampInteger(
-      settings?.largeFileWarningMb ?? DEFAULT_SETTINGS.largeFileWarningMb,
+      readNumber(
+        source.largeFileWarningMb,
+        DEFAULT_SETTINGS.largeFileWarningMb,
+      ),
       MIN_LARGE_FILE_WARNING_MB,
       MAX_LARGE_FILE_WARNING_MB,
       DEFAULT_SETTINGS.largeFileWarningMb,
@@ -67,112 +80,133 @@ export class WordReaderSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
+  getSettingDefinitions(): SettingDefinitionItem[] {
     const text = getWordReaderText(this.plugin.settings.language).settings;
 
-    new Setting(containerEl)
-      .setName(text.languageName)
-      .setDesc(text.languageDesc)
-      .addDropdown((dropdown) => {
-        dropdown
-          .addOption("zh-CN", text.languageZh)
-          .addOption("en", text.languageEn)
-          .setValue(this.plugin.settings.language)
-          .onChange(async (value) => {
-            this.plugin.settings.language = normalizeLanguage(value);
-            await this.plugin.saveSettings();
-            this.plugin.refreshWordReaderViews();
-            this.display();
-          });
-      });
+    return [
+      {
+        name: text.languageName,
+        desc: text.languageDesc,
+        control: {
+          type: "dropdown",
+          key: "language",
+          defaultValue: DEFAULT_SETTINGS.language,
+          options: {
+            "zh-CN": text.languageZh,
+            en: text.languageEn,
+          },
+        },
+      },
+      {
+        name: text.defaultZoomName,
+        desc: text.defaultZoomDesc,
+        control: {
+          type: "number",
+          key: "defaultZoomPercent",
+          defaultValue: DEFAULT_SETTINGS.defaultZoomPercent,
+          placeholder: "100",
+          min: MIN_ZOOM_PERCENT,
+          max: MAX_ZOOM_PERCENT,
+          step: 5,
+        },
+      },
+      {
+        name: text.defaultFitWidthName,
+        desc: text.defaultFitWidthDesc,
+        control: {
+          type: "toggle",
+          key: "defaultFitWidth",
+          defaultValue: DEFAULT_SETTINGS.defaultFitWidth,
+        },
+      },
+      {
+        name: text.showOutlineName,
+        desc: text.showOutlineDesc,
+        control: {
+          type: "toggle",
+          key: "showOutlineByDefault",
+          defaultValue: DEFAULT_SETTINGS.showOutlineByDefault,
+        },
+      },
+      {
+        name: text.imagePreviewName,
+        desc: text.imagePreviewDesc,
+        control: {
+          type: "toggle",
+          key: "enableImagePreview",
+          defaultValue: DEFAULT_SETTINGS.enableImagePreview,
+        },
+      },
+      {
+        name: text.largeFileWarningName,
+        desc: text.largeFileWarningDesc,
+        control: {
+          type: "number",
+          key: "largeFileWarningMb",
+          defaultValue: DEFAULT_SETTINGS.largeFileWarningMb,
+          placeholder: "25",
+          min: MIN_LARGE_FILE_WARNING_MB,
+          max: MAX_LARGE_FILE_WARNING_MB,
+          step: 1,
+        },
+      },
+      {
+        name: text.externalOpeningName,
+        desc: text.externalOpeningDesc,
+      },
+    ];
+  }
 
-    new Setting(containerEl)
-      .setName(text.defaultZoomName)
-      .setDesc(text.defaultZoomDesc)
-      .addText((input) => {
-        input
-          .setPlaceholder("100")
-          .setValue(String(this.plugin.settings.defaultZoomPercent))
-          .onChange(async (value) => {
-            this.plugin.settings.defaultZoomPercent = clampInteger(
-              Number(value),
-              MIN_ZOOM_PERCENT,
-              MAX_ZOOM_PERCENT,
-              DEFAULT_SETTINGS.defaultZoomPercent,
-            );
-            await this.plugin.saveSettings();
-          });
+  getControlValue(key: string): unknown {
+    return getSettingValue(this.plugin.settings, key);
+  }
 
-        input.inputEl.type = "number";
-        input.inputEl.min = String(MIN_ZOOM_PERCENT);
-        input.inputEl.max = String(MAX_ZOOM_PERCENT);
-        input.inputEl.step = "5";
-      });
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    const previousLanguage = this.plugin.settings.language;
+    this.plugin.settings = normalizeSettings({
+      ...this.plugin.settings,
+      [key]: value,
+    });
+    await this.plugin.saveSettings();
 
-    new Setting(containerEl)
-      .setName(text.defaultFitWidthName)
-      .setDesc(text.defaultFitWidthDesc)
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.defaultFitWidth)
-          .onChange(async (value) => {
-            this.plugin.settings.defaultFitWidth = value;
-            await this.plugin.saveSettings();
-          });
-      });
+    if (this.plugin.settings.language !== previousLanguage) {
+      this.plugin.refreshWordReaderViews();
+      this.update();
+    }
+  }
+}
 
-    new Setting(containerEl)
-      .setName(text.showOutlineName)
-      .setDesc(text.showOutlineDesc)
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.showOutlineByDefault)
-          .onChange(async (value) => {
-            this.plugin.settings.showOutlineByDefault = value;
-            await this.plugin.saveSettings();
-          });
-      });
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
-    new Setting(containerEl)
-      .setName(text.imagePreviewName)
-      .setDesc(text.imagePreviewDesc)
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.enableImagePreview)
-          .onChange(async (value) => {
-            this.plugin.settings.enableImagePreview = value;
-            await this.plugin.saveSettings();
-          });
-      });
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" ? value : fallback;
+}
 
-    new Setting(containerEl)
-      .setName(text.largeFileWarningName)
-      .setDesc(text.largeFileWarningDesc)
-      .addText((input) => {
-        input
-          .setPlaceholder("25")
-          .setValue(String(this.plugin.settings.largeFileWarningMb))
-          .onChange(async (value) => {
-            this.plugin.settings.largeFileWarningMb = clampInteger(
-              Number(value),
-              MIN_LARGE_FILE_WARNING_MB,
-              MAX_LARGE_FILE_WARNING_MB,
-              DEFAULT_SETTINGS.largeFileWarningMb,
-            );
-            await this.plugin.saveSettings();
-          });
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
 
-        input.inputEl.type = "number";
-        input.inputEl.min = String(MIN_LARGE_FILE_WARNING_MB);
-        input.inputEl.max = String(MAX_LARGE_FILE_WARNING_MB);
-        input.inputEl.step = "1";
-      });
-
-    new Setting(containerEl)
-      .setName(text.externalOpeningName)
-      .setDesc(text.externalOpeningDesc);
+function getSettingValue(
+  settings: WordReaderSettings,
+  key: string,
+): unknown {
+  switch (key) {
+    case "language":
+      return settings.language;
+    case "defaultZoomPercent":
+      return settings.defaultZoomPercent;
+    case "defaultFitWidth":
+      return settings.defaultFitWidth;
+    case "showOutlineByDefault":
+      return settings.showOutlineByDefault;
+    case "enableImagePreview":
+      return settings.enableImagePreview;
+    case "largeFileWarningMb":
+      return settings.largeFileWarningMb;
+    default:
+      return undefined;
   }
 }
 

@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.4.1 - 2026-06-07
+
+### English
+
+#### Added
+
+- Added the official `eslint-plugin-obsidianmd` recommended rules, zero-warning local checks, and CI/release lint gates.
+- Added repository-level development rules documenting required Obsidian compatibility and release checks.
+
+#### Changed
+
+- Migrated plugin settings to Obsidian's declarative `getSettingDefinitions()` API and raised the minimum supported Obsidian version to 1.13.0.
+- Simplified command IDs so Obsidian can add the plugin namespace without duplicated prefixes.
+
+#### Fixed
+
+- Made document creation and DOM type checks safe across Obsidian popout windows.
+- Replaced direct `fetch` and CommonJS `require()` usage with local resource loading and guarded desktop-only module imports.
+- Removed an unsafe settings argument and other automated review warnings.
+
+### 中文
+
+#### 新增
+
+- 接入官方 `eslint-plugin-obsidianmd` 推荐规则、零告警本地检查，以及 CI 和发布流程中的 lint 门禁。
+- 增加仓库级开发规则，明确 Obsidian 兼容性要求和发布前必需检查。
+
+#### 变更
+
+- 设置页迁移到 Obsidian 声明式 `getSettingDefinitions()` API，并将最低支持版本提升到 Obsidian 1.13.0。
+- 简化命令 ID，由 Obsidian 自动添加插件命名空间，避免重复前缀。
+
+#### 修复
+
+- 修复文档创建与 DOM 类型检查在 Obsidian 弹出窗口中的跨窗口兼容性。
+- 使用本地资源读取和受桌面端保护的模块导入，替代直接使用 `fetch` 和 CommonJS `require()`。
+- 移除设置读取中的不安全参数以及其他自动审查告警。
+
 ## 1.4.0 - 2026-06-07
 
 ### English

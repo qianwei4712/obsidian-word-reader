@@ -27,14 +27,18 @@ export async function openExternalDocx(
     return;
   }
 
-  const shell = getElectronShell();
+  const shell = await getElectronShell();
   const failureReason = await shell.openPath(adapter.getFullPath(file.path));
   if (failureReason) {
     throw new Error(failureReason);
   }
 }
 
-function getElectronShell(): ElectronShell {
-  const electron = require("electron") as { shell: ElectronShell };
+async function getElectronShell(): Promise<ElectronShell> {
+  if (!Platform.isDesktopApp) {
+    throw new Error("External opening is only available on desktop");
+  }
+
+  const electron = await import("electron");
   return electron.shell;
 }

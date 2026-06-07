@@ -27,7 +27,7 @@ export default class WordReaderPlugin extends Plugin {
     this.registerExtensions(["docx", "doc"], VIEW_TYPE_WORD_READER);
 
     this.addCommand({
-      id: "word-reader-reload",
+      id: "reload",
       name: text.commands.reload,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
@@ -44,7 +44,7 @@ export default class WordReaderPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "word-reader-copy-text",
+      id: "copy-text",
       name: text.commands.copyText,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
@@ -61,7 +61,7 @@ export default class WordReaderPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "word-reader-copy-markdown",
+      id: "copy-markdown",
       name: text.commands.copyMarkdown,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
@@ -78,7 +78,7 @@ export default class WordReaderPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "word-reader-create-note",
+      id: "create-note",
       name: text.commands.createNote,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
@@ -95,7 +95,7 @@ export default class WordReaderPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "word-reader-open-external",
+      id: "open-external",
       name: text.commands.openExternal,
       checkCallback: (checking) => {
         const view = this.getActiveWordView();
@@ -129,7 +129,8 @@ export default class WordReaderPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = normalizeSettings(await this.loadData());
+    const loadedSettings: unknown = await this.loadData();
+    this.settings = normalizeSettings(loadedSettings);
   }
 
   async saveSettings(): Promise<void> {

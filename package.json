@@ -1,11 +1,14 @@
 {
   "name": "obsidian-word-reader",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Read .docx files inside Obsidian without modifying the original Word document.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix --max-warnings 0",
+    "check": "npm run lint && npm run typecheck && npm run build",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "release:check": "node scripts/release-check.mjs",
     "release:notes": "node scripts/extract-changelog.mjs",
@@ -27,9 +30,15 @@
     "setimmediate": "file:vendor/setimmediate"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^20.17.10",
     "esbuild": "^0.24.2",
-    "obsidian": "^1.7.2",
-    "typescript": "^5.7.2"
+    "eslint": "^9.39.4",
+    "eslint-plugin-obsidianmd": "^0.3.0",
+    "globals": "^17.6.0",
+    "jiti": "^2.6.1",
+    "obsidian": "^1.13.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.59.1"
   }
 }

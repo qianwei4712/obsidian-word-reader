@@ -3,6 +3,7 @@ import {
   FileView,
   Modal,
   Notice,
+  Platform,
   TFile,
   WorkspaceLeaf,
   setIcon,
@@ -432,7 +433,7 @@ export class WordView extends FileView {
 
     // SECURITY: Only structural DOM elements are created for safe document rendering.
     // No <script> elements are created or injected. All content comes from trusted local .docx files.
-    const renderTargetEl = document.createElement("div");
+    const renderTargetEl = activeDocument.createElement("div");
     renderTargetEl.className = "word-reader-render-buffer";
     let renderedBlobUrls = new Set<string>();
     let adoptedBlobUrls = false;
@@ -523,7 +524,7 @@ export class WordView extends FileView {
     const targetEl = this.documentEl;
     const topLevelNodes = Array.from(renderTargetEl.childNodes);
     const totalUnits = topLevelNodes.reduce((total, node) => {
-      if (node instanceof HTMLElement && node.matches(".docx-wrapper")) {
+      if (node.instanceOf(HTMLElement) && node.matches(".docx-wrapper")) {
         return total + Math.max(node.childNodes.length, 1);
       }
       return total + 1;
@@ -535,7 +536,7 @@ export class WordView extends FileView {
         return;
       }
 
-      if (node instanceof HTMLElement && node.matches(".docx-wrapper")) {
+      if (node.instanceOf(HTMLElement) && node.matches(".docx-wrapper")) {
         const wrapperEl = node.cloneNode(false) as HTMLElement;
         targetEl.appendChild(wrapperEl);
         const wrapperChildren = Array.from(node.childNodes);
@@ -554,7 +555,7 @@ export class WordView extends FileView {
             return;
           }
 
-          const fragment = document.createDocumentFragment();
+          const fragment = activeDocument.createDocumentFragment();
           for (const child of wrapperChildren.slice(
             index,
             index + DOM_COMMIT_CHUNK_SIZE,
@@ -665,9 +666,9 @@ export class WordView extends FileView {
         return;
       }
 
-      const fragment = document.createDocumentFragment();
+      const fragment = activeDocument.createDocumentFragment();
       for (const heading of headings.slice(index, index + OUTLINE_CHUNK_SIZE)) {
-        const buttonEl = document.createElement("button");
+        const buttonEl = activeDocument.createElement("button");
         buttonEl.className = `word-reader-outline-item level-${heading.level}`;
         buttonEl.type = "button";
         buttonEl.title = heading.text;
@@ -735,12 +736,13 @@ export class WordView extends FileView {
       return;
     }
 
-    if (!(event.target instanceof Element)) {
+    const target = event.targetNode;
+    if (!target?.instanceOf(Element)) {
       return;
     }
 
-    const imageEl = event.target.closest("img");
-    if (!(imageEl instanceof HTMLImageElement)) {
+    const imageEl = target.closest("img");
+    if (!imageEl?.instanceOf(HTMLImageElement)) {
       return;
     }
 
@@ -938,7 +940,7 @@ export class WordView extends FileView {
       return "";
     }
 
-    const fragment = document.createDocumentFragment();
+    const fragment = activeDocument.createDocumentFragment();
     for (let index = 0; index < selection.rangeCount; index += 1) {
       fragment.appendChild(selection.getRangeAt(index).cloneContents());
     }
@@ -1394,7 +1396,7 @@ function appendDiagnosticEntry(
 }
 
 function createMessageListItem(text: string): HTMLLIElement {
-  const itemEl = document.createElement("li");
+  const itemEl = activeDocument.createElement("li");
   itemEl.textContent = text;
   return itemEl;
 }
@@ -1424,7 +1426,7 @@ function collectBlobUrls(rootEl: HTMLElement): Set<string> {
       }
     }
 
-    if (element instanceof HTMLStyleElement) {
+    if (element.instanceOf(HTMLStyleElement)) {
       for (const match of (element.textContent ?? "").matchAll(blobUrlPattern)) {
         urls.add(match[0]);
       }
@@ -1492,7 +1494,7 @@ async function highlightText(
   shouldContinue: () => boolean,
 ): Promise<HTMLElement[]> {
   const normalizedQuery = query.toLowerCase();
-  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
+  const walker = activeDocument.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parentEl = node.parentElement;
       if (
@@ -1543,7 +1545,7 @@ async function highlightText(
       }
 
       const text = textNode.nodeValue ?? "";
-      const fragment = document.createDocumentFragment();
+      const fragment = activeDocument.createDocumentFragment();
       let lastIndex = 0;
       let match: RegExpExecArray | null;
       regex.lastIndex = 0;
@@ -1551,13 +1553,13 @@ async function highlightText(
       while ((match = regex.exec(text)) !== null) {
         if (match.index > lastIndex) {
           fragment.appendChild(
-            document.createTextNode(text.slice(lastIndex, match.index)),
+            activeDocument.createTextNode(text.slice(lastIndex, match.index)),
           );
         }
 
         // SECURITY: Only <span> elements are created for text highlighting.
         // No script execution or external resource loading occurs.
-        const markEl = document.createElement("span");
+        const markEl = activeDocument.createElement("span");
         markEl.className = "word-reader-highlight";
         markEl.textContent = match[0];
         fragment.appendChild(markEl);
@@ -1567,7 +1569,9 @@ async function highlightText(
       }
 
       if (lastIndex < text.length) {
-        fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        fragment.appendChild(
+          activeDocument.createTextNode(text.slice(lastIndex)),
+        );
       }
 
       textNode.replaceWith(fragment);
@@ -1641,7 +1645,7 @@ function markdownForNode(node: Node): string {
     return node.textContent ?? "";
   }
 
-  if (!(node instanceof HTMLElement)) {
+  if (!node.instanceOf(HTMLElement)) {
     return markdownForChildNodes(node);
   }
 
@@ -1692,7 +1696,7 @@ function markdownForNode(node: Node): string {
 
 function markdownForList(listEl: HTMLElement, marker: string): string {
   return Array.from(listEl.children)
-    .filter((child): child is HTMLElement => child instanceof HTMLElement)
+    .filter((child): child is HTMLElement => child.instanceOf(HTMLElement))
     .filter((child) => child.tagName.toLowerCase() === "li")
     .map((itemEl) => `${marker} ${markdownForChildNodes(itemEl).trim()}`)
     .join("\n");
@@ -1780,7 +1784,7 @@ class ImagePreviewModal extends Modal {
     this.contentEl.empty();
     this.titleEl.setText(this.alt);
     this.contentEl.addClass("word-reader-image-modal");
-    document.addEventListener("keydown", this.handleKeyDown);
+    this.contentEl.doc.addEventListener("keydown", this.handleKeyDown);
 
     const toolbarEl = this.contentEl.createDiv({
       cls: "word-reader-image-toolbar",
@@ -1844,7 +1848,7 @@ class ImagePreviewModal extends Modal {
   }
 
   onClose(): void {
-    document.removeEventListener("keydown", this.handleKeyDown);
+    this.contentEl.doc.removeEventListener("keydown", this.handleKeyDown);
     this.releaseResource?.();
     this.contentEl.empty();
   }
@@ -1998,7 +2002,7 @@ class ImagePreviewModal extends Modal {
 
   private async copyImage(): Promise<void> {
     try {
-      const clipboard = getElectronClipboard();
+      const clipboard = await getElectronClipboard();
       if (clipboard) {
         const image = await this.loadElectronImage();
         clipboard.writeImage(image);
@@ -2016,7 +2020,7 @@ class ImagePreviewModal extends Modal {
     try {
       const imageData = await loadImageData(this.src);
       const fileName = this.getImageFileName(imageData.extension);
-      const dialog = getElectronDialog();
+      const dialog = await getElectronDialog();
       if (!dialog) {
         downloadImageData(imageData, fileName);
         new Notice(this.text.notices.startedImageDownload);
@@ -2042,7 +2046,7 @@ class ImagePreviewModal extends Modal {
           return;
         }
 
-        await getNodeFsPromises().writeFile(result.filePath, imageData.bytes);
+        await writeImageFile(result.filePath, imageData.bytes);
         new Notice(this.text.notices.savedImage);
       } catch {
         downloadImageData(imageData, fileName);
@@ -2063,7 +2067,7 @@ class ImagePreviewModal extends Modal {
   }
 
   private async loadElectronImage(): Promise<ElectronNativeImage> {
-    const nativeImage = getElectronNativeImage();
+    const nativeImage = await getElectronNativeImage();
     if (this.src.startsWith("data:")) {
       const image = nativeImage.createFromDataURL(this.src);
       if (!image.isEmpty?.()) {
@@ -2103,27 +2107,48 @@ interface ElectronDialog {
   }>;
 }
 
-interface NodeFsPromises {
-  writeFile(path: string, data: Uint8Array): Promise<void>;
-}
-
 interface ImageData {
   bytes: Uint8Array;
   extension: string;
 }
 
 async function loadImageData(src: string): Promise<ImageData> {
-  const response = await fetch(src);
-  if (!response.ok) {
-    throw new Error(`Image request failed: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const { bytes, mimeType } = await loadLocalImageBytes(src);
   return {
     bytes,
-    extension: getImageExtension(blob.type),
+    extension: getImageExtension(mimeType),
   };
+}
+
+function loadLocalImageBytes(
+  src: string,
+): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("GET", src, true);
+    request.responseType = "arraybuffer";
+    request.addEventListener("load", () => {
+      if (request.status !== 0 && (request.status < 200 || request.status >= 300)) {
+        reject(new Error(`Image request failed: ${request.status}`));
+        return;
+      }
+
+      const response: unknown = request.response;
+      if (!(response instanceof ArrayBuffer)) {
+        reject(new Error("Image request returned an invalid response"));
+        return;
+      }
+
+      resolve({
+        bytes: new Uint8Array(response),
+        mimeType: request.getResponseHeader("content-type") ?? "",
+      });
+    });
+    request.addEventListener("error", () => {
+      reject(new Error("Image request failed"));
+    });
+    request.send();
+  });
 }
 
 function getImageExtension(mimeType: string): string {
@@ -2163,10 +2188,8 @@ function getImageMimeType(extension: string): string {
 }
 
 function createImageBlob(imageData: ImageData): Blob {
-  const buffer = imageData.bytes.buffer.slice(
-    imageData.bytes.byteOffset,
-    imageData.bytes.byteOffset + imageData.bytes.byteLength,
-  ) as ArrayBuffer;
+  const buffer = new ArrayBuffer(imageData.bytes.byteLength);
+  new Uint8Array(buffer).set(imageData.bytes);
   return new Blob([buffer], {
     type: getImageMimeType(imageData.extension),
   });
@@ -2188,7 +2211,7 @@ async function copyImageWithWebClipboard(imageData: ImageData): Promise<void> {
 function downloadImageData(imageData: ImageData, fileName: string): void {
   const blob = createImageBlob(imageData);
   const url = URL.createObjectURL(blob);
-  const linkEl = document.createElement("a");
+  const linkEl = activeDocument.createElement("a");
   linkEl.href = url;
   linkEl.download = fileName;
   linkEl.click();
@@ -2198,7 +2221,14 @@ function downloadImageData(imageData: ImageData, fileName: string): void {
 }
 
 function sanitizeFileName(value: string): string {
-  const sanitized = value.replace(/[<>:"/\\|?*\x00-\x1f]/g, "-").trim();
+  const sanitized = Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || '<>:"/\\|?*'.includes(character)
+      ? "-"
+      : character;
+  })
+    .join("")
+    .trim();
   return sanitized || "word-image";
 }
 
@@ -2206,23 +2236,41 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function getElectronClipboard(): ElectronClipboard | null {
-  const electron = require("electron") as { clipboard?: ElectronClipboard };
-  return electron.clipboard ?? null;
+async function getElectronClipboard(): Promise<ElectronClipboard | null> {
+  if (!Platform.isDesktopApp) {
+    return null;
+  }
+
+  const electron = await import("electron");
+  return electron.clipboard;
 }
 
-function getElectronDialog(): ElectronDialog | null {
-  const electron = require("electron") as { dialog?: ElectronDialog };
-  return electron.dialog ?? null;
+async function getElectronDialog(): Promise<ElectronDialog | null> {
+  if (!Platform.isDesktopApp) {
+    return null;
+  }
+
+  const electron = await import("electron");
+  return electron.dialog;
 }
 
-function getElectronNativeImage(): ElectronNativeImageModule {
-  const electron = require("electron") as {
-    nativeImage: ElectronNativeImageModule;
-  };
+async function getElectronNativeImage(): Promise<ElectronNativeImageModule> {
+  if (!Platform.isDesktopApp) {
+    throw new Error("Native image support is only available on desktop");
+  }
+
+  const electron = await import("electron");
   return electron.nativeImage;
 }
 
-function getNodeFsPromises(): NodeFsPromises {
-  return require("fs/promises") as NodeFsPromises;
+async function writeImageFile(
+  path: string,
+  data: Uint8Array,
+): Promise<void> {
+  if (!Platform.isDesktopApp) {
+    throw new Error("Saving images outside the vault is only available on desktop");
+  }
+
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(path, data);
 }
