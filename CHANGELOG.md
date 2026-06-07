@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.2 - 2026-06-07
+
+### English
+
+#### Fixed
+
+- Replaced the settings page HTML heading with Obsidian's native `Setting.setHeading()` API for consistent UI and automated review compliance.
+
+### 中文
+
+#### 修复
+
+- 将设置页面的 HTML 标题替换为 Obsidian 原生 `Setting.setHeading()` API，以保持界面一致并通过自动审核。
+
 ## 1.3.1 - 2026-06-06
 
 ### English
