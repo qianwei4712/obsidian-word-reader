@@ -47,6 +47,12 @@ Run this checklist before publishing a stable release:
   - Test fit width.
   - Test search, previous/next navigation, and current result highlighting.
   - Test large document loading status with a file above the configured warning size.
+  - Confirm a long document shows reading, rendering, preview preparation, and navigation-building status updates before the final preview state.
+  - Confirm a document with at least 12 rendered pages remains responsive while pages are committed and while searching for a frequent term.
+  - Confirm rapidly changing the search query or switching files does not leave stale highlights or outline entries.
+  - Confirm image-heavy documents still support image preview, copy, and save after switching from base64 data URLs to Blob URLs.
+  - Confirm reloading, switching, and closing image-heavy documents does not leave broken previews in an already-open image modal.
+  - In a development build, confirm the developer console logs read, render, DOM commit, outline, total duration, page count, and image count metrics.
 - Copy and notes:
   - Copy selected rendered text.
   - Copy whole-document plain text.

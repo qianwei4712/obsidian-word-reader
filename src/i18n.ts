@@ -68,6 +68,8 @@ export interface WordReaderText {
     preview: (fileName: string) => string;
     reading: (fileName: string) => string;
     rendering: (fileName: string) => string;
+    preparingPreview: (fileName: string, percent: number) => string;
+    buildingNavigation: (fileName: string) => string;
     largeDocument: (sizeMb: string) => string;
     legacyDoc: (fileName: string) => string;
   };
@@ -221,6 +223,10 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
       preview: (fileName) => `Read-only preview: ${fileName}`,
       reading: (fileName) => `Reading ${fileName}...`,
       rendering: (fileName) => `Rendering ${fileName}...`,
+      preparingPreview: (fileName, percent) =>
+        `Preparing ${fileName} preview (${percent}%)...`,
+      buildingNavigation: (fileName) =>
+        `Building navigation for ${fileName}...`,
       largeDocument: (sizeMb) =>
         `Large document detected (${sizeMb} MB). Rendering may take a while...`,
       legacyDoc: (fileName) => `Legacy .doc file: ${fileName}`,
@@ -393,6 +399,9 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
       preview: (fileName) => `只读预览：${fileName}`,
       reading: (fileName) => `正在读取 ${fileName}...`,
       rendering: (fileName) => `正在渲染 ${fileName}...`,
+      preparingPreview: (fileName, percent) =>
+        `正在准备 ${fileName} 预览（${percent}%）...`,
+      buildingNavigation: (fileName) => `正在生成 ${fileName} 导航...`,
       largeDocument: (sizeMb) =>
         `检测到大文档（${sizeMb} MB），渲染可能需要一些时间...`,
       legacyDoc: (fileName) => `旧版 .doc 文件：${fileName}`,

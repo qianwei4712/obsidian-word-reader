@@ -24,6 +24,13 @@ const MIN_IMAGE_ZOOM = 0.1;
 const MAX_IMAGE_ZOOM = 8;
 const IMAGE_ZOOM_STEP = 1.1;
 const SEARCH_DEBOUNCE_MS = 150;
+const DOM_COMMIT_CHUNK_SIZE = 4;
+const OUTLINE_CHUNK_SIZE = 50;
+const SEARCH_SCAN_CHUNK_SIZE = 500;
+const SEARCH_MUTATION_CHUNK_SIZE = 100;
+const LONG_DOCUMENT_PAGE_THRESHOLD = 12;
+
+declare const __DEV__: boolean;
 
 export class WordView extends FileView {
   private readonly plugin: WordReaderPlugin;
@@ -43,10 +50,15 @@ export class WordView extends FileView {
   private searchMatchEls: HTMLElement[] = [];
   private currentSearchIndex = -1;
   private searchHighlightTimer: number | null = null;
+  private searchTaskToken = 0;
+  private outlineTaskToken = 0;
   private buffer: ArrayBuffer | null = null;
   private renderToken = 0;
   private renderedDocumentKey: string | null = null;
   private pendingRenderKey: string | null = null;
+  private documentBlobUrls = new Set<string>();
+  private retainedBlobUrls = new Map<string, number>();
+  private pendingBlobUrlRevocations = new Set<string>();
   private zoom = 1;
   private fitWidth = false;
   private outlineVisible = false;
@@ -86,10 +98,9 @@ export class WordView extends FileView {
 
   async onUnloadFile(): Promise<void> {
     this.renderToken += 1;
-    this.clearSearchTimer();
+    this.cancelSearchWork();
     this.releaseDocumentState();
-    this.documentEl?.empty();
-    this.outlineListEl?.empty();
+    this.clearRenderedDocument();
     this.updateSearchState();
     this.setStatus("");
   }
@@ -162,6 +173,8 @@ export class WordView extends FileView {
 
   refreshInterfaceLanguage(): void {
     const file = this.file;
+    this.renderToken += 1;
+    this.cancelSearchWork();
     this.buildLayout();
     if (file) {
       void this.loadDocx(file, { force: true });
@@ -214,6 +227,9 @@ export class WordView extends FileView {
       () => {
         this.outlineVisible = !this.outlineVisible;
         this.applyOutlineVisibility();
+        if (this.outlineVisible && this.renderedDocumentKey) {
+          void this.updateOutline(this.renderToken);
+        }
       },
     );
 
@@ -312,12 +328,14 @@ export class WordView extends FileView {
     this.ensureLayout();
 
     const token = ++this.renderToken;
-    this.clearSearchTimer();
+    const loadStartedAt = performance.now();
+    this.cancelSearchWork();
     this.clearSearchHighlightsState();
     this.updateSearchState();
 
     if (this.isLegacyDocFile(file)) {
       this.releaseDocumentState();
+      this.clearRenderedDocument();
       this.showLegacyDocMessage(file);
       return;
     }
@@ -330,14 +348,13 @@ export class WordView extends FileView {
       this.documentEl?.hasChildNodes()
     ) {
       this.applyDocumentOptions();
-      this.updateOutline();
+      void this.updateOutline(token);
       this.scheduleSearchHighlights();
       this.setStatus(this.text.status.preview(file.name));
       return;
     }
 
-    this.documentEl?.empty();
-    this.outlineListEl?.empty();
+    this.clearRenderedDocument();
     this.pendingRenderKey = renderKey;
     this.renderedDocumentKey = null;
     this.setStatus(this.text.status.reading(file.name), false, true);
@@ -355,13 +372,22 @@ export class WordView extends FileView {
     }
 
     try {
+      await yieldToBrowser();
+      if (token !== this.renderToken) {
+        return;
+      }
+
+      const readStartedAt = performance.now();
       const buffer = await this.app.vault.readBinary(file);
       if (token !== this.renderToken) {
         return;
       }
 
       this.buffer = buffer;
-      await this.renderCurrentBuffer(token, renderKey);
+      await this.renderCurrentBuffer(token, renderKey, {
+        loadStartedAt,
+        readDurationMs: performance.now() - readStartedAt,
+      });
     } catch (error) {
       if (token !== this.renderToken) {
         return;
@@ -375,6 +401,10 @@ export class WordView extends FileView {
   private async renderCurrentBuffer(
     token: number,
     renderKey: string,
+    timings?: {
+      loadStartedAt: number;
+      readDurationMs: number;
+    },
   ): Promise<void> {
     if (!this.buffer || !this.documentEl || !this.file) {
       return;
@@ -385,39 +415,176 @@ export class WordView extends FileView {
       this.documentEl.hasChildNodes()
     ) {
       this.applyDocumentOptions();
-      this.updateOutline();
+      void this.updateOutline(token);
       this.scheduleSearchHighlights();
       this.setStatus(this.text.status.preview(this.file.name));
       return;
     }
 
+    this.cancelSearchWork();
+    this.clearSearchHighlightsState();
+    this.updateSearchState();
     this.setStatus(this.text.status.rendering(this.file.name), false, true);
+    await yieldToBrowser();
+    if (token !== this.renderToken) {
+      return;
+    }
 
     // SECURITY: Only structural DOM elements are created for safe document rendering.
     // No <script> elements are created or injected. All content comes from trusted local .docx files.
     const renderTargetEl = document.createElement("div");
     renderTargetEl.className = "word-reader-render-buffer";
+    let renderedBlobUrls = new Set<string>();
+    let adoptedBlobUrls = false;
 
-    await renderDocx(this.buffer, renderTargetEl, {
-      fitWidth: this.fitWidth,
-    });
+    try {
+      const rendererStartedAt = performance.now();
+      await renderDocx(this.buffer, renderTargetEl, {
+        fitWidth: this.fitWidth,
+      });
+      const rendererDurationMs = performance.now() - rendererStartedAt;
+      renderedBlobUrls = collectBlobUrls(renderTargetEl);
 
-    if (token !== this.renderToken) {
+      if (token !== this.renderToken) {
+        return;
+      }
+
+      const imageCount = prepareRenderedImages(renderTargetEl);
+      const pageCount = renderTargetEl.querySelectorAll(
+        ".docx-wrapper > section.docx",
+      ).length;
+      const commitStartedAt = performance.now();
+
+      this.clearRenderedDocument();
+      this.documentBlobUrls = renderedBlobUrls;
+      adoptedBlobUrls = true;
+      await this.commitRenderedDocument(renderTargetEl, token, this.file.name);
+
+      if (token !== this.renderToken) {
+        return;
+      }
+
+      const commitDurationMs = performance.now() - commitStartedAt;
+      this.renderedDocumentKey = renderKey;
+      this.pendingRenderKey = null;
+      this.applyDocumentOptions();
+      this.documentEl.toggleClass(
+        "is-long-document",
+        pageCount >= LONG_DOCUMENT_PAGE_THRESHOLD,
+      );
+
+      this.setStatus(
+        this.text.status.buildingNavigation(this.file.name),
+        false,
+        true,
+      );
+      const outlineStartedAt = performance.now();
+      await this.updateOutline(token);
+      const outlineDurationMs = performance.now() - outlineStartedAt;
+
+      if (token !== this.renderToken) {
+        return;
+      }
+
+      this.scheduleSearchHighlights();
+      this.setStatus(this.text.status.preview(this.file.name));
+      logRenderPerformance({
+        fileName: this.file.name,
+        fileSizeBytes: this.file.stat.size,
+        readDurationMs: timings?.readDurationMs ?? 0,
+        rendererDurationMs,
+        commitDurationMs,
+        outlineDurationMs,
+        totalDurationMs:
+          performance.now() - (timings?.loadStartedAt ?? rendererStartedAt),
+        pageCount,
+        imageCount,
+        blobUrlCount: renderedBlobUrls.size,
+      });
+    } finally {
+      if (!adoptedBlobUrls) {
+        for (const url of collectBlobUrls(renderTargetEl)) {
+          renderedBlobUrls.add(url);
+        }
+        revokeBlobUrls(renderedBlobUrls);
+      }
+    }
+  }
+
+  private async commitRenderedDocument(
+    renderTargetEl: HTMLElement,
+    token: number,
+    fileName: string,
+  ): Promise<void> {
+    if (!this.documentEl) {
       return;
     }
 
-    this.documentEl.empty();
-    this.outlineListEl?.empty();
-    while (renderTargetEl.firstChild) {
-      this.documentEl.appendChild(renderTargetEl.firstChild);
-    }
+    const targetEl = this.documentEl;
+    const topLevelNodes = Array.from(renderTargetEl.childNodes);
+    const totalUnits = topLevelNodes.reduce((total, node) => {
+      if (node instanceof HTMLElement && node.matches(".docx-wrapper")) {
+        return total + Math.max(node.childNodes.length, 1);
+      }
+      return total + 1;
+    }, 0);
+    let completedUnits = 0;
 
-    this.renderedDocumentKey = renderKey;
-    this.pendingRenderKey = null;
-    this.applyDocumentOptions();
-    this.updateOutline();
-    this.scheduleSearchHighlights();
-    this.setStatus(this.text.status.preview(this.file.name));
+    for (const node of topLevelNodes) {
+      if (token !== this.renderToken || this.documentEl !== targetEl) {
+        return;
+      }
+
+      if (node instanceof HTMLElement && node.matches(".docx-wrapper")) {
+        const wrapperEl = node.cloneNode(false) as HTMLElement;
+        targetEl.appendChild(wrapperEl);
+        const wrapperChildren = Array.from(node.childNodes);
+
+        if (wrapperChildren.length === 0) {
+          completedUnits += 1;
+          continue;
+        }
+
+        for (
+          let index = 0;
+          index < wrapperChildren.length;
+          index += DOM_COMMIT_CHUNK_SIZE
+        ) {
+          if (token !== this.renderToken || this.documentEl !== targetEl) {
+            return;
+          }
+
+          const fragment = document.createDocumentFragment();
+          for (const child of wrapperChildren.slice(
+            index,
+            index + DOM_COMMIT_CHUNK_SIZE,
+          )) {
+            fragment.appendChild(child);
+          }
+          wrapperEl.appendChild(fragment);
+          completedUnits += Math.min(
+            DOM_COMMIT_CHUNK_SIZE,
+            wrapperChildren.length - index,
+          );
+          this.setStatus(
+            this.text.status.preparingPreview(
+              fileName,
+              Math.round((completedUnits / totalUnits) * 100),
+            ),
+            false,
+            true,
+          );
+
+          if (index + DOM_COMMIT_CHUNK_SIZE < wrapperChildren.length) {
+            await yieldToBrowser();
+          }
+        }
+        continue;
+      }
+
+      targetEl.appendChild(node);
+      completedUnits += 1;
+    }
   }
 
   private ensureLayout(): void {
@@ -469,37 +636,55 @@ export class WordView extends FileView {
     }
   }
 
-  private updateOutline(): void {
+  private async updateOutline(token: number): Promise<void> {
     if (!this.documentEl || !this.outlineListEl) {
       return;
     }
 
-    this.outlineListEl.empty();
-    const headings = getDocumentHeadings(this.documentEl);
+    const taskToken = ++this.outlineTaskToken;
+    const documentEl = this.documentEl;
+    const outlineListEl = this.outlineListEl;
+    outlineListEl.empty();
+    const headings = getDocumentHeadings(documentEl);
 
     if (headings.length === 0) {
-      this.outlineListEl.createDiv({
+      outlineListEl.createDiv({
         cls: "word-reader-outline-empty",
         text: this.text.outline.empty,
       });
       return;
     }
 
-    for (const heading of headings) {
-      const buttonEl = this.outlineListEl.createEl("button", {
-        cls: `word-reader-outline-item level-${heading.level}`,
-        attr: {
-          type: "button",
-          title: heading.text,
-        },
-      });
-      buttonEl.setText(heading.text);
-      buttonEl.addEventListener("click", () => {
-        heading.element.scrollIntoView({
-          block: "start",
-          inline: "nearest",
+    for (let index = 0; index < headings.length; index += OUTLINE_CHUNK_SIZE) {
+      if (
+        taskToken !== this.outlineTaskToken ||
+        token !== this.renderToken ||
+        this.documentEl !== documentEl ||
+        this.outlineListEl !== outlineListEl
+      ) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      for (const heading of headings.slice(index, index + OUTLINE_CHUNK_SIZE)) {
+        const buttonEl = document.createElement("button");
+        buttonEl.className = `word-reader-outline-item level-${heading.level}`;
+        buttonEl.type = "button";
+        buttonEl.title = heading.text;
+        buttonEl.textContent = heading.text;
+        buttonEl.addEventListener("click", () => {
+          heading.element.scrollIntoView({
+            block: "start",
+            inline: "nearest",
+          });
         });
-      });
+        fragment.appendChild(buttonEl);
+      }
+      outlineListEl.appendChild(fragment);
+
+      if (index + OUTLINE_CHUNK_SIZE < headings.length) {
+        await yieldToBrowser();
+      }
     }
   }
 
@@ -567,12 +752,16 @@ export class WordView extends FileView {
     event.preventDefault();
     event.stopPropagation();
 
+    const releaseBlobUrl = src.startsWith("blob:")
+      ? this.retainBlobUrl(src)
+      : undefined;
     new ImagePreviewModal(
       this.app,
       src,
       imageEl.alt || this.file?.name || "Word document image",
       this.file?.basename || "word-image",
       this.text,
+      releaseBlobUrl,
     ).open();
   }
 
@@ -595,7 +784,7 @@ export class WordView extends FileView {
       return;
     }
 
-    this.documentEl.empty();
+    this.clearRenderedDocument();
     this.documentEl.createDiv({
       cls: "word-reader-message-title",
       text: this.text.legacyDoc.title,
@@ -623,7 +812,7 @@ export class WordView extends FileView {
     const message = error instanceof Error ? error.message : String(error);
     const errorInfo = classifyWordError(message, this.text, this.buffer);
     const diagnostics = createWordDiagnostics(errorInfo.kind, message, file);
-    this.documentEl?.empty();
+    this.clearRenderedDocument();
     this.documentEl?.createDiv({
       cls: "word-reader-message-title",
       text: errorInfo.title,
@@ -759,10 +948,16 @@ export class WordView extends FileView {
 
   private scheduleSearchHighlights(): void {
     this.clearSearchTimer();
+    const taskToken = ++this.searchTaskToken;
     this.searchHighlightTimer = window.setTimeout(() => {
       this.searchHighlightTimer = null;
-      this.updateSearchHighlights();
+      void this.updateSearchHighlights(taskToken);
     }, SEARCH_DEBOUNCE_MS);
+  }
+
+  private cancelSearchWork(): void {
+    this.clearSearchTimer();
+    this.searchTaskToken += 1;
   }
 
   private clearSearchTimer(): void {
@@ -774,12 +969,20 @@ export class WordView extends FileView {
     this.searchHighlightTimer = null;
   }
 
-  private updateSearchHighlights(): void {
+  private async updateSearchHighlights(taskToken: number): Promise<void> {
     if (!this.documentEl) {
       return;
     }
 
-    clearSearchHighlights(this.documentEl);
+    const documentEl = this.documentEl;
+    const shouldContinue = (): boolean =>
+      taskToken === this.searchTaskToken && this.documentEl === documentEl;
+
+    await clearSearchHighlights(documentEl, shouldContinue);
+    if (!shouldContinue()) {
+      return;
+    }
+
     this.clearSearchHighlightsState();
 
     const query = this.searchQuery.trim();
@@ -788,7 +991,12 @@ export class WordView extends FileView {
       return;
     }
 
-    this.searchMatchEls = highlightText(this.documentEl, query);
+    const matches = await highlightText(documentEl, query, shouldContinue);
+    if (!shouldContinue()) {
+      return;
+    }
+
+    this.searchMatchEls = matches;
     if (this.searchMatchEls.length > 0) {
       this.currentSearchIndex = 0;
     }
@@ -799,7 +1007,7 @@ export class WordView extends FileView {
   private navigateSearch(direction: number): void {
     const matchCount = this.searchMatchEls.length;
     if (matchCount === 0) {
-      this.updateSearchHighlights();
+      this.scheduleSearchHighlights();
       return;
     }
 
@@ -850,11 +1058,55 @@ export class WordView extends FileView {
   }
 
   private releaseDocumentState(): void {
-    this.clearSearchTimer();
+    this.cancelSearchWork();
     this.buffer = null;
     this.renderedDocumentKey = null;
     this.pendingRenderKey = null;
     this.clearSearchHighlightsState();
+    this.revokeDocumentBlobUrls();
+  }
+
+  private clearRenderedDocument(): void {
+    this.cancelSearchWork();
+    this.outlineTaskToken += 1;
+    this.revokeDocumentBlobUrls();
+    this.documentEl?.empty();
+    this.documentEl?.removeClass("is-long-document");
+    this.outlineListEl?.empty();
+  }
+
+  private retainBlobUrl(url: string): () => void {
+    this.retainedBlobUrls.set(url, (this.retainedBlobUrls.get(url) ?? 0) + 1);
+    let released = false;
+
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+
+      const remaining = (this.retainedBlobUrls.get(url) ?? 1) - 1;
+      if (remaining > 0) {
+        this.retainedBlobUrls.set(url, remaining);
+        return;
+      }
+
+      this.retainedBlobUrls.delete(url);
+      if (this.pendingBlobUrlRevocations.delete(url)) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }
+
+  private revokeDocumentBlobUrls(): void {
+    for (const url of this.documentBlobUrls) {
+      if ((this.retainedBlobUrls.get(url) ?? 0) > 0) {
+        this.pendingBlobUrlRevocations.add(url);
+      } else {
+        URL.revokeObjectURL(url);
+      }
+    }
+    this.documentBlobUrls.clear();
   }
 
   private getRenderKey(file: TFile): string {
@@ -867,22 +1119,46 @@ export class WordView extends FileView {
   }
 }
 
-function clearSearchHighlights(rootEl: HTMLElement): void {
+async function clearSearchHighlights(
+  rootEl: HTMLElement,
+  shouldContinue: () => boolean,
+): Promise<void> {
   const highlights = Array.from(
     rootEl.querySelectorAll("span.word-reader-highlight"),
   );
 
-  for (const highlightEl of highlights) {
-    const parentEl = highlightEl.parentNode;
-    if (!parentEl) {
-      continue;
+  for (
+    let index = 0;
+    index < highlights.length;
+    index += SEARCH_MUTATION_CHUNK_SIZE
+  ) {
+    if (!shouldContinue()) {
+      return;
     }
 
-    while (highlightEl.firstChild) {
-      parentEl.insertBefore(highlightEl.firstChild, highlightEl);
+    const parents = new Set<Node>();
+    for (const highlightEl of highlights.slice(
+      index,
+      index + SEARCH_MUTATION_CHUNK_SIZE,
+    )) {
+      const parentEl = highlightEl.parentNode;
+      if (!parentEl) {
+        continue;
+      }
+
+      while (highlightEl.firstChild) {
+        parentEl.insertBefore(highlightEl.firstChild, highlightEl);
+      }
+      parentEl.removeChild(highlightEl);
+      parents.add(parentEl);
     }
-    parentEl.removeChild(highlightEl);
-    parentEl.normalize();
+    for (const parentEl of parents) {
+      parentEl.normalize();
+    }
+
+    if (index + SEARCH_MUTATION_CHUNK_SIZE < highlights.length) {
+      await yieldToBrowser();
+    }
   }
 }
 
@@ -1127,58 +1403,179 @@ function formatFileSizeMb(sizeBytes: number): string {
   return (sizeBytes / 1024 / 1024).toFixed(1);
 }
 
-function highlightText(rootEl: HTMLElement, query: string): HTMLElement[] {
+function prepareRenderedImages(rootEl: HTMLElement): number {
+  const imageEls = Array.from(rootEl.querySelectorAll("img"));
+  for (const imageEl of imageEls) {
+    imageEl.loading = "lazy";
+    imageEl.decoding = "async";
+  }
+  return imageEls.length;
+}
+
+function collectBlobUrls(rootEl: HTMLElement): Set<string> {
+  const urls = new Set<string>();
+  const blobUrlPattern = /blob:[^)'"\s]+/g;
+  const elements = [rootEl, ...Array.from(rootEl.querySelectorAll("*"))];
+
+  for (const element of elements) {
+    for (const attribute of Array.from(element.attributes)) {
+      for (const match of attribute.value.matchAll(blobUrlPattern)) {
+        urls.add(match[0]);
+      }
+    }
+
+    if (element instanceof HTMLStyleElement) {
+      for (const match of (element.textContent ?? "").matchAll(blobUrlPattern)) {
+        urls.add(match[0]);
+      }
+    }
+  }
+
+  return urls;
+}
+
+function revokeBlobUrls(urls: Iterable<string>): void {
+  for (const url of urls) {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    let completed = false;
+    const finish = (): void => {
+      if (completed) {
+        return;
+      }
+
+      completed = true;
+      window.clearTimeout(timeoutId);
+      window.cancelAnimationFrame(frameId);
+      resolve();
+    };
+    const timeoutId = window.setTimeout(finish, 50);
+    const frameId = window.requestAnimationFrame(finish);
+  });
+}
+
+interface RenderPerformanceMetrics {
+  fileName: string;
+  fileSizeBytes: number;
+  readDurationMs: number;
+  rendererDurationMs: number;
+  commitDurationMs: number;
+  outlineDurationMs: number;
+  totalDurationMs: number;
+  pageCount: number;
+  imageCount: number;
+  blobUrlCount: number;
+}
+
+function logRenderPerformance(metrics: RenderPerformanceMetrics): void {
+  if (typeof __DEV__ === "undefined" || !__DEV__) {
+    return;
+  }
+
+  console.debug("[Word Reader] Render performance", {
+    ...metrics,
+    readDurationMs: Math.round(metrics.readDurationMs),
+    rendererDurationMs: Math.round(metrics.rendererDurationMs),
+    commitDurationMs: Math.round(metrics.commitDurationMs),
+    outlineDurationMs: Math.round(metrics.outlineDurationMs),
+    totalDurationMs: Math.round(metrics.totalDurationMs),
+  });
+}
+
+async function highlightText(
+  rootEl: HTMLElement,
+  query: string,
+  shouldContinue: () => boolean,
+): Promise<HTMLElement[]> {
+  const normalizedQuery = query.toLowerCase();
   const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parentEl = node.parentElement;
-      if (!parentEl || parentEl.closest(".word-reader-toolbar")) {
+      if (
+        !parentEl ||
+        parentEl.closest("style, script, .word-reader-toolbar")
+      ) {
         return NodeFilter.FILTER_REJECT;
       }
-
-      if (!node.nodeValue?.toLowerCase().includes(query.toLowerCase())) {
-        return NodeFilter.FILTER_REJECT;
-      }
-
       return NodeFilter.FILTER_ACCEPT;
     },
   });
 
   const textNodes: Text[] = [];
+  let scannedNodeCount = 0;
   while (walker.nextNode()) {
-    textNodes.push(walker.currentNode as Text);
+    const textNode = walker.currentNode as Text;
+    if (textNode.nodeValue?.toLowerCase().includes(normalizedQuery)) {
+      textNodes.push(textNode);
+    }
+    scannedNodeCount += 1;
+    if (scannedNodeCount % SEARCH_SCAN_CHUNK_SIZE === 0) {
+      await yieldToBrowser();
+      if (!shouldContinue()) {
+        return [];
+      }
+    }
   }
 
   const matches: HTMLElement[] = [];
   const escapedQuery = escapeRegExp(query);
   const regex = new RegExp(escapedQuery, "gi");
 
-  for (const textNode of textNodes) {
-    const text = textNode.nodeValue ?? "";
-    const fragment = document.createDocumentFragment();
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
+  for (
+    let index = 0;
+    index < textNodes.length;
+    index += SEARCH_MUTATION_CHUNK_SIZE
+  ) {
+    if (!shouldContinue()) {
+      return [];
+    }
 
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        fragment.appendText(text.slice(lastIndex, match.index));
+    for (const textNode of textNodes.slice(
+      index,
+      index + SEARCH_MUTATION_CHUNK_SIZE,
+    )) {
+      if (!textNode.isConnected || !rootEl.contains(textNode)) {
+        continue;
       }
 
-      // SECURITY: Only <span> elements are created for text highlighting.
-      // No script execution or external resource loading occurs.
-      const markEl = document.createElement("span");
-      markEl.className = "word-reader-highlight";
-      markEl.textContent = match[0];
-      fragment.appendChild(markEl);
-      matches.push(markEl);
+      const text = textNode.nodeValue ?? "";
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      regex.lastIndex = 0;
 
-      lastIndex = match.index + match[0].length;
+      while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          fragment.appendChild(
+            document.createTextNode(text.slice(lastIndex, match.index)),
+          );
+        }
+
+        // SECURITY: Only <span> elements are created for text highlighting.
+        // No script execution or external resource loading occurs.
+        const markEl = document.createElement("span");
+        markEl.className = "word-reader-highlight";
+        markEl.textContent = match[0];
+        fragment.appendChild(markEl);
+        matches.push(markEl);
+
+        lastIndex = match.index + match[0].length;
+      }
+
+      if (lastIndex < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+
+      textNode.replaceWith(fragment);
     }
 
-    if (lastIndex < text.length) {
-      fragment.appendText(text.slice(lastIndex));
+    if (index + SEARCH_MUTATION_CHUNK_SIZE < textNodes.length) {
+      await yieldToBrowser();
     }
-
-    textNode.replaceWith(fragment);
   }
 
   return matches;
@@ -1373,6 +1770,7 @@ class ImagePreviewModal extends Modal {
     private readonly alt: string,
     private readonly suggestedName: string,
     private readonly text: WordReaderText,
+    private readonly releaseResource?: () => void,
   ) {
     super(app);
   }
@@ -1447,6 +1845,7 @@ class ImagePreviewModal extends Modal {
 
   onClose(): void {
     document.removeEventListener("keydown", this.handleKeyDown);
+    this.releaseResource?.();
     this.contentEl.empty();
   }
 

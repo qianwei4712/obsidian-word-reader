@@ -106,9 +106,13 @@ Available settings:
 
 - Rendering work is guarded by a cancellation token so stale results are discarded.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
+- Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
+- Long previews defer off-screen page painting until pages approach the viewport.
+- Embedded images use lazy loading, asynchronous decoding, and recyclable Blob URLs instead of persistent base64 data URLs.
 - The current rendered file state is tracked to avoid unnecessary repeated renders.
-- Search highlighting is debounced while typing to reduce work on large documents.
-- Closing or unloading a file releases document buffers, search timers, and search result references.
+- Search highlighting is debounced and processed in cancellable chunks to reduce work on large documents.
+- Development builds log file reading, rendering, DOM commit, outline, and total preview timings to the developer console.
+- Closing or unloading a file releases document buffers, generated Blob URLs, search timers, and search result references.
 
 ## Stability and Support
 

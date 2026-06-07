@@ -178,6 +178,11 @@
   box-shadow: 0 1px 8px rgb(0 0 0 / 18%);
 }
 
+.word-reader-document.is-long-document .docx-wrapper > section.docx {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1056px;
+}
+
 .word-reader-document .docx section,
 .word-reader-document .docx article,
 .word-reader-document .docx div,

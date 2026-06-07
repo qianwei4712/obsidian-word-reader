@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.4.0 - 2026-06-07
+
+### English
+
+#### Added
+
+- Added clearer reading, rendering, preview preparation, and navigation-building status feedback for large and long Word documents.
+- Added development-build render timing diagnostics for file reading, document rendering, DOM commit, outline creation, and total preview time.
+
+#### Changed
+
+- Long documents now commit rendered pages, build outlines, and apply search highlights in cancellable chunks to reduce main-thread stalls.
+- Image-heavy documents now use lazy, asynchronously decoded Blob URL images, with generated image and font resources released when previews change or close.
+- Long previews defer off-screen page painting to reduce rendering work during normal reading.
+
+### 中文
+
+#### 新增
+
+- 为大型和长篇 Word 文档增加更清晰的读取、渲染、预览准备和导航生成状态反馈。
+- 在开发构建中增加渲染耗时诊断，覆盖文件读取、文档渲染、DOM 提交、大纲生成和预览总耗时。
+
+#### 变更
+
+- 长文档现在会分片提交渲染页面、生成大纲和处理搜索高亮，并支持取消过期任务，以减少主线程长时间阻塞。
+- 图片密集文档改用懒加载、异步解码的 Blob URL 图片，并在预览切换或关闭时释放生成的图片和字体资源。
+- 长文档预览会延迟绘制屏幕外页面，减少正常阅读过程中的渲染开销。
+
 ## 1.3.3 - 2026-06-07
 
 ### English

@@ -23,7 +23,9 @@ export async function renderDocx(
     ignoreHeight: false,
     ignoreFonts: false,
     breakPages: true,
-    useBase64URL: true,
+    // Blob URLs avoid duplicating large embedded images as base64 strings.
+    // WordView tracks and revokes every generated URL when the preview changes.
+    useBase64URL: false,
     experimental: true,
     trimXmlDeclaration: true,
   });
