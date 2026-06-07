@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.3 - 2026-06-07
+
+### English
+
+#### Fixed
+
+- Removed the redundant plugin-name heading from the settings page to follow Obsidian's settings UI guidelines and pass automated review.
+
+### 中文
+
+#### 修复
+
+- 移除设置页面中重复的插件名称标题，以遵循 Obsidian 设置界面规范并通过自动审核。
+
 ## 1.3.2 - 2026-06-07
 
 ### English

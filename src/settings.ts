@@ -72,8 +72,6 @@ export class WordReaderSettingTab extends PluginSettingTab {
     containerEl.empty();
     const text = getWordReaderText(this.plugin.settings.language).settings;
 
-    new Setting(containerEl).setName("Obsidian Word Reader").setHeading();
-
     new Setting(containerEl)
       .setName(text.languageName)
       .setDesc(text.languageDesc)
