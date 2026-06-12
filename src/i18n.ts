@@ -76,6 +76,8 @@ export interface WordReaderText {
   outline: {
     title: string;
     empty: string;
+    expandSection: string;
+    collapseSection: string;
   };
   legacyDoc: {
     title: string;
@@ -234,6 +236,8 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
     outline: {
       title: "Outline",
       empty: "No headings found",
+      expandSection: "Expand section",
+      collapseSection: "Collapse section",
     },
     legacyDoc: {
       title: "Legacy .doc file",
@@ -409,6 +413,8 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
     outline: {
       title: "大纲",
       empty: "未找到标题",
+      expandSection: "展开章节",
+      collapseSection: "折叠章节",
     },
     legacyDoc: {
       title: "旧版 .doc 文件",

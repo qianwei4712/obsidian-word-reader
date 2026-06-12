@@ -10,20 +10,34 @@ export async function openExternalDocx(
   file: TFile,
   text?: WordReaderText,
 ): Promise<void> {
-  if (!Platform.isDesktopApp) {
-    new Notice(
+  await openExternalFile(app, file, {
+    desktopOnly:
       text?.notices.externalDesktopOnly ??
-        "External opening is only available in Obsidian Desktop",
-    );
+      "External opening is only available in Obsidian Desktop",
+    localVaultOnly:
+      text?.notices.externalLocalVaultOnly ??
+      "External opening requires a local desktop vault",
+  });
+}
+
+export interface ExternalOpenMessages {
+  desktopOnly: string;
+  localVaultOnly: string;
+}
+
+export async function openExternalFile(
+  app: App,
+  file: TFile,
+  messages: ExternalOpenMessages,
+): Promise<void> {
+  if (!Platform.isDesktopApp) {
+    new Notice(messages.desktopOnly);
     return;
   }
 
   const adapter = app.vault.adapter;
   if (!(adapter instanceof FileSystemAdapter)) {
-    new Notice(
-      text?.notices.externalLocalVaultOnly ??
-        "External opening requires a local desktop vault",
-    );
+    new Notice(messages.localVaultOnly);
     return;
   }
 

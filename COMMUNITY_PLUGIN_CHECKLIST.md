@@ -45,7 +45,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `1.5.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `1.6.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

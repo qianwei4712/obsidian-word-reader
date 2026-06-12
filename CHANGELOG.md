@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.6.0 - 2026-06-12
+
+### English
+
+#### Added
+
+- Added automatic current-section highlighting in the document outline.
+- Added collapsible outline sections with restored collapse state per file.
+- Added reading-state restoration for zoom, fit-width mode, outline visibility,
+  collapsed sections, and scroll position across the 50 most recently used
+  Word documents.
+- Added unit coverage for shared reader lifecycle, status, zoom, outline,
+  resource, and bounded LRU state modules.
+
+#### Changed
+
+- Extracted reusable reader primitives for file lifecycle cancellation, loading
+  status, privacy-safe diagnostics, zoom behavior, external opening, and
+  retained resource cleanup as the foundation for later Office formats.
+- Word error diagnostics and Blob URL cleanup now use the shared reader
+  infrastructure while preserving existing DOCX behavior.
+
+### 中文
+
+#### 新增
+
+- 大纲会根据当前滚动位置自动高亮正在阅读的章节。
+- 大纲章节支持折叠，并按文件恢复折叠状态。
+- 为最近使用的 50 个 Word 文档恢复缩放、适配宽度、大纲显示、折叠章节和
+  滚动位置等阅读状态。
+- 增加公共阅读生命周期、状态、缩放、大纲、资源和有界 LRU 状态模块的单元测试。
+
+#### 变更
+
+- 抽取文件生命周期取消、加载状态、隐私安全诊断、缩放、外部打开和资源释放等
+  公共阅读能力，为后续 Office 格式提供基础。
+- Word 错误诊断和 Blob URL 清理改用公共阅读基础设施，同时保持现有 DOCX 行为兼容。
+
 ## 1.5.0 - 2026-06-07
 
 ### English

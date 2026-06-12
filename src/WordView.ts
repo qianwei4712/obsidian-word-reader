@@ -20,6 +20,25 @@ import {
   createWordDiagnostics,
   formatWordDiagnostics,
 } from "./wordErrors";
+import { ReaderLifecycle } from "./reader/lifecycle";
+import {
+  buildReaderOutline,
+  getVisibleOutlineId,
+  type ReaderOutlineItem,
+} from "./reader/outline";
+import type { ReaderViewState } from "./reader/readingState";
+import {
+  releaseResources,
+  RetainedResourceRegistry,
+} from "./reader/resources";
+import {
+  ReaderStatusController,
+  type ReaderStatus,
+} from "./reader/status";
+import {
+  normalizeZoom,
+  preserveZoomAnchor,
+} from "./reader/zoom";
 
 export const VIEW_TYPE_WORD_READER = "word-reader-view";
 
@@ -37,6 +56,11 @@ const SEARCH_MUTATION_CHUNK_SIZE = 100;
 const LONG_DOCUMENT_PAGE_THRESHOLD = 12;
 
 declare const __DEV__: boolean;
+
+interface ScrollPosition {
+  left: number;
+  top: number;
+}
 
 export class WordView extends FileView {
   private readonly plugin: WordReaderPlugin;
@@ -59,12 +83,24 @@ export class WordView extends FileView {
   private searchTaskToken = 0;
   private outlineTaskToken = 0;
   private buffer: ArrayBuffer | null = null;
-  private renderToken = 0;
+  private readonly renderLifecycle = new ReaderLifecycle();
+  private readonly readerStatus = new ReaderStatusController((status) => {
+    this.renderStatus(status);
+  });
   private renderedDocumentKey: string | null = null;
   private pendingRenderKey: string | null = null;
-  private documentBlobUrls = new Set<string>();
-  private retainedBlobUrls = new Map<string, number>();
-  private pendingBlobUrlRevocations = new Set<string>();
+  private readonly documentResources = new RetainedResourceRegistry(
+    (resource) => {
+      URL.revokeObjectURL(resource);
+    },
+  );
+  private outlineItems: ReaderOutlineItem<HTMLElement>[] = [];
+  private outlineRows = new Map<string, HTMLElement>();
+  private collapsedOutlineIds = new Set<string>();
+  private activeOutlineId: string | null = null;
+  private activeFilePath: string | null = null;
+  private pendingScrollPosition: ScrollPosition | null = null;
+  private scrollFrameId: number | null = null;
   private zoom = 1;
   private fitWidth = false;
   private outlineVisible = false;
@@ -99,11 +135,16 @@ export class WordView extends FileView {
   }
 
   async onLoadFile(file: TFile): Promise<void> {
+    this.restoreReadingState(file.path);
     await this.loadDocx(file);
   }
 
   async onUnloadFile(): Promise<void> {
-    this.renderToken += 1;
+    this.saveReadingState();
+    await this.plugin.flushData();
+    this.activeFilePath = null;
+    this.renderLifecycle.cancel();
+    this.cancelScrollFrame();
     this.cancelSearchWork();
     this.releaseDocumentState();
     this.clearRenderedDocument();
@@ -116,6 +157,7 @@ export class WordView extends FileView {
       return;
     }
 
+    this.captureScrollPosition();
     await this.loadDocx(this.file, { force: true });
   }
 
@@ -179,7 +221,10 @@ export class WordView extends FileView {
 
   refreshInterfaceLanguage(): void {
     const file = this.file;
-    this.renderToken += 1;
+    this.captureScrollPosition();
+    this.saveReadingState();
+    this.renderLifecycle.cancel();
+    this.cancelScrollFrame();
     this.cancelSearchWork();
     this.buildLayout();
     if (file) {
@@ -215,10 +260,12 @@ export class WordView extends FileView {
     });
 
     this.createIconButton(toolbarEl, "panel-top-open", text.toolbar.fitWidth, () => {
+      this.captureScrollPosition();
       this.fitWidth = !this.fitWidth;
+      this.saveReadingState();
       if (this.buffer && this.file) {
         void this.renderCurrentBuffer(
-          ++this.renderToken,
+          this.renderLifecycle.begin(),
           this.getRenderKey(this.file),
         );
       } else {
@@ -233,8 +280,9 @@ export class WordView extends FileView {
       () => {
         this.outlineVisible = !this.outlineVisible;
         this.applyOutlineVisibility();
+        this.saveReadingState();
         if (this.outlineVisible && this.renderedDocumentKey) {
-          void this.updateOutline(this.renderToken);
+          void this.updateOutline(this.renderLifecycle.currentToken);
         }
       },
     );
@@ -319,12 +367,16 @@ export class WordView extends FileView {
     this.scrollEl.addEventListener("wheel", (event) => {
       this.handleCtrlWheelZoom(event);
     });
+    this.scrollEl.addEventListener("scroll", () => {
+      this.scheduleScrollUpdate();
+    }, { passive: true });
     this.documentEl = this.scrollEl.createDiv({ cls: "word-reader-document" });
     this.documentEl.addEventListener("click", (event) => {
       this.handleDocumentClick(event);
     });
     this.applyDocumentOptions();
     this.applyOutlineVisibility();
+    this.readerStatus.refresh();
   }
 
   private async loadDocx(
@@ -333,7 +385,7 @@ export class WordView extends FileView {
   ): Promise<void> {
     this.ensureLayout();
 
-    const token = ++this.renderToken;
+    const token = this.renderLifecycle.begin();
     const loadStartedAt = performance.now();
     this.cancelSearchWork();
     this.clearSearchHighlightsState();
@@ -343,6 +395,7 @@ export class WordView extends FileView {
       this.releaseDocumentState();
       this.clearRenderedDocument();
       this.showLegacyDocMessage(file);
+      await this.restoreScrollPosition(token);
       return;
     }
 
@@ -354,7 +407,8 @@ export class WordView extends FileView {
       this.documentEl?.hasChildNodes()
     ) {
       this.applyDocumentOptions();
-      void this.updateOutline(token);
+      await this.updateOutline(token);
+      await this.restoreScrollPosition(token);
       this.scheduleSearchHighlights();
       this.setStatus(this.text.status.preview(file.name));
       return;
@@ -379,13 +433,13 @@ export class WordView extends FileView {
 
     try {
       await yieldToBrowser();
-      if (token !== this.renderToken) {
+      if (!this.renderLifecycle.isCurrent(token)) {
         return;
       }
 
       const readStartedAt = performance.now();
       const buffer = await this.app.vault.readBinary(file);
-      if (token !== this.renderToken) {
+      if (!this.renderLifecycle.isCurrent(token)) {
         return;
       }
 
@@ -395,7 +449,7 @@ export class WordView extends FileView {
         readDurationMs: performance.now() - readStartedAt,
       });
     } catch (error) {
-      if (token !== this.renderToken) {
+      if (!this.renderLifecycle.isCurrent(token)) {
         return;
       }
 
@@ -421,7 +475,8 @@ export class WordView extends FileView {
       this.documentEl.hasChildNodes()
     ) {
       this.applyDocumentOptions();
-      void this.updateOutline(token);
+      await this.updateOutline(token);
+      await this.restoreScrollPosition(token);
       this.scheduleSearchHighlights();
       this.setStatus(this.text.status.preview(this.file.name));
       return;
@@ -432,7 +487,7 @@ export class WordView extends FileView {
     this.updateSearchState();
     this.setStatus(this.text.status.rendering(this.file.name), false, true);
     await yieldToBrowser();
-    if (token !== this.renderToken) {
+    if (!this.renderLifecycle.isCurrent(token)) {
       return;
     }
 
@@ -451,7 +506,7 @@ export class WordView extends FileView {
       const rendererDurationMs = performance.now() - rendererStartedAt;
       renderedBlobUrls = collectBlobUrls(renderTargetEl);
 
-      if (token !== this.renderToken) {
+      if (!this.renderLifecycle.isCurrent(token)) {
         return;
       }
 
@@ -462,11 +517,11 @@ export class WordView extends FileView {
       const commitStartedAt = performance.now();
 
       this.clearRenderedDocument();
-      this.documentBlobUrls = renderedBlobUrls;
+      this.documentResources.replace(renderedBlobUrls);
       adoptedBlobUrls = true;
       await this.commitRenderedDocument(renderTargetEl, token, this.file.name);
 
-      if (token !== this.renderToken) {
+      if (!this.renderLifecycle.isCurrent(token)) {
         return;
       }
 
@@ -488,10 +543,11 @@ export class WordView extends FileView {
       await this.updateOutline(token);
       const outlineDurationMs = performance.now() - outlineStartedAt;
 
-      if (token !== this.renderToken) {
+      if (!this.renderLifecycle.isCurrent(token)) {
         return;
       }
 
+      await this.restoreScrollPosition(token);
       this.scheduleSearchHighlights();
       this.setStatus(this.text.status.preview(this.file.name));
       logRenderPerformance({
@@ -512,7 +568,9 @@ export class WordView extends FileView {
         for (const url of collectBlobUrls(renderTargetEl)) {
           renderedBlobUrls.add(url);
         }
-        revokeBlobUrls(renderedBlobUrls);
+        releaseResources(renderedBlobUrls, (resource) => {
+          URL.revokeObjectURL(resource);
+        });
       }
     }
   }
@@ -537,7 +595,7 @@ export class WordView extends FileView {
     let completedUnits = 0;
 
     for (const node of topLevelNodes) {
-      if (token !== this.renderToken || this.documentEl !== targetEl) {
+      if (!this.renderLifecycle.isCurrent(token) || this.documentEl !== targetEl) {
         return;
       }
 
@@ -556,7 +614,10 @@ export class WordView extends FileView {
           index < wrapperChildren.length;
           index += DOM_COMMIT_CHUNK_SIZE
         ) {
-          if (token !== this.renderToken || this.documentEl !== targetEl) {
+          if (
+            !this.renderLifecycle.isCurrent(token) ||
+            this.documentEl !== targetEl
+          ) {
             return;
           }
 
@@ -651,9 +712,11 @@ export class WordView extends FileView {
     const documentEl = this.documentEl;
     const outlineListEl = this.outlineListEl;
     outlineListEl.empty();
-    const headings = getDocumentHeadings(documentEl);
+    this.outlineRows.clear();
+    this.activeOutlineId = null;
+    this.outlineItems = buildReaderOutline(getDocumentHeadings(documentEl));
 
-    if (headings.length === 0) {
+    if (this.outlineItems.length === 0) {
       outlineListEl.createDiv({
         cls: "word-reader-outline-empty",
         text: this.text.outline.empty,
@@ -661,10 +724,25 @@ export class WordView extends FileView {
       return;
     }
 
-    for (let index = 0; index < headings.length; index += OUTLINE_CHUNK_SIZE) {
+    const collapsibleIds = new Set(
+      this.outlineItems
+        .filter((item) => item.hasChildren)
+        .map((item) => item.id),
+    );
+    for (const id of this.collapsedOutlineIds) {
+      if (!collapsibleIds.has(id)) {
+        this.collapsedOutlineIds.delete(id);
+      }
+    }
+
+    for (
+      let index = 0;
+      index < this.outlineItems.length;
+      index += OUTLINE_CHUNK_SIZE
+    ) {
       if (
         taskToken !== this.outlineTaskToken ||
-        token !== this.renderToken ||
+        !this.renderLifecycle.isCurrent(token) ||
         this.documentEl !== documentEl ||
         this.outlineListEl !== outlineListEl
       ) {
@@ -672,25 +750,144 @@ export class WordView extends FileView {
       }
 
       const fragment = activeDocument.createDocumentFragment();
-      for (const heading of headings.slice(index, index + OUTLINE_CHUNK_SIZE)) {
+      for (const item of this.outlineItems.slice(
+        index,
+        index + OUTLINE_CHUNK_SIZE,
+      )) {
+        const rowEl = activeDocument.createElement("div");
+        rowEl.className =
+          `word-reader-outline-row level-${item.level}`;
+        rowEl.toggleClass(
+          "is-hidden",
+          item.ancestorIds.some((id) => this.collapsedOutlineIds.has(id)),
+        );
+        this.outlineRows.set(item.id, rowEl);
+
+        if (item.hasChildren) {
+          const toggleEl = activeDocument.createElement("button");
+          const isCollapsed = this.collapsedOutlineIds.has(item.id);
+          toggleEl.className = "word-reader-outline-collapse";
+          toggleEl.type = "button";
+          toggleEl.setAttribute("aria-expanded", String(!isCollapsed));
+          toggleEl.setAttribute(
+            "aria-label",
+            isCollapsed
+              ? this.text.outline.expandSection
+              : this.text.outline.collapseSection,
+          );
+          toggleEl.title = toggleEl.getAttribute("aria-label") ?? "";
+          setIcon(toggleEl, isCollapsed ? "chevron-right" : "chevron-down");
+          toggleEl.addEventListener("click", (event) => {
+            event.stopPropagation();
+            this.toggleOutlineItem(item.id);
+          });
+          rowEl.appendChild(toggleEl);
+        } else {
+          const spacerEl = activeDocument.createElement("span");
+          spacerEl.className = "word-reader-outline-collapse-spacer";
+          rowEl.appendChild(spacerEl);
+        }
+
         const buttonEl = activeDocument.createElement("button");
-        buttonEl.className = `word-reader-outline-item level-${heading.level}`;
+        buttonEl.className = "word-reader-outline-item";
         buttonEl.type = "button";
-        buttonEl.title = heading.text;
-        buttonEl.textContent = heading.text;
+        buttonEl.title = item.text;
+        buttonEl.textContent = item.text;
         buttonEl.addEventListener("click", () => {
-          heading.element.scrollIntoView({
+          item.element.scrollIntoView({
             block: "start",
             inline: "nearest",
           });
+          this.setActiveOutlineItem(item.id);
         });
-        fragment.appendChild(buttonEl);
+        rowEl.appendChild(buttonEl);
+        fragment.appendChild(rowEl);
       }
       outlineListEl.appendChild(fragment);
 
-      if (index + OUTLINE_CHUNK_SIZE < headings.length) {
+      if (index + OUTLINE_CHUNK_SIZE < this.outlineItems.length) {
         await yieldToBrowser();
       }
+    }
+
+    this.updateCurrentSection();
+  }
+
+  private toggleOutlineItem(id: string): void {
+    if (this.collapsedOutlineIds.has(id)) {
+      this.collapsedOutlineIds.delete(id);
+    } else {
+      this.collapsedOutlineIds.add(id);
+    }
+    this.saveReadingState();
+    void this.updateOutline(this.renderLifecycle.currentToken);
+  }
+
+  private scheduleScrollUpdate(): void {
+    this.saveReadingState();
+    if (this.scrollFrameId !== null) {
+      return;
+    }
+
+    const scrollWindow = this.scrollEl?.win ?? window;
+    this.scrollFrameId = scrollWindow.requestAnimationFrame(() => {
+      this.scrollFrameId = null;
+      this.updateCurrentSection();
+    });
+  }
+
+  private cancelScrollFrame(): void {
+    if (this.scrollFrameId === null) {
+      return;
+    }
+
+    const scrollWindow = this.scrollEl?.win ?? window;
+    scrollWindow.cancelAnimationFrame(this.scrollFrameId);
+    this.scrollFrameId = null;
+  }
+
+  private updateCurrentSection(): void {
+    if (!this.scrollEl || this.outlineItems.length === 0) {
+      this.setActiveOutlineItem(null);
+      return;
+    }
+
+    const readingLine = this.scrollEl.getBoundingClientRect().top + 24;
+    let currentIndex = 0;
+    let low = 0;
+    let high = this.outlineItems.length - 1;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      if (
+        this.outlineItems[middle].element.getBoundingClientRect().top <=
+        readingLine
+      ) {
+        currentIndex = middle;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+
+    this.setActiveOutlineItem(
+      getVisibleOutlineId(
+        this.outlineItems[currentIndex],
+        this.collapsedOutlineIds,
+      ),
+    );
+  }
+
+  private setActiveOutlineItem(id: string | null): void {
+    if (id === this.activeOutlineId) {
+      return;
+    }
+
+    if (this.activeOutlineId) {
+      this.outlineRows.get(this.activeOutlineId)?.removeClass("is-active");
+    }
+    this.activeOutlineId = id;
+    if (id) {
+      this.outlineRows.get(id)?.addClass("is-active");
     }
   }
 
@@ -706,26 +903,40 @@ export class WordView extends FileView {
     const scrollRect = scrollEl?.getBoundingClientRect();
     const offsetX = scrollRect ? event.clientX - scrollRect.left : 0;
     const offsetY = scrollRect ? event.clientY - scrollRect.top : 0;
-    const contentX = scrollEl ? (scrollEl.scrollLeft + offsetX) / this.zoom : 0;
-    const contentY = scrollEl ? (scrollEl.scrollTop + offsetY) / this.zoom : 0;
+    const previousZoom = this.zoom;
     const direction = event.deltaY < 0 ? 1 : -1;
 
     this.setZoom(this.zoom + direction * ZOOM_STEP);
 
     if (scrollEl) {
-      scrollEl.scrollLeft = contentX * this.zoom - offsetX;
-      scrollEl.scrollTop = contentY * this.zoom - offsetY;
+      const nextScroll = preserveZoomAnchor(
+        {
+          left: scrollEl.scrollLeft,
+          top: scrollEl.scrollTop,
+        },
+        { left: offsetX, top: offsetY },
+        previousZoom,
+        this.zoom,
+      );
+      scrollEl.scrollLeft = nextScroll.left;
+      scrollEl.scrollTop = nextScroll.top;
     }
   }
 
   private setZoom(value: number): void {
-    if (!Number.isFinite(value)) {
+    const normalized = normalizeZoom(value, {
+      min: MIN_ZOOM,
+      max: MAX_ZOOM,
+      step: ZOOM_STEP,
+    });
+    if (normalized === null) {
       this.updateZoomControl();
       return;
     }
 
-    this.zoom = clamp(roundToStep(value, ZOOM_STEP), MIN_ZOOM, MAX_ZOOM);
+    this.zoom = normalized;
     this.applyDocumentOptions();
+    this.saveReadingState();
   }
 
   private updateZoomControl(): void {
@@ -777,13 +988,20 @@ export class WordView extends FileView {
     isError = false,
     isLoading = false,
   ): void {
+    this.readerStatus.set(
+      message,
+      isError ? "error" : isLoading ? "loading" : "idle",
+    );
+  }
+
+  private renderStatus(status: ReaderStatus): void {
     if (!this.statusEl) {
       return;
     }
 
-    this.statusEl.setText(message);
-    this.statusEl.toggleClass("is-error", isError);
-    this.statusEl.toggleClass("is-loading", isLoading);
+    this.statusEl.setText(status.message);
+    this.statusEl.toggleClass("is-error", status.kind === "error");
+    this.statusEl.toggleClass("is-loading", status.kind === "loading");
   }
 
   private showLegacyDocMessage(file: TFile): void {
@@ -1059,6 +1277,77 @@ export class WordView extends FileView {
     }
   }
 
+  private restoreReadingState(path: string): void {
+    this.activeFilePath = path;
+    const state = this.plugin.getReadingState(path);
+    const defaultZoom = this.plugin.settings.defaultZoomPercent / 100;
+    this.zoom =
+      normalizeZoom(state?.zoom ?? defaultZoom, {
+        min: MIN_ZOOM,
+        max: MAX_ZOOM,
+        step: ZOOM_STEP,
+      }) ?? defaultZoom;
+    this.fitWidth = state?.fitWidth ?? this.plugin.settings.defaultFitWidth;
+    this.outlineVisible =
+      state?.outlineVisible ?? this.plugin.settings.showOutlineByDefault;
+    this.collapsedOutlineIds = new Set(state?.collapsedOutlineIds ?? []);
+    this.pendingScrollPosition = {
+      left: state?.scrollLeft ?? 0,
+      top: state?.scrollTop ?? 0,
+    };
+    this.applyDocumentOptions();
+    this.applyOutlineVisibility();
+  }
+
+  private captureScrollPosition(): void {
+    if (!this.scrollEl) {
+      return;
+    }
+
+    this.pendingScrollPosition = {
+      left: this.scrollEl.scrollLeft,
+      top: this.scrollEl.scrollTop,
+    };
+  }
+
+  private async restoreScrollPosition(token: number): Promise<void> {
+    const position = this.pendingScrollPosition;
+    if (!position || !this.scrollEl) {
+      this.updateCurrentSection();
+      return;
+    }
+
+    await yieldToBrowser();
+    if (!this.renderLifecycle.isCurrent(token) || !this.scrollEl) {
+      return;
+    }
+
+    this.scrollEl.scrollLeft = position.left;
+    this.scrollEl.scrollTop = position.top;
+    this.pendingScrollPosition = null;
+    this.updateCurrentSection();
+  }
+
+  private saveReadingState(): void {
+    if (!this.activeFilePath) {
+      return;
+    }
+
+    const position = this.pendingScrollPosition ?? {
+      left: this.scrollEl?.scrollLeft ?? 0,
+      top: this.scrollEl?.scrollTop ?? 0,
+    };
+    const state: ReaderViewState = {
+      zoom: this.zoom,
+      fitWidth: this.fitWidth,
+      outlineVisible: this.outlineVisible,
+      scrollLeft: position.left,
+      scrollTop: position.top,
+      collapsedOutlineIds: Array.from(this.collapsedOutlineIds),
+    };
+    this.plugin.updateReadingState(this.activeFilePath, state);
+  }
+
   private isLegacyDocFile(file: TFile): boolean {
     return file.extension.toLowerCase() === "doc";
   }
@@ -1074,50 +1363,23 @@ export class WordView extends FileView {
     this.renderedDocumentKey = null;
     this.pendingRenderKey = null;
     this.clearSearchHighlightsState();
-    this.revokeDocumentBlobUrls();
+    this.documentResources.releaseActive();
   }
 
   private clearRenderedDocument(): void {
     this.cancelSearchWork();
     this.outlineTaskToken += 1;
-    this.revokeDocumentBlobUrls();
+    this.documentResources.releaseActive();
     this.documentEl?.empty();
     this.documentEl?.removeClass("is-long-document");
     this.outlineListEl?.empty();
+    this.outlineItems = [];
+    this.outlineRows.clear();
+    this.activeOutlineId = null;
   }
 
   private retainBlobUrl(url: string): () => void {
-    this.retainedBlobUrls.set(url, (this.retainedBlobUrls.get(url) ?? 0) + 1);
-    let released = false;
-
-    return () => {
-      if (released) {
-        return;
-      }
-      released = true;
-
-      const remaining = (this.retainedBlobUrls.get(url) ?? 1) - 1;
-      if (remaining > 0) {
-        this.retainedBlobUrls.set(url, remaining);
-        return;
-      }
-
-      this.retainedBlobUrls.delete(url);
-      if (this.pendingBlobUrlRevocations.delete(url)) {
-        URL.revokeObjectURL(url);
-      }
-    };
-  }
-
-  private revokeDocumentBlobUrls(): void {
-    for (const url of this.documentBlobUrls) {
-      if ((this.retainedBlobUrls.get(url) ?? 0) > 0) {
-        this.pendingBlobUrlRevocations.add(url);
-      } else {
-        URL.revokeObjectURL(url);
-      }
-    }
-    this.documentBlobUrls.clear();
+    return this.documentResources.retain(url);
   }
 
   private getRenderKey(file: TFile): string {
@@ -1221,12 +1483,6 @@ function collectBlobUrls(rootEl: HTMLElement): Set<string> {
   }
 
   return urls;
-}
-
-function revokeBlobUrls(urls: Iterable<string>): void {
-  for (const url of urls) {
-    URL.revokeObjectURL(url);
-  }
 }
 
 function yieldToBrowser(): Promise<void> {
@@ -1520,10 +1776,6 @@ function escapeRegExp(value: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
-}
-
-function roundToStep(value: number, step: number): number {
-  return Math.round(value / step) * step;
 }
 
 class ImagePreviewModal extends Modal {

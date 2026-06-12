@@ -47,6 +47,10 @@ Run this checklist before publishing a stable release:
   - Test toolbar zoom input.
   - Test `Ctrl` + mouse wheel zoom.
   - Test fit width.
+  - Confirm scrolling updates the highlighted current outline section.
+  - Collapse parent outline headings and confirm their descendants hide and restore correctly.
+  - Reopen a document and confirm zoom, fit width, outline visibility, collapsed sections, and scroll position are restored.
+  - Open more than 50 distinct documents and confirm persisted reading state remains capped at 50 entries.
   - Test search, previous/next navigation, and current result highlighting.
   - Test large document loading status with a file above the configured warning size.
   - Confirm a long document shows reading, rendering, preview preparation, and navigation-building status updates before the final preview state.
@@ -75,6 +79,7 @@ Run this checklist before publishing a stable release:
   - Switch between Chinese and English.
   - Confirm settings text, toolbar labels, notices, status messages, errors, and image modal text follow the selected language.
   - Confirm default zoom, default fit width, outline visibility, image preview, and large file warning settings persist after reload.
+  - Confirm changing interface language preserves the current document reading position and outline state.
 - Release automation:
   - Confirm unit and integration tests pass in CI.
   - Confirm the security scan passes against source and `dist/main.js`.

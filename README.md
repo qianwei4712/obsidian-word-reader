@@ -17,7 +17,10 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 - Click rendered images to preview them in a larger modal.
 - Search rendered text in the current document with previous/next navigation.
 - Copy selected rendered text, whole-document plain text, selected Markdown, or whole-document Markdown.
-- Use the clickable outline panel to jump between rendered headings.
+- Use the collapsible outline panel to jump between rendered headings and see
+  the current section highlighted while reading.
+- Restore zoom, fit-width mode, outline state, collapsed sections, and scroll
+  position for the 50 most recently used Word documents.
 - Switch the plugin interface between Chinese and English.
 - Open the source file with the system default Word/WPS-compatible application.
 - Show a clear fallback page for legacy `.doc` files with external-open and conversion guidance.
@@ -70,6 +73,8 @@ Inside the image preview:
 
 - Use the outline button to show or hide the heading outline.
 - Click an outline item to scroll the rendered document to that heading.
+- Collapse or expand outline sections with the chevron beside parent headings.
+- The outline highlights the current section as the document scrolls.
 - The outline is built from headings found in the rendered Word document.
 
 ### Copy
@@ -104,6 +109,9 @@ Available settings:
 
 ## Performance and Stability
 
+- Shared reader lifecycle, status, diagnostics, zoom, external-open, and
+  resource-cleanup primitives keep document behavior consistent and prepare
+  the plugin for later local Office formats.
 - Rendering work is guarded by a cancellation token so stale results are discarded.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
 - Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
@@ -111,6 +119,8 @@ Available settings:
 - Embedded images use lazy loading, asynchronous decoding, and recyclable Blob URLs instead of persistent base64 data URLs.
 - The current rendered file state is tracked to avoid unnecessary repeated renders.
 - Search highlighting is debounced and processed in cancellable chunks to reduce work on large documents.
+- Reading state uses a bounded 50-file LRU store so persisted plugin data does
+  not grow without limit.
 - Development builds log file reading, rendering, DOM commit, outline, and total preview timings to the developer console.
 - Closing or unloading a file releases document buffers, generated Blob URLs, search timers, and search result references.
 

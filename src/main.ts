@@ -10,9 +10,18 @@ import {
   normalizeSettings,
 } from "./settings";
 import { getWordReaderText, type WordReaderText } from "./i18n";
+import {
+  ReadingStateStore,
+  type ReaderViewState,
+} from "./reader/readingState";
+
+const DATA_SAVE_DEBOUNCE_MS = 500;
 
 export default class WordReaderPlugin extends Plugin {
   settings: WordReaderSettings = DEFAULT_SETTINGS;
+  private readingStates = new ReadingStateStore();
+  private dataSaveTimer: number | null = null;
+  private dataSavePromise: Promise<void> = Promise.resolve();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -112,6 +121,16 @@ export default class WordReaderPlugin extends Plugin {
     });
   }
 
+  onunload(): void {
+    if (this.dataSaveTimer !== null) {
+      window.clearTimeout(this.dataSaveTimer);
+      this.dataSaveTimer = null;
+      void this.persistData().catch((error: unknown) => {
+        console.error("Word Reader could not save plugin data", error);
+      });
+    }
+  }
+
   private getActiveWordView(): WordView | null {
     return this.app.workspace.getActiveViewOfType(WordView);
   }
@@ -129,12 +148,65 @@ export default class WordReaderPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const loadedSettings: unknown = await this.loadData();
-    this.settings = normalizeSettings(loadedSettings);
+    const loadedData: unknown = await this.loadData();
+    this.settings = normalizeSettings(loadedData);
+    this.readingStates = new ReadingStateStore(
+      undefined,
+      getReadingStateData(loadedData),
+    );
   }
 
   async saveSettings(): Promise<void> {
     this.settings = normalizeSettings(this.settings);
-    await this.saveData(this.settings);
+    await this.flushData();
   }
+
+  getReadingState(path: string): ReaderViewState | undefined {
+    return this.readingStates.get(path);
+  }
+
+  updateReadingState(path: string, state: ReaderViewState): void {
+    this.readingStates.set(path, state);
+    this.scheduleDataSave();
+  }
+
+  async flushData(): Promise<void> {
+    if (this.dataSaveTimer !== null) {
+      window.clearTimeout(this.dataSaveTimer);
+      this.dataSaveTimer = null;
+    }
+    await this.persistData();
+  }
+
+  private scheduleDataSave(): void {
+    if (this.dataSaveTimer !== null) {
+      window.clearTimeout(this.dataSaveTimer);
+    }
+    this.dataSaveTimer = window.setTimeout(() => {
+      this.dataSaveTimer = null;
+      void this.persistData().catch((error: unknown) => {
+        console.error("Word Reader could not save plugin data", error);
+      });
+    }, DATA_SAVE_DEBOUNCE_MS);
+  }
+
+  private persistData(): Promise<void> {
+    const data = {
+      ...this.settings,
+      readingStates: this.readingStates.serialize(),
+    };
+    this.dataSavePromise = this.dataSavePromise
+      .catch(() => undefined)
+      .then(async () => {
+        await this.saveData(data);
+      });
+    return this.dataSavePromise;
+  }
+}
+
+function getReadingStateData(data: unknown): unknown {
+  if (typeof data !== "object" || data === null) {
+    return undefined;
+  }
+  return (data as Record<string, unknown>).readingStates;
 }

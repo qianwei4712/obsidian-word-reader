@@ -1,4 +1,13 @@
 import type { WordReaderText } from "./i18n";
+import {
+  createReaderDiagnostics,
+  fingerprintMessage,
+  formatReaderDiagnostics,
+  type ReaderDiagnosticFile,
+  type ReaderDiagnostics,
+} from "./reader/diagnostics";
+
+export { fingerprintMessage };
 
 export type WordErrorKind =
   | "encrypted"
@@ -16,19 +25,8 @@ export interface WordErrorInfo {
   tips: string[];
 }
 
-export interface WordDiagnostics {
-  category: WordErrorKind;
-  fileName: string;
-  fileSizeBytes: number;
-  modifiedAt: string;
-  errorSummary: string;
-}
-
-export interface WordDiagnosticFile {
-  name: string;
-  size: number;
-  mtime: number;
-}
+export type WordDiagnostics = ReaderDiagnostics<WordErrorKind>;
+export type WordDiagnosticFile = ReaderDiagnosticFile;
 
 export function classifyWordError(
   message: string,
@@ -158,13 +156,11 @@ export function createWordDiagnostics(
   message: string,
   file: WordDiagnosticFile,
 ): WordDiagnostics {
-  return {
+  return createReaderDiagnostics(
     category,
-    fileName: file.name,
-    fileSizeBytes: file.size,
-    modifiedAt: new Date(file.mtime).toISOString(),
-    errorSummary: createSafeDiagnosticSummary(category, message),
-  };
+    createSafeDiagnosticSummary(category, message),
+    file,
+  );
 }
 
 export function createSafeDiagnosticSummary(
@@ -182,30 +178,10 @@ export function createSafeDiagnosticSummary(
   return `${summaries[category]} (fingerprint: ${fingerprintMessage(message)})`;
 }
 
-export function fingerprintMessage(message: string): string {
-  let hash = 0x811c9dc5;
-  for (const character of message) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
 export function formatWordDiagnostics(
   diagnostics: WordDiagnostics,
 ): string {
-  return JSON.stringify(
-    {
-      product: "Obsidian Word Reader",
-      category: diagnostics.category,
-      fileName: diagnostics.fileName,
-      fileSizeBytes: diagnostics.fileSizeBytes,
-      modifiedAt: diagnostics.modifiedAt,
-      errorSummary: diagnostics.errorSummary,
-    },
-    null,
-    2,
-  );
+  return formatReaderDiagnostics("Obsidian Word Reader", diagnostics);
 }
 
 function containsUtf16LeText(bytes: Uint8Array, text: string): boolean {
