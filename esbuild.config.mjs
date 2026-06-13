@@ -27,7 +27,7 @@ const copyAssetsPlugin = {
 
 const context = await esbuild.context({
   banner: {
-    js: "/* Obsidian Word Reader */",
+    js: "/* Office Reader */",
   },
   entryPoints: ["src/main.ts"],
   bundle: true,

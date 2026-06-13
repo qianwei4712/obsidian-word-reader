@@ -127,7 +127,7 @@ export class WordView extends FileView {
   }
 
   getDisplayText(): string {
-    return this.file?.name ?? "Word Reader";
+    return this.file?.name ?? "Office Reader";
   }
 
   getIcon(): string {
@@ -1529,7 +1529,7 @@ function logRenderPerformance(metrics: RenderPerformanceMetrics): void {
     return;
   }
 
-  console.debug("[Word Reader] Render performance", {
+  console.debug("[Office Reader] Render performance", {
     ...metrics,
     readDurationMs: Math.round(metrics.readDurationMs),
     rendererDurationMs: Math.round(metrics.rendererDurationMs),

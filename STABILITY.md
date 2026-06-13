@@ -39,7 +39,7 @@ Run this checklist before publishing a stable release:
   - `npm run release`
   - Confirm the release zip contains only `main.js`, `manifest.json`, and `styles.css`.
 - Installation:
-  - Install the release zip into a test vault at `.obsidian/plugins/obsidian-word-reader/`.
+  - Install the release zip into a test vault at `.obsidian/plugins/word-reader/`.
   - Enable the plugin from Obsidian Community plugins.
   - Confirm Obsidian loads the plugin without console errors.
 - `.docx` preview:

@@ -181,7 +181,7 @@ export function createSafeDiagnosticSummary(
 export function formatWordDiagnostics(
   diagnostics: WordDiagnostics,
 ): string {
-  return formatReaderDiagnostics("Obsidian Word Reader", diagnostics);
+  return formatReaderDiagnostics("Office Reader", diagnostics);
 }
 
 function containsUtf16LeText(bytes: Uint8Array, text: string): boolean {

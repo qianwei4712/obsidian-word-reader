@@ -250,7 +250,7 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
     errors: {
       encryptedTitle: "Encrypted Word document",
       encryptedBody:
-        "This document appears to be encrypted or password protected. Obsidian Word Reader cannot unlock it. Open it in Word or WPS, remove the password if appropriate, then save a readable .docx copy.",
+        "This document appears to be encrypted or password protected. Office Reader cannot unlock it. Open it in Word or WPS, remove the password if appropriate, then save a readable .docx copy.",
       encryptedStatus: "Encrypted Word document",
       encryptedTips: [
         "Open the document in Word or WPS with the correct password.",
@@ -425,7 +425,7 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
     errors: {
       encryptedTitle: "加密的 Word 文档",
       encryptedBody:
-        "该文档可能已加密或受密码保护。Obsidian Word Reader 不能解锁文档。请用 Word 或 WPS 打开，按需移除密码后另存为可读取的 .docx 副本。",
+        "该文档可能已加密或受密码保护。Office Reader 不能解锁文档。请用 Word 或 WPS 打开，按需移除密码后另存为可读取的 .docx 副本。",
       encryptedStatus: "加密的 Word 文档",
       encryptedTips: [
         "用 Word 或 WPS 输入正确密码打开该文档。",

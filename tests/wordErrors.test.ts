@@ -69,7 +69,7 @@ void test("diagnostics expose stable, privacy-safe metadata", () => {
   assert.match(diagnostics.errorSummary, /fingerprint: [0-9a-f]{8}/);
   assert.equal(formatted.includes(message), false);
   assert.deepEqual(parsed, {
-    product: "Obsidian Word Reader",
+    product: "Office Reader",
     category: "unknown",
     fileName: "Report.docx",
     fileSizeBytes: 1234,

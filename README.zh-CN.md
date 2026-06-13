@@ -1,8 +1,8 @@
-# Obsidian Word Reader
+# Office Reader
 
 [English README](README.md)
 
-Obsidian Word Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接打开
+Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接打开
 `.docx` 和 `.pptx` 文件，并以只读方式阅读 Office 文档。
 
 插件不是 Office 编辑器，而是提供完全本地的阅读流程，同时保持原始文件不变。
@@ -98,7 +98,7 @@ Obsidian Word Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内
 
 ## 设置
 
-打开 Obsidian 设置，然后进入 `第三方插件` -> `Obsidian Word Reader`。
+打开 Obsidian 设置，然后进入 `第三方插件` -> `Office Reader`。
 
 当前支持的设置：
 
@@ -187,19 +187,19 @@ created: 2026-05-28
 2. 在 vault 中创建插件目录：
 
    ```text
-   YourVault/.obsidian/plugins/obsidian-word-reader/
+   YourVault/.obsidian/plugins/word-reader/
    ```
 
 3. 将 zip 解压到该目录。文件必须直接位于插件目录根部：
 
    ```text
-   YourVault/.obsidian/plugins/obsidian-word-reader/main.js
-   YourVault/.obsidian/plugins/obsidian-word-reader/manifest.json
-   YourVault/.obsidian/plugins/obsidian-word-reader/styles.css
+   YourVault/.obsidian/plugins/word-reader/main.js
+   YourVault/.obsidian/plugins/word-reader/manifest.json
+   YourVault/.obsidian/plugins/word-reader/styles.css
    ```
 
 4. 重启 Obsidian，或重新加载第三方插件。
-5. 在 Obsidian 设置中启用第三方插件，并启用 Obsidian Word Reader。
+5. 在 Obsidian 设置中启用第三方插件，并启用 Office Reader。
 
 ### 从源码构建
 

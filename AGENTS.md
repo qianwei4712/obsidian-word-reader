@@ -6,7 +6,7 @@
 - Use the official `eslint-plugin-obsidianmd` recommended configuration.
 - Treat every ESLint warning as a release blocker.
 - Use supported Obsidian APIs compatible with `manifest.json.minAppVersion`.
-- Preserve local-only, read-only Word document behavior unless a task explicitly changes the product scope.
+- Preserve local-only, read-only Office document behavior unless a task explicitly changes the product scope.
 - Do not add telemetry, remote code execution, dynamic script injection, or undisclosed network requests.
 
 ## Required checks

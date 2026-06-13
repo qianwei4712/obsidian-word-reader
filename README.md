@@ -1,8 +1,8 @@
-# Obsidian Word Reader
+# Office Reader
 
 [中文文档](README.zh-CN.md)
 
-Obsidian Word Reader is a desktop-only Obsidian plugin for opening `.docx`
+Office Reader is a desktop-only Obsidian plugin for opening `.docx`
 and `.pptx` files directly inside Obsidian as safe, read-only documents.
 
 The plugin is not an Office editor. It provides local reading workflows while
@@ -103,7 +103,7 @@ Inside the image preview:
 
 ## Settings
 
-Open Obsidian settings, then go to `Community plugins` -> `Obsidian Word Reader`.
+Open Obsidian settings, then go to `Community plugins` -> `Office Reader`.
 
 Available settings:
 
@@ -196,19 +196,19 @@ If the same-name Markdown file already exists, the plugin opens it without overw
 2. Create the plugin folder in your vault:
 
    ```text
-   YourVault/.obsidian/plugins/obsidian-word-reader/
+   YourVault/.obsidian/plugins/word-reader/
    ```
 
 3. Extract the zip into that folder. The files must be directly inside the plugin folder:
 
    ```text
-   YourVault/.obsidian/plugins/obsidian-word-reader/main.js
-   YourVault/.obsidian/plugins/obsidian-word-reader/manifest.json
-   YourVault/.obsidian/plugins/obsidian-word-reader/styles.css
+   YourVault/.obsidian/plugins/word-reader/main.js
+   YourVault/.obsidian/plugins/word-reader/manifest.json
+   YourVault/.obsidian/plugins/word-reader/styles.css
    ```
 
 4. Restart Obsidian or reload community plugins.
-5. In Obsidian, open Settings, enable Community plugins, then enable Obsidian Word Reader.
+5. In Obsidian, open Settings, enable Community plugins, then enable Office Reader.
 
 ### Build from source
 

@@ -184,7 +184,7 @@ export default class WordReaderPlugin extends Plugin {
       window.clearTimeout(this.dataSaveTimer);
       this.dataSaveTimer = null;
       void this.persistData().catch((error: unknown) => {
-        console.error("Word Reader could not save plugin data", error);
+        console.error("Office Reader could not save plugin data", error);
       });
     }
   }
@@ -256,7 +256,7 @@ export default class WordReaderPlugin extends Plugin {
     this.dataSaveTimer = window.setTimeout(() => {
       this.dataSaveTimer = null;
       void this.persistData().catch((error: unknown) => {
-        console.error("Word Reader could not save plugin data", error);
+        console.error("Office Reader could not save plugin data", error);
       });
     }, DATA_SAVE_DEBOUNCE_MS);
   }

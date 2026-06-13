@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0.2 - 2026-06-13
+
+### English
+
+#### Changed
+
+- Renamed the community-directory display name from Word Reader to Office
+  Reader while retaining the stable `word-reader` plugin ID for update
+  compatibility.
+- Updated English and Chinese documentation, manual installation paths,
+  diagnostics, logs, and build metadata to use the new display name.
+
+### 中文
+
+#### 变更
+
+- 社区插件目录显示名称由 Word Reader 更新为 Office Reader，同时保留稳定的
+  `word-reader` 插件 ID，确保现有安装可以继续升级。
+- 更新中英文说明文档、手动安装目录、诊断信息、日志和构建元数据，使其统一使用
+  新显示名称。
+
 ## 2.0.1 - 2026-06-13
 
 ### English

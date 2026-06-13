@@ -20,6 +20,8 @@ Community directory and before publishing later releases.
 - [ ] `LICENSE` exists and dependency licenses are compatible.
 - [ ] `manifest.json` is committed on the default branch and contains the
   intended release version.
+- [ ] The manifest display name is `Office Reader`; the stable plugin ID
+  remains `word-reader` for update compatibility.
 - [ ] `versions.json` maps the release version to the correct minimum Obsidian
   version.
 - [ ] The manifest ID is unique, lowercase, contains only letters and hyphens,
@@ -54,7 +56,7 @@ Community directory and before publishing later releases.
 - [ ] Confirm the GitHub release has binary attachments named `main.js`,
   `manifest.json`, and `styles.css`.
 - [ ] Install the release assets into
-  `.obsidian/plugins/obsidian-word-reader/` and verify that Obsidian loads the
+  `.obsidian/plugins/word-reader/` and verify that Obsidian loads the
   plugin without console errors.
 
 ## Initial directory submission
