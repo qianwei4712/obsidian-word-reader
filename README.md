@@ -2,13 +2,19 @@
 
 [中文文档](README.zh-CN.md)
 
-Obsidian Word Reader is a desktop-only Obsidian plugin for opening `.docx` files directly inside Obsidian as safe, read-only documents.
+Obsidian Word Reader is a desktop-only Obsidian plugin for opening `.docx`
+and `.pptx` files directly inside Obsidian as safe, read-only documents.
 
-The plugin is not a Word editor. It is designed to make Word documents easier to read, search, reference, and summarize inside an Obsidian vault while keeping the original file unchanged.
+The plugin is not an Office editor. It provides local reading workflows while
+keeping the original files unchanged.
 
 ## Features
 
 - Open `.docx` files in an Obsidian tab.
+- Open `.pptx` files in an Obsidian tab with local rendering for text, images,
+  common shapes, tables, themes, layouts, and masters.
+- Navigate presentations with previous/next controls, page-number jump,
+  continuous zoom, fit to window, fullscreen reading, and external open.
 - Render headings, paragraphs, lists, tables, images, and page breaks where supported by `docx-preview`.
 - Keep the original Word file unchanged.
 - Follow Obsidian light and dark themes for the Word preview surface. Complex Word documents with explicit colors may still affect the final rendered appearance.
@@ -33,12 +39,13 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 | Extension | Status | Notes |
 | --- | --- | --- |
 | `.docx` | Supported | Rendered inside Obsidian through `docx-preview`. |
+| `.pptx` | Supported | Rendered locally as a read-only presentation. |
 | `.doc` | Guidance page | Shown inside Obsidian with external-open and `.docx` conversion guidance. |
 
 ## Usage
 
-1. Put a `.docx` file into your Obsidian vault.
-2. Click the `.docx` file in the file explorer.
+1. Put a `.docx` or `.pptx` file into your Obsidian vault.
+2. Click the file in the file explorer.
 3. Read the document in the Obsidian tab opened by the plugin.
 4. Use the toolbar to reload, zoom, fit width, show the outline, search, copy text, copy Markdown, create a summary note, or open the file externally.
 
@@ -47,6 +54,16 @@ The plugin is not a Word editor. It is designed to make Word documents easier to
 - Type a percentage in the zoom input.
 - Use `Ctrl` + mouse wheel over the document preview for continuous zoom.
 - Use fit width when you want the document to match the current pane.
+
+### PowerPoint Reading
+
+- Use the arrow buttons, `Page Up`/`Page Down`, or `Left`/`Right` to change
+  slides.
+- Enter a slide number to jump directly to it.
+- Use the percentage input or `Ctrl` + mouse wheel to zoom.
+- Use fit window to keep the complete slide visible while resizing a pane.
+- Use fullscreen for presentation-focused reading.
+- The current slide, zoom, fit mode, and scroll position are restored per file.
 
 ### Image Preview
 
@@ -96,13 +113,19 @@ Available settings:
 - Whether the outline is visible by default.
 - Whether rendered images can be clicked for larger preview.
 - Large file warning threshold in MB.
-- External opening note. The plugin uses the operating system default application for `.docx` files.
+- External opening note. The plugin uses the operating system default
+  application for source Office files.
 
 ## Compatibility and Errors
 
 - Legacy `.doc` files open to an explanation page instead of being rendered directly.
 - Encrypted or password-protected documents show a dedicated encrypted document message.
 - Failed `.docx` previews are classified as encrypted, format mismatched, damaged ZIP packages, invalid XML structures, unsupported document structures, or unknown failures where possible.
+- Failed `.pptx` previews distinguish format mismatch, encryption, damaged XML
+  or ZIP data, unsupported structures, and safe-preview limit violations.
+- PPTX archives are checked before decompression for file count, per-entry
+  expanded size, total expanded size, ZIP64 usage, encryption, and abnormal
+  compression ratios.
 - Error pages provide a collapsed diagnostic section and a copy action for issue reports.
 - Copied diagnostics use JSON and include only the error category, file name, size, modification time, and a privacy-safe summary with an error fingerprint. Raw renderer errors, document content, internal XML, and absolute vault paths are excluded.
 - Large file warnings include the file size and use the configured threshold from settings.
@@ -113,6 +136,8 @@ Available settings:
   resource-cleanup primitives keep document behavior consistent and prepare
   the plugin for later local Office formats.
 - Rendering work is guarded by a cancellation token so stale results are discarded.
+- PPTX file and slide rendering use separate cancellation generations so rapid
+  file switching and page navigation cannot commit stale slides.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
 - Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
 - Long previews defer off-screen page painting until pages approach the viewport.
@@ -298,10 +323,13 @@ CI and release workflows use Node.js 20.19.0.
 
 ## Known Limits
 
-- This is not a Word editor.
-- The plugin never saves changes back to `.docx`.
+- This is not an Office editor.
+- The plugin never saves changes back to `.docx` or `.pptx`.
 - Legacy `.doc` files are not rendered directly, but the plugin shows external-open and conversion guidance.
 - Complex Word layouts may not render exactly like Microsoft Word.
+- PPTX animation, transitions, audio/video playback, macros, editing, charts,
+  SmartArt, SVG/GIF/WebP media, and pixel-perfect PowerPoint fidelity are not
+  supported.
 - Word previews follow the current Obsidian theme, but explicit colors stored in the Word document may still influence the rendered result.
 - Very large files or files with many images may render slowly.
 - Mobile support is not included in this version.
@@ -310,11 +338,17 @@ CI and release workflows use Node.js 20.19.0.
 
 This plugin is designed with security as a top priority:
 
-- **Local-only operations**: The plugin only reads `.docx` files from your local Obsidian vault. No network requests are made.
+- **Local-only operations**: The plugin only reads `.docx` and `.pptx` files
+  from your local Obsidian vault. No network requests are made.
 - **No external resources**: The plugin never loads scripts, styles, or assets from the internet. All rendering logic runs locally.
-- **Read-only access**: The plugin never modifies, overwrites, or writes back to the original Word document. It uses Obsidian's binary vault API for rendering and text extraction only.
+- **Read-only access**: The plugin never modifies, overwrites, or writes back
+  to the original Office file. It uses Obsidian's binary vault API for
+  rendering and text extraction only.
 - **No dynamic script injection**: The plugin creates only structural DOM elements (`div`, `span`, `button`, `input`) for document rendering. No `<script>` elements are created or injected at any point.
-- **Sandboxed rendering**: Word content is rendered into isolated DOM containers with no execution context. All content comes from trusted local `.docx` files in your vault.
+- **Safe PPTX archives**: ZIP metadata is validated before decompression, and
+  external package relationships are ignored instead of being loaded.
+- **Sandboxed rendering**: Office content is rendered into structural DOM
+  containers with no script execution context.
 - **Desktop-only**: The plugin requires desktop Obsidian because it uses Electron APIs for image clipboard operations and file dialogs. This is declared in `manifest.json` as `isDesktopOnly: true`.
 
 Use Word, WPS, or another external editor when the source document needs to be changed.

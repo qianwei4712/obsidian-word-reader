@@ -115,6 +115,15 @@ function scanSourceText(sourceText, fileName) {
           report(node, "dynamic-import", "Dynamic import paths must be static strings.");
         } else if (/^(?:https?:)?\/\//i.test(firstString)) {
           report(node, "remote-import", "Remote module imports are disallowed.");
+        } else if (
+          firstString === "electron" ||
+          firstString.startsWith("node:")
+        ) {
+          report(
+            node,
+            "desktop-runtime-import",
+            "Electron and Node.js runtime modules must use guarded CommonJS loading.",
+          );
         }
       }
 
@@ -172,6 +181,7 @@ function validateScannerRules() {
     ["element.innerHTML = html", "html-injection"],
     ['fetch("https://example.com")', "network-request"],
     ["import(moduleUrl)", "dynamic-import"],
+    ['import("electron")', "desktop-runtime-import"],
   ];
 
   for (const [sourceText, expectedRule] of cases) {
@@ -209,6 +219,13 @@ function scanBundle() {
       rule: "bundled-import-scripts",
       pattern: /\bimportScripts\s*\(/,
       message: "The production bundle calls importScripts().",
+    },
+    {
+      rule: "bundled-desktop-runtime-import",
+      pattern:
+        /\bimport\s*\(\s*["'](?:electron|node:[^"']+)["']\s*\)/,
+      message:
+        "The production bundle dynamically imports an Electron or Node.js runtime module.",
     },
   ];
 

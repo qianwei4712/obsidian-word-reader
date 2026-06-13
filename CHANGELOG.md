@@ -1,5 +1,70 @@
 # Changelog
 
+## 2.0.1 - 2026-06-13
+
+### English
+
+#### Fixed
+
+- Fixed external opening in Obsidian Desktop by loading Electron through the
+  guarded CommonJS plugin runtime instead of a browser dynamic import.
+- Applied the same runtime fix to image copy, image save, and Node.js file
+  access, with a production-bundle regression check.
+
+### 中文
+
+#### 修复
+
+- 修复 Obsidian 桌面端外部打开失败的问题，Electron 改为通过带平台守卫的
+  CommonJS 插件运行时加载，不再使用浏览器动态导入。
+- 同步修复图片复制、图片另存和 Node.js 文件访问，并新增生产包回归检查。
+
+## 2.0.0 - 2026-06-13
+
+### English
+
+#### Added
+
+- Added local, read-only `.pptx` preview with text, images, common shapes,
+  tables, theme colors, slide layouts, and slide masters.
+- Added previous/next navigation, page-number jump, continuous zoom, fit to
+  window, fullscreen reading, external open, and per-file page restoration.
+- Added pre-decompression ZIP safety limits for entry count, per-entry expanded
+  size, total expanded size, ZIP64, encryption, and abnormal compression ratios.
+- Added generated PPTX package and DOM rendering integration tests.
+
+#### Security
+
+- PPTX rendering ignores external relationships, rejects script-capable SVG
+  media, and never loads remote resources.
+- Desktop Electron and Node.js integrations use guarded CommonJS loading so
+  external open, image copy, and image save work in Obsidian's plugin runtime.
+- Animation, audio/video playback, macros, editing, and source-file write-back
+  are outside the supported preview scope.
+- Rapid file, page, and zoom changes invalidate stale rendering work and
+  release generated Blob URLs.
+
+### 中文
+
+#### 新增
+
+- 新增本地只读 `.pptx` 预览，支持文本、图片、常见形状、表格、主题颜色、
+  幻灯片版式和母版。
+- 新增上一张/下一张、页码跳转、连续缩放、适应窗口、全屏阅读、外部打开，
+  并按文件恢复阅读页码。
+- 新增解压前 ZIP 安全限制，覆盖条目数量、单条目解压大小、总解压大小、
+  ZIP64、加密和异常压缩率。
+- 新增运行时生成 PPTX 包及 DOM 渲染的集成测试。
+
+#### 安全
+
+- PPTX 渲染会忽略外部关系、拒绝可包含脚本或远程引用的 SVG 媒体，并且
+  不加载任何远程资源。
+- 桌面端 Electron 与 Node.js 集成改用带平台守卫的 CommonJS 加载，确保
+  外部打开、图片复制和图片另存可在 Obsidian 插件运行时正常工作。
+- 不支持动画、音视频播放、宏、编辑和源文件回写。
+- 快速切换文件、页码或缩放时会作废过期渲染任务，并释放生成的 Blob URL。
+
 ## 1.6.0 - 2026-06-12
 
 ### English

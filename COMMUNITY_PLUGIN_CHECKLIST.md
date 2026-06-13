@@ -36,8 +36,10 @@ Community directory and before publishing later releases.
 - [ ] Review the current submission requirements and plugin guidelines.
 - [ ] Confirm there is no telemetry, self-update mechanism, obfuscated code,
   dynamic script injection, or undisclosed network use.
-- [ ] Confirm the plugin does not modify or write back to source `.docx`
-  files.
+- [ ] Confirm the plugin does not modify or write back to source `.docx` or
+  `.pptx` files.
+- [ ] Confirm PPTX external relationships are ignored and the production
+  bundle contains no network request code.
 - [ ] Confirm UI text uses sentence case and settings do not repeat the plugin
   name as a heading.
 - [ ] Confirm desktop-only Electron and Node.js access is guarded.
@@ -45,7 +47,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `1.6.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `2.0.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

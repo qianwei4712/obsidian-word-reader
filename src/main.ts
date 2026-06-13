@@ -2,6 +2,11 @@ import { Plugin } from "obsidian";
 
 import { openExternalDocx } from "./commands/openExternal";
 import { createNoteFromDocx } from "./commands/createNoteFromDocx";
+import {
+  PptxView,
+  VIEW_TYPE_PPTX_READER,
+} from "./PptxView";
+import { getPptxReaderText } from "./pptx/pptxI18n";
 import { WordView, VIEW_TYPE_WORD_READER } from "./WordView";
 import {
   DEFAULT_SETTINGS,
@@ -32,14 +37,19 @@ export default class WordReaderPlugin extends Plugin {
       VIEW_TYPE_WORD_READER,
       (leaf) => new WordView(leaf, this),
     );
+    this.registerView(
+      VIEW_TYPE_PPTX_READER,
+      (leaf) => new PptxView(leaf, this),
+    );
 
     this.registerExtensions(["docx", "doc"], VIEW_TYPE_WORD_READER);
+    this.registerExtensions(["pptx"], VIEW_TYPE_PPTX_READER);
 
     this.addCommand({
       id: "reload",
       name: text.commands.reload,
       checkCallback: (checking) => {
-        const view = this.getActiveWordView();
+        const view = this.getActiveReaderView();
         if (!view?.file) {
           return false;
         }
@@ -107,15 +117,63 @@ export default class WordReaderPlugin extends Plugin {
       id: "open-external",
       name: text.commands.openExternal,
       checkCallback: (checking) => {
-        const view = this.getActiveWordView();
+        const view = this.getActiveReaderView();
         if (!view?.file) {
           return false;
         }
 
         if (!checking) {
-          void openExternalDocx(this.app, view.file, this.text);
+          if (view instanceof PptxView) {
+            void view.openExternal();
+          } else {
+            void openExternalDocx(this.app, view.file, this.text);
+          }
         }
 
+        return true;
+      },
+    });
+
+    const pptxText = getPptxReaderText(this.settings.language);
+    this.addCommand({
+      id: "previous-slide",
+      name: pptxText.commands.previousSlide,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          void view.previousSlide();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "next-slide",
+      name: pptxText.commands.nextSlide,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          void view.nextSlide();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "toggle-presentation-fullscreen",
+      name: pptxText.commands.toggleFullscreen,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          void view.toggleFullscreen();
+        }
         return true;
       },
     });
@@ -135,6 +193,14 @@ export default class WordReaderPlugin extends Plugin {
     return this.app.workspace.getActiveViewOfType(WordView);
   }
 
+  private getActivePptxView(): PptxView | null {
+    return this.app.workspace.getActiveViewOfType(PptxView);
+  }
+
+  private getActiveReaderView(): WordView | PptxView | null {
+    return this.getActiveWordView() ?? this.getActivePptxView();
+  }
+
   get text(): WordReaderText {
     return getWordReaderText(this.settings.language);
   }
@@ -142,6 +208,11 @@ export default class WordReaderPlugin extends Plugin {
   refreshWordReaderViews(): void {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_WORD_READER)) {
       if (leaf.view instanceof WordView) {
+        leaf.view.refreshInterfaceLanguage();
+      }
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_PPTX_READER)) {
+      if (leaf.view instanceof PptxView) {
         leaf.view.refreshInterfaceLanguage();
       }
     }

@@ -423,3 +423,165 @@
   height: 32px;
   padding: 0 8px;
 }
+
+.pptx-reader-root:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #111;
+}
+
+.pptx-reader-toolbar button.is-active {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.pptx-reader-page-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.pptx-reader-page-input {
+  width: 58px;
+  text-align: center;
+}
+
+.pptx-reader-page-count {
+  min-width: 42px;
+  white-space: nowrap;
+}
+
+.pptx-reader-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  background: #202124;
+}
+
+.pptx-reader-canvas {
+  position: relative;
+  margin: auto;
+}
+
+.pptx-reader-stage {
+  position: relative;
+  overflow: hidden;
+  color: #000;
+  background: #fff;
+  box-shadow: 0 4px 24px rgb(0 0 0 / 45%);
+  transform-origin: top left;
+  user-select: text;
+}
+
+.pptx-reader-element {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform-origin: center center;
+}
+
+.pptx-reader-shape-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pptx-reader-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.15;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.pptx-reader-paragraph {
+  min-height: 1em;
+}
+
+.pptx-reader-bullet {
+  display: inline-block;
+  min-width: 1.2em;
+}
+
+.pptx-reader-text .is-bold,
+.pptx-reader-table .is-bold {
+  font-weight: 700;
+}
+
+.pptx-reader-text .is-italic,
+.pptx-reader-table .is-italic {
+  font-style: italic;
+}
+
+.pptx-reader-text .is-underlined,
+.pptx-reader-table .is-underlined {
+  text-decoration: underline;
+}
+
+.pptx-reader-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.pptx-reader-table {
+  width: 100%;
+  height: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: #000;
+  background: transparent;
+  font-size: 14px;
+}
+
+.pptx-reader-table td {
+  box-sizing: border-box;
+  padding: 4px 6px;
+  overflow: hidden;
+  border: 1px solid #808080;
+  vertical-align: middle;
+}
+
+.pptx-reader-unsupported-object {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px dashed #808080;
+  color: #606060;
+  background: rgb(255 255 255 / 70%);
+  font-size: 12px;
+  text-align: center;
+}
+
+.pptx-reader-error {
+  width: min(720px, calc(100vw - 96px));
+  margin: 24px auto;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border-radius: var(--radius-m);
+}
+
+.pptx-reader-error-details {
+  max-height: 160px;
+  margin: 0;
+  padding: 0 0 12px;
+  overflow: auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

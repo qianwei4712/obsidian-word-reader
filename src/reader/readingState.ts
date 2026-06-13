@@ -8,6 +8,7 @@ export interface ReaderViewState {
   scrollLeft: number;
   scrollTop: number;
   collapsedOutlineIds: string[];
+  page?: number;
 }
 
 export interface PersistedReaderViewState {
@@ -91,7 +92,7 @@ export class ReadingStateStore {
 
 export function normalizeReaderViewState(value: unknown): ReaderViewState {
   const source = isRecord(value) ? value : {};
-  return {
+  const state: ReaderViewState = {
     zoom: readFiniteNumber(source.zoom, 1),
     fitWidth: readBoolean(source.fitWidth, false),
     outlineVisible: readBoolean(source.outlineVisible, true),
@@ -102,6 +103,11 @@ export function normalizeReaderViewState(value: unknown): ReaderViewState {
       MAX_COLLAPSED_OUTLINE_IDS,
     ),
   };
+  const page = readFiniteNumber(source.page, 0);
+  if (page >= 1) {
+    state.page = Math.floor(page);
+  }
+  return state;
 }
 
 function normalizeStoredEntries(value: unknown): PersistedReaderViewState[] {

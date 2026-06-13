@@ -1,7 +1,7 @@
 {
   "name": "obsidian-word-reader",
-  "version": "1.6.0",
-  "description": "Read .docx files inside Obsidian without modifying the original Word document.",
+  "version": "2.0.1",
+  "description": "Read .docx and .pptx files inside Obsidian without modifying the originals.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -21,13 +21,17 @@
     "obsidian",
     "obsidian-plugin",
     "docx",
-    "word"
+    "word",
+    "pptx",
+    "powerpoint"
   ],
   "author": "qianw",
   "license": "MIT",
   "dependencies": {
+    "@xmldom/xmldom": "^0.8.13",
     "docx-preview": "^0.3.6",
     "immediate": "file:vendor/immediate",
+    "jszip": "^3.10.1",
     "mammoth": "^1.9.1",
     "setimmediate": "file:vendor/setimmediate"
   },
@@ -38,7 +42,6 @@
     "eslint": "^9.39.4",
     "eslint-plugin-obsidianmd": "^0.3.0",
     "globals": "^17.6.0",
-    "jszip": "^3.10.1",
     "jiti": "^2.6.1",
     "obsidian": "^1.13.0",
     "typescript": "^5.7.2",

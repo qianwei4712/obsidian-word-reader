@@ -12,6 +12,21 @@ The 1.0.0 stable line freezes the core reader scope:
 
 New reader features should be planned for minor versions after 1.0.0. Patch releases should focus on regressions, compatibility fixes, documentation corrections, and packaging issues.
 
+## 2.0.0 PPTX Scope
+
+The 2.0.0 line adds local, read-only `.pptx` preview:
+
+- Render text, embedded images, common shapes, tables, theme colors, layouts,
+  and masters without loading remote resources.
+- Navigate by previous/next slide and page number.
+- Support zoom, fit to window, fullscreen reading, external open, and restored
+  per-file page state.
+- Validate ZIP metadata before decompression with entry-count, per-entry size,
+  total expanded size, encryption, ZIP64, and compression-ratio limits.
+- Keep animation, transitions, audio/video playback, macros, editing, charts,
+  SmartArt, SVG/GIF/WebP media, and exact PowerPoint layout fidelity outside
+  the supported scope.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -35,6 +50,19 @@ Run this checklist before publishing a stable release:
   - Open a legacy `.doc` file.
   - Confirm the guidance page appears.
   - Confirm external open is available on Desktop.
+- `.pptx` preview:
+  - Open presentations containing text, embedded images, common shapes, tables,
+    theme colors, layouts, and masters.
+  - Test previous/next navigation, page-number jump, zoom, fit to window,
+    fullscreen reading, keyboard navigation, and external open.
+  - Reopen a presentation and confirm page, zoom, fit mode, and scroll position
+    are restored.
+  - Rapidly switch files, pages, and zoom levels and confirm no stale slide is
+    displayed.
+  - Open damaged, encrypted, renamed non-PPTX, over-limit, and unsupported
+    presentations and confirm each shows understandable recovery guidance.
+  - Confirm presentations with external image relationships do not make
+    network requests.
 - Error diagnostics:
   - Open encrypted, invalid, and damaged test documents where available.
   - Confirm error pages show an appropriate category and recovery guidance.
@@ -94,6 +122,8 @@ Supported:
 - Obsidian Desktop.
 - Local desktop vaults.
 - `.docx` read-only preview through `docx-preview`.
+- `.pptx` local, read-only preview for text, embedded images, common shapes,
+  tables, themes, layouts, and masters.
 - Plain text and Markdown extraction through `mammoth`.
 - `.doc` detection with external-open and conversion guidance.
 
@@ -103,6 +133,9 @@ Not supported:
 - Mobile-specific support.
 - Direct rendering of legacy `.doc` binary files.
 - Password-protected or encrypted Word documents.
+- Password-protected or encrypted PowerPoint presentations.
+- PPTX animation, transitions, audio/video playback, macros, editing, charts,
+  SmartArt, SVG/GIF/WebP media, and pixel-perfect PowerPoint rendering.
 - Perfect Microsoft Word layout fidelity for complex documents.
 - Remote vault adapters that do not expose local file paths for external opening.
 

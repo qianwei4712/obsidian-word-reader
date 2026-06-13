@@ -44,3 +44,11 @@ void test("ReadingStateStore serializes and normalizes persisted input", () => {
     collapsedOutlineIds: [],
   });
 });
+
+void test("ReadingStateStore preserves a normalized presentation page", () => {
+  const normalized = normalizeReaderViewState({
+    ...state,
+    page: 4.8,
+  });
+  assert.equal(normalized.page, 4);
+});

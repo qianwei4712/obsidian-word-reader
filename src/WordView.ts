@@ -10,6 +10,14 @@ import {
 } from "obsidian";
 
 import type WordReaderPlugin from "./main";
+import {
+  getElectronModule,
+  getFileSystemPromises,
+  type ElectronClipboard,
+  type ElectronDialog,
+  type ElectronNativeImage,
+  type ElectronNativeImageModule,
+} from "./desktopRuntime";
 import { createNoteFromDocx } from "./commands/createNoteFromDocx";
 import { openExternalDocx } from "./commands/openExternal";
 import { renderDocx } from "./renderer/docxRenderer";
@@ -2119,33 +2127,6 @@ class ImagePreviewModal extends Modal {
   }
 }
 
-interface ElectronNativeImage {
-  isEmpty?(): boolean;
-}
-
-interface ElectronNativeImageModule {
-  createFromBuffer(buffer: Uint8Array): ElectronNativeImage;
-  createFromDataURL(dataUrl: string): ElectronNativeImage;
-}
-
-interface ElectronClipboard {
-  writeImage(image: ElectronNativeImage): void;
-}
-
-interface ElectronDialog {
-  showSaveDialog(options: {
-    title: string;
-    defaultPath: string;
-    filters: Array<{
-      name: string;
-      extensions: string[];
-    }>;
-  }): Promise<{
-    canceled: boolean;
-    filePath?: string;
-  }>;
-}
-
 interface ImageData {
   bytes: Uint8Array;
   extension: string;
@@ -2279,9 +2260,7 @@ async function getElectronClipboard(): Promise<ElectronClipboard | null> {
   if (!Platform.isDesktopApp) {
     return null;
   }
-
-  const electron = await import("electron");
-  return electron.clipboard;
+  return getElectronModule().clipboard;
 }
 
 async function getElectronDialog(): Promise<ElectronDialog | null> {
@@ -2289,8 +2268,7 @@ async function getElectronDialog(): Promise<ElectronDialog | null> {
     return null;
   }
 
-  const electron = await import("electron");
-  return electron.dialog;
+  return getElectronModule().dialog;
 }
 
 async function getElectronNativeImage(): Promise<ElectronNativeImageModule> {
@@ -2298,8 +2276,7 @@ async function getElectronNativeImage(): Promise<ElectronNativeImageModule> {
     throw new Error("Native image support is only available on desktop");
   }
 
-  const electron = await import("electron");
-  return electron.nativeImage;
+  return getElectronModule().nativeImage;
 }
 
 async function writeImageFile(
@@ -2310,6 +2287,5 @@ async function writeImageFile(
     throw new Error("Saving images outside the vault is only available on desktop");
   }
 
-  const { writeFile } = await import("node:fs/promises");
-  await writeFile(path, data);
+  await getFileSystemPromises().writeFile(path, data);
 }
