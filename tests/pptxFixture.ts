@@ -195,6 +195,46 @@ export async function createMinimalPptx(): Promise<ArrayBuffer> {
   });
 }
 
+export async function createCompatibilityPptx(): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(await createMinimalPptx());
+  const slide = await zip.file("ppt/slides/slide1.xml")?.async("string");
+  if (!slide) {
+    throw new Error("Minimal PPTX slide is missing.");
+  }
+  const compatibilityShapes = `
+    <p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="10" name="Grouped shapes"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="6858000" y="3657600"/><a:ext cx="2743200" cy="1371600"/><a:chOff x="0" y="0"/><a:chExt cx="2743200" cy="1371600"/></a:xfrm></p:grpSpPr>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="11" name="Grouped ellipse"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="ellipse"/><a:solidFill><a:schemeClr val="accent1"><a:tint val="30000"/></a:schemeClr></a:solidFill></p:spPr>
+        <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:r><a:rPr sz="1400"><a:latin typeface="Aptos"/></a:rPr><a:t>Group</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="12" name="Grouped arrow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="1097280" y="228600"/><a:ext cx="1371600" cy="685800"/></a:xfrm><a:prstGeom prst="rightArrow"/><a:solidFill><a:schemeClr val="accent2"/></a:solidFill></p:spPr>
+      </p:sp>
+    </p:grpSp>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="13" name="Chart"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+      <p:xfrm><a:off x="9601200" y="3657600"/><a:ext cx="1097280" cy="914400"/></p:xfrm>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" rel:id="rId4"/></a:graphicData></a:graphic>
+    </p:graphicFrame>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="14" name="SmartArt"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+      <p:xfrm><a:off x="9601200" y="4800600"/><a:ext cx="1097280" cy="914400"/></p:xfrm>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram"><dgm:relIds xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" rel:dm="rId5"/></a:graphicData></a:graphic>
+    </p:graphicFrame>`;
+  zip.file(
+    "ppt/slides/slide1.xml",
+    slide.replace("</p:spTree>", `${compatibilityShapes}\n  </p:spTree>`),
+  );
+  return zip.generateAsync({
+    type: "arraybuffer",
+    compression: "DEFLATE",
+  });
+}
+
 function relationships(
   entries: Array<[id: string, type: string, target: string]>,
 ): string {

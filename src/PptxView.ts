@@ -9,6 +9,10 @@ import {
 import type WordReaderPlugin from "./main";
 import { createNoteFromPptx } from "./commands/createNoteFromPptx";
 import { openExternalFile } from "./commands/openExternal";
+import {
+  createPptxDiagnosticReport,
+  formatPptxDiagnosticReport,
+} from "./pptx/pptxDiagnostics";
 import { PptxPackage } from "./pptx/pptxPackage";
 import { classifyPptxError } from "./pptx/pptxErrors";
 import {
@@ -20,7 +24,15 @@ import {
   searchPptxSlides,
   type PptxSlideMetadata,
 } from "./pptx/pptxMetadata";
-import { renderPptxSlide } from "./pptx/pptxRenderer";
+import {
+  PptxRenderCancelledError,
+  renderPptxSlide,
+  type PptxRenderDiagnostics,
+} from "./pptx/pptxRenderer";
+import {
+  PptxThumbnailWindow,
+  type PptxThumbnailWindowChange,
+} from "./pptx/pptxThumbnailWindow";
 import { ReaderLifecycle } from "./reader/lifecycle";
 import type { ReaderViewState } from "./reader/readingState";
 import {
@@ -35,6 +47,8 @@ import { normalizeZoom, preserveZoomAnchor } from "./reader/zoom";
 
 export const VIEW_TYPE_PPTX_READER = "pptx-reader-view";
 
+declare const __DEV__: boolean;
+
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.05;
@@ -43,6 +57,18 @@ const THUMBNAIL_WIDTH = 140;
 
 interface RenderOptions {
   restoreScroll?: boolean;
+}
+
+interface PptxNavigationEntry {
+  element: HTMLElement;
+  snippetEl: HTMLElement;
+  matchEl: HTMLElement;
+  thumbnailEl: HTMLElement;
+  resources: Set<string>;
+  renderVersion: number;
+  rendering: boolean;
+  rendered: boolean;
+  mounted: boolean;
 }
 
 export class PptxView extends FileView {
@@ -70,17 +96,11 @@ export class PptxView extends FileView {
   private navigationButtonEl: HTMLButtonElement | null = null;
   private notesButtonEl: HTMLButtonElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private thumbnailObserver: IntersectionObserver | null = null;
   private presentation: PptxPackage | null = null;
   private slideMetadata: PptxSlideMetadata[] = [];
-  private readonly navigationEntries = new Map<
-    number,
-    {
-      element: HTMLElement;
-      snippetEl: HTMLElement;
-      matchEl: HTMLElement;
-      thumbnailEl: HTMLElement;
-    }
-  >();
+  private readonly navigationEntries = new Map<number, PptxNavigationEntry>();
+  private readonly thumbnailWindow = new PptxThumbnailWindow(0);
   private currentSlideIndex = 0;
   private activeFilePath: string | null = null;
   private pendingScrollPosition: { left: number; top: number } | null = null;
@@ -91,10 +111,10 @@ export class PptxView extends FileView {
   private searchQuery = "";
   private renderedWidth = 0;
   private renderedHeight = 0;
+  private currentRenderDiagnostics: PptxRenderDiagnostics | null = null;
   private readonly loadLifecycle = new ReaderLifecycle();
   private readonly slideLifecycle = new ReaderLifecycle();
   private readonly thumbnailLifecycle = new ReaderLifecycle();
-  private readonly thumbnailResources = new Set<string>();
   private readonly slideResources = new RetainedResourceRegistry((resource) => {
     URL.revokeObjectURL(resource);
   });
@@ -227,6 +247,40 @@ export class PptxView extends FileView {
     }
   }
 
+  async copyRenderDiagnostics(): Promise<void> {
+    const file = this.file;
+    const presentation = this.presentation;
+    const render = this.currentRenderDiagnostics;
+    if (!file || !presentation || !render) {
+      new Notice(this.text.notices.noRenderDiagnostics);
+      return;
+    }
+    try {
+      const entries = [...this.navigationEntries.values()];
+      const report = createPptxDiagnosticReport(
+        file,
+        presentation,
+        this.currentSlideIndex,
+        render,
+        {
+          mounted: entries.filter((entry) => entry.mounted).length,
+          rendered: entries.filter((entry) => entry.rendered).length,
+          rendering: entries.filter((entry) => entry.rendering).length,
+          resourceCount: entries.reduce(
+            (count, entry) => count + entry.resources.size,
+            0,
+          ),
+        },
+      );
+      await navigator.clipboard.writeText(
+        formatPptxDiagnosticReport(report),
+      );
+      new Notice(this.text.notices.copiedRenderDiagnostics);
+    } catch (error) {
+      new Notice(this.text.notices.copyFailed(getErrorMessage(error)));
+    }
+  }
+
   async createSummaryNote(): Promise<void> {
     if (!this.file || this.slideMetadata.length === 0) {
       return;
@@ -276,13 +330,15 @@ export class PptxView extends FileView {
     this.saveReadingState();
     this.slideLifecycle.cancel();
     this.thumbnailLifecycle.cancel();
+    this.disconnectThumbnailObserver();
     this.releaseThumbnailResources();
     this.buildLayout();
     if (file && this.presentation) {
+      this.thumbnailLifecycle.begin();
       this.buildNavigationList();
       this.updateNotes();
       void this.renderCurrentSlide({ restoreScroll: true });
-      void this.renderThumbnails(this.presentation);
+      this.startThumbnailRendering(this.presentation);
     }
   }
 
@@ -384,6 +440,14 @@ export class PptxView extends FileView {
     this.createIconButton(toolbarEl, "copy", text.toolbar.copyText, () => {
       void this.copyText();
     });
+    this.createIconButton(
+      toolbarEl,
+      "activity",
+      text.toolbar.copyRenderDiagnostics,
+      () => {
+        void this.copyRenderDiagnostics();
+      },
+    );
     this.createIconButton(
       toolbarEl,
       "notebook-pen",
@@ -578,11 +642,12 @@ export class PptxView extends FileView {
         0,
         presentation.slideCount - 1,
       );
+      this.thumbnailLifecycle.begin();
       this.buildNavigationList();
       this.updateNotes();
       this.updateNavigationControls();
       await this.renderCurrentSlide({ restoreScroll: true });
-      void this.renderThumbnails(presentation);
+      this.startThumbnailRendering(presentation);
     } catch (error) {
       if (!this.loadLifecycle.isCurrent(token)) {
         return;
@@ -609,6 +674,7 @@ export class PptxView extends FileView {
     this.updateNavigationControls();
     this.updateActiveNavigationEntry();
     this.updateNotes();
+    this.refreshThumbnailWindow();
     this.saveReadingState();
     await this.renderCurrentSlide({ restoreScroll: true });
   }
@@ -645,6 +711,11 @@ export class PptxView extends FileView {
         presentation,
         slideContext,
         this.canvasEl.ownerDocument,
+        {
+          isCancelled: () =>
+            !this.slideLifecycle.isCurrent(token) ||
+            this.presentation !== presentation,
+        },
       );
       resources = rendered.resources;
       if (
@@ -660,7 +731,13 @@ export class PptxView extends FileView {
       this.stageEl = rendered.element;
       this.renderedWidth = rendered.width;
       this.renderedHeight = rendered.height;
+      this.currentRenderDiagnostics = rendered.diagnostics;
       this.canvasEl.appendChild(rendered.element);
+      logPptxRenderPerformance(
+        file.name,
+        index,
+        rendered.diagnostics,
+      );
       this.applyScale();
       if (options.restoreScroll) {
         this.restoreScrollPosition();
@@ -673,6 +750,9 @@ export class PptxView extends FileView {
         ),
       );
     } catch (error) {
+      if (error instanceof PptxRenderCancelledError) {
+        return;
+      }
       if (
         this.slideLifecycle.isCurrent(token) &&
         this.presentation === presentation
@@ -689,8 +769,12 @@ export class PptxView extends FileView {
   }
 
   private buildNavigationList(): void {
+    this.disconnectThumbnailObserver();
+    this.releaseThumbnailResources();
     this.slideListEl?.empty();
     this.navigationEntries.clear();
+    this.thumbnailWindow.reset();
+    this.thumbnailWindow.setSlideCount(this.slideMetadata.length);
     if (!this.slideListEl) {
       return;
     }
@@ -740,10 +824,16 @@ export class PptxView extends FileView {
         snippetEl,
         matchEl,
         thumbnailEl,
+        resources: new Set<string>(),
+        renderVersion: 0,
+        rendering: false,
+        rendered: false,
+        mounted: false,
       });
     }
     this.applyNavigationSearch();
     this.updateActiveNavigationEntry();
+    this.setupThumbnailObserver();
   }
 
   private applyNavigationSearch(): void {
@@ -761,6 +851,9 @@ export class PptxView extends FileView {
       }
       const result = resultBySlide.get(metadata.index);
       entry.element.toggleClass("is-hidden", !result);
+      if (!result) {
+        this.thumbnailWindow.setVisible(metadata.index, false);
+      }
       entry.snippetEl.setText(result?.snippet ?? "");
       totalMatches += result?.matchCount ?? 0;
       entry.matchEl.setText(
@@ -781,6 +874,7 @@ export class PptxView extends FileView {
         ? this.text.navigation.searchCount(totalMatches, results.length)
         : this.text.navigation.slideCount(this.slideMetadata.length),
     );
+    this.refreshThumbnailWindow();
   }
 
   private updateActiveNavigationEntry(): void {
@@ -798,65 +892,169 @@ export class PptxView extends FileView {
     }
   }
 
-  private async renderThumbnails(presentation: PptxPackage): Promise<void> {
-    const token = this.thumbnailLifecycle.begin();
-    this.releaseThumbnailResources();
+  private startThumbnailRendering(presentation: PptxPackage): void {
+    this.thumbnailWindow.setSlideCount(presentation.slideCount);
+    this.refreshThumbnailWindow();
+  }
 
-    for (let index = 0; index < presentation.slideCount; index += 1) {
-      if (
-        !this.thumbnailLifecycle.isCurrent(token) ||
-        this.presentation !== presentation
-      ) {
-        return;
-      }
+  private setupThumbnailObserver(): void {
+    const Observer =
+      this.slideListEl?.ownerDocument.defaultView?.IntersectionObserver;
+    if (!Observer || !this.slideListEl) {
+      return;
+    }
+    this.thumbnailObserver = new Observer(
+      (observations) => {
+        for (const observation of observations) {
+          const index = Number(
+            observation.target.getAttribute("data-slide-index"),
+          );
+          this.thumbnailWindow.setVisible(
+            index,
+            observation.isIntersecting,
+          );
+        }
+        this.refreshThumbnailWindow();
+      },
+      {
+        root: this.slideListEl,
+        rootMargin: "240px 0px",
+      },
+    );
+    for (const [index, entry] of this.navigationEntries) {
+      entry.element.setAttribute("data-slide-index", String(index));
+      this.thumbnailObserver.observe(entry.element);
+    }
+  }
+
+  private disconnectThumbnailObserver(): void {
+    this.thumbnailObserver?.disconnect();
+    this.thumbnailObserver = null;
+  }
+
+  private refreshThumbnailWindow(): void {
+    const presentation = this.presentation;
+    if (!presentation) {
+      return;
+    }
+    this.applyThumbnailWindowChange(
+      this.thumbnailWindow.update(this.currentSlideIndex),
+      presentation,
+      this.thumbnailLifecycle.currentToken,
+    );
+  }
+
+  private applyThumbnailWindowChange(
+    change: PptxThumbnailWindowChange,
+    presentation: PptxPackage,
+    lifecycleToken: number,
+  ): void {
+    for (const index of change.unmount) {
+      this.unmountThumbnail(index);
+    }
+    for (const index of change.mount) {
       const entry = this.navigationEntries.get(index);
       if (!entry) {
         continue;
       }
-
-      let resources = new Set<string>();
-      let adopted = false;
-      try {
-        const context = await presentation.getSlideContext(index);
-        const rendered = await renderPptxSlide(
-          presentation,
-          context,
-          entry.thumbnailEl.ownerDocument,
-        );
-        resources = rendered.resources;
-        if (
-          !this.thumbnailLifecycle.isCurrent(token) ||
-          this.presentation !== presentation ||
-          !entry.thumbnailEl.isConnected
-        ) {
-          continue;
-        }
-        for (const resource of resources) {
-          this.thumbnailResources.add(resource);
-        }
-        adopted = true;
-        const scale = THUMBNAIL_WIDTH / rendered.width;
-        rendered.element.addClass("pptx-reader-thumbnail-stage");
-        rendered.element.setAttribute("aria-hidden", "true");
-        rendered.element.style.transform = `scale(${scale})`;
-        entry.thumbnailEl.empty();
-        entry.thumbnailEl.style.height = `${rendered.height * scale}px`;
-        entry.thumbnailEl.appendChild(rendered.element);
-      } catch {
-        entry.thumbnailEl.empty();
-        entry.thumbnailEl.createDiv({
-          cls: "pptx-reader-thumbnail-placeholder",
-          text: String(index + 1),
-        });
-      } finally {
-        if (!adopted) {
-          releaseResources(resources, (resource) => {
-            URL.revokeObjectURL(resource);
-          });
-        }
-      }
-      await yieldToBrowser();
+      entry.mounted = true;
+      void this.renderThumbnail(
+        index,
+        entry,
+        presentation,
+        lifecycleToken,
+      );
     }
+  }
+
+  private async renderThumbnail(
+    index: number,
+    entry: PptxNavigationEntry,
+    presentation: PptxPackage,
+    lifecycleToken: number,
+  ): Promise<void> {
+    if (entry.rendered || entry.rendering || !entry.mounted) {
+      return;
+    }
+    entry.rendering = true;
+    entry.renderVersion += 1;
+    const renderVersion = entry.renderVersion;
+    let resources = new Set<string>();
+    let adopted = false;
+    const isCancelled = (): boolean =>
+      !this.thumbnailLifecycle.isCurrent(lifecycleToken) ||
+      this.presentation !== presentation ||
+      !entry.mounted ||
+      entry.renderVersion !== renderVersion ||
+      !entry.thumbnailEl.isConnected;
+
+    try {
+      const context = await presentation.getSlideContext(index);
+      if (isCancelled()) {
+        return;
+      }
+      const rendered = await renderPptxSlide(
+        presentation,
+        context,
+        entry.thumbnailEl.ownerDocument,
+        { isCancelled },
+      );
+      resources = rendered.resources;
+      if (isCancelled()) {
+        return;
+      }
+      entry.resources = resources;
+      adopted = true;
+      entry.rendered = true;
+      const scale = THUMBNAIL_WIDTH / rendered.width;
+      rendered.element.addClass("pptx-reader-thumbnail-stage");
+      rendered.element.setAttribute("aria-hidden", "true");
+      rendered.element.style.transform = `scale(${scale})`;
+      entry.thumbnailEl.empty();
+      entry.thumbnailEl.style.height = `${rendered.height * scale}px`;
+      entry.thumbnailEl.appendChild(rendered.element);
+    } catch (error) {
+      if (!(error instanceof PptxRenderCancelledError) && entry.mounted) {
+        this.showThumbnailPlaceholder(entry, index);
+      }
+    } finally {
+      if (entry.renderVersion === renderVersion) {
+        entry.rendering = false;
+      }
+      if (!adopted) {
+        releaseResources(resources, (resource) => {
+          URL.revokeObjectURL(resource);
+        });
+      }
+    }
+  }
+
+  private unmountThumbnail(index: number): void {
+    const entry = this.navigationEntries.get(index);
+    if (!entry) {
+      return;
+    }
+    entry.mounted = false;
+    entry.renderVersion += 1;
+    entry.rendering = false;
+    entry.rendered = false;
+    releaseResources(entry.resources, (resource) => {
+      URL.revokeObjectURL(resource);
+    });
+    entry.resources.clear();
+    this.showThumbnailPlaceholder(entry, index);
+  }
+
+  private showThumbnailPlaceholder(
+    entry: PptxNavigationEntry,
+    index: number,
+  ): void {
+    entry.thumbnailEl.empty();
+    entry.thumbnailEl.style.removeProperty("height");
+    entry.thumbnailEl.createDiv({
+      cls: "pptx-reader-thumbnail-placeholder",
+      text: String(index + 1),
+    });
   }
 
   private updateNotes(): void {
@@ -1193,16 +1391,19 @@ export class PptxView extends FileView {
     this.stageEl = null;
     this.renderedWidth = 0;
     this.renderedHeight = 0;
+    this.currentRenderDiagnostics = null;
     this.canvasEl?.empty();
   }
 
   private releasePresentation(): void {
+    this.disconnectThumbnailObserver();
+    this.thumbnailLifecycle.cancel();
+    this.releaseThumbnailResources();
     this.presentation = null;
     this.slideMetadata = [];
     this.navigationEntries.clear();
     this.slideListEl?.empty();
-    this.thumbnailLifecycle.cancel();
-    this.releaseThumbnailResources();
+    this.thumbnailWindow.reset();
     this.slideResources.releaseActive();
     this.applyNavigationSearch();
     this.updateNotes();
@@ -1210,10 +1411,9 @@ export class PptxView extends FileView {
   }
 
   private releaseThumbnailResources(): void {
-    releaseResources(this.thumbnailResources, (resource) => {
-      URL.revokeObjectURL(resource);
-    });
-    this.thumbnailResources.clear();
+    for (const index of this.navigationEntries.keys()) {
+      this.unmountThumbnail(index);
+    }
   }
 }
 
@@ -1225,10 +1425,18 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function yieldToBrowser(): Promise<void> {
-  return new Promise((resolve) => {
-    window.requestAnimationFrame(() => {
-      resolve();
-    });
+function logPptxRenderPerformance(
+  fileName: string,
+  slideIndex: number,
+  diagnostics: PptxRenderDiagnostics,
+): void {
+  if (typeof __DEV__ === "undefined" || !__DEV__) {
+    return;
+  }
+  console.debug("[Office Reader] PPTX render performance", {
+    fileName,
+    slide: slideIndex + 1,
+    ...diagnostics,
+    durationMs: Math.round(diagnostics.durationMs),
   });
 }

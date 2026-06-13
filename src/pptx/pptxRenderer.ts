@@ -16,6 +16,7 @@ import {
   numberAttribute,
   textContent,
 } from "./xml";
+import { releaseResources } from "../reader/resources";
 
 const NATURAL_SLIDE_WIDTH = 960;
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -27,6 +28,33 @@ export interface RenderedPptxSlide {
   resources: Set<string>;
   width: number;
   height: number;
+  diagnostics: PptxRenderDiagnostics;
+}
+
+export interface PptxRenderDiagnostics {
+  durationMs: number;
+  layerCount: number;
+  shapeCount: number;
+  textShapeCount: number;
+  imageCount: number;
+  tableCount: number;
+  chartCount: number;
+  smartArtCount: number;
+  unsupportedObjectCount: number;
+  resourceCount: number;
+  fontFamilies: string[];
+}
+
+export interface PptxRenderOptions {
+  isCancelled?: () => boolean;
+  now?: () => number;
+}
+
+export class PptxRenderCancelledError extends Error {
+  constructor() {
+    super("PowerPoint rendering was cancelled.");
+    this.name = "PptxRenderCancelledError";
+  }
 }
 
 interface ThemeColors {
@@ -66,6 +94,20 @@ interface RenderContext {
   pixelWidth: number;
   pixelHeight: number;
   placeholderFallbacks: Map<string, Element>;
+  diagnostics: MutablePptxRenderDiagnostics;
+  isCancelled: () => boolean;
+}
+
+interface MutablePptxRenderDiagnostics {
+  layerCount: number;
+  shapeCount: number;
+  textShapeCount: number;
+  imageCount: number;
+  tableCount: number;
+  chartCount: number;
+  smartArtCount: number;
+  unsupportedObjectCount: number;
+  fontFamilies: Set<string>;
 }
 
 const DEFAULT_THEME_COLORS: ThemeColors = {
@@ -91,7 +133,10 @@ export async function renderPptxSlide(
   pptx: PptxPackage,
   slideContext: PptxSlideContext,
   ownerDocument: Document,
+  options: PptxRenderOptions = {},
 ): Promise<RenderedPptxSlide> {
+  const now = options.now ?? (() => performance.now());
+  const startedAt = now();
   const pixelWidth = NATURAL_SLIDE_WIDTH;
   const pixelHeight =
     NATURAL_SLIDE_WIDTH * (pptx.slideHeight / pptx.slideWidth);
@@ -100,6 +145,17 @@ export async function renderPptxSlide(
   stageEl.style.width = `${pixelWidth}px`;
   stageEl.style.height = `${pixelHeight}px`;
   const resources = new Set<string>();
+  const diagnostics: MutablePptxRenderDiagnostics = {
+    layerCount: 0,
+    shapeCount: 0,
+    textShapeCount: 0,
+    imageCount: 0,
+    tableCount: 0,
+    chartCount: 0,
+    smartArtCount: 0,
+    unsupportedObjectCount: 0,
+    fontFamilies: new Set<string>(),
+  };
   const theme = parseThemeColors(slideContext.theme);
   const placeholderFallbacks = buildPlaceholderFallbacks(slideContext);
   const context: RenderContext = {
@@ -112,60 +168,84 @@ export async function renderPptxSlide(
     pixelWidth,
     pixelHeight,
     placeholderFallbacks,
+    diagnostics,
+    isCancelled: options.isCancelled ?? (() => false),
   };
 
-  stageEl.style.background = findBackgroundColor(slideContext, theme);
-  const rootSpace: CoordinateSpace = {
-    offsetX: 0,
-    offsetY: 0,
-    scaleX: 1,
-    scaleY: 1,
-  };
+  try {
+    ensureRenderActive(context);
+    stageEl.style.background = findBackgroundColor(slideContext, theme);
+    const rootSpace: CoordinateSpace = {
+      offsetX: 0,
+      offsetY: 0,
+      scaleX: 1,
+      scaleY: 1,
+    };
 
-  if (slideContext.master && slideContext.masterPath) {
+    if (slideContext.master && slideContext.masterPath) {
+      await renderLayer(
+        stageEl,
+        {
+          xmlDocument: slideContext.master,
+          path: slideContext.masterPath,
+          relationships: slideContext.masterRelationships,
+        },
+        context,
+        rootSpace,
+        true,
+      );
+    }
+    if (slideContext.layout && slideContext.layoutPath) {
+      await renderLayer(
+        stageEl,
+        {
+          xmlDocument: slideContext.layout,
+          path: slideContext.layoutPath,
+          relationships: slideContext.layoutRelationships,
+        },
+        context,
+        rootSpace,
+        true,
+      );
+    }
     await renderLayer(
       stageEl,
       {
-        xmlDocument: slideContext.master,
-        path: slideContext.masterPath,
-        relationships: slideContext.masterRelationships,
+        xmlDocument: slideContext.slide,
+        path: slideContext.slidePath,
+        relationships: slideContext.slideRelationships,
       },
       context,
       rootSpace,
-      true,
+      false,
     );
-  }
-  if (slideContext.layout && slideContext.layoutPath) {
-    await renderLayer(
-      stageEl,
-      {
-        xmlDocument: slideContext.layout,
-        path: slideContext.layoutPath,
-        relationships: slideContext.layoutRelationships,
-      },
-      context,
-      rootSpace,
-      true,
-    );
-  }
-  await renderLayer(
-    stageEl,
-    {
-      xmlDocument: slideContext.slide,
-      path: slideContext.slidePath,
-      relationships: slideContext.slideRelationships,
-    },
-    context,
-    rootSpace,
-    false,
-  );
+    ensureRenderActive(context);
 
-  return {
-    element: stageEl,
-    resources,
-    width: pixelWidth,
-    height: pixelHeight,
-  };
+    return {
+      element: stageEl,
+      resources,
+      width: pixelWidth,
+      height: pixelHeight,
+      diagnostics: {
+        durationMs: Math.max(0, now() - startedAt),
+        layerCount: diagnostics.layerCount,
+        shapeCount: diagnostics.shapeCount,
+        textShapeCount: diagnostics.textShapeCount,
+        imageCount: diagnostics.imageCount,
+        tableCount: diagnostics.tableCount,
+        chartCount: diagnostics.chartCount,
+        smartArtCount: diagnostics.smartArtCount,
+        unsupportedObjectCount: diagnostics.unsupportedObjectCount,
+        resourceCount: resources.size,
+        fontFamilies: [...diagnostics.fontFamilies].sort(),
+      },
+    };
+  } catch (error) {
+    releaseResources(resources, (resource) => {
+      URL.revokeObjectURL(resource);
+    });
+    throw error;
+  }
 }
 
 async function renderLayer(
@@ -175,6 +255,7 @@ async function renderLayer(
   coordinateSpace: CoordinateSpace,
   skipPlaceholders: boolean,
 ): Promise<void> {
+  ensureRenderActive(context);
   const shapeTree = firstDescendantNamed(
     layer.xmlDocument.documentElement,
     "spTree",
@@ -182,7 +263,9 @@ async function renderLayer(
   if (!shapeTree) {
     return;
   }
+  context.diagnostics.layerCount += 1;
   for (const shape of childElements(shapeTree)) {
+    ensureRenderActive(context);
     if (
       !["sp", "pic", "graphicFrame", "cxnSp", "grpSp"].includes(
         localName(shape),
@@ -210,6 +293,8 @@ async function renderShape(
   context: RenderContext,
   coordinateSpace: CoordinateSpace,
 ): Promise<void> {
+  ensureRenderActive(context);
+  context.diagnostics.shapeCount += 1;
   if (localName(shape) === "grpSp") {
     const groupTransform = parseGroupTransform(shape, coordinateSpace);
     if (!groupTransform) {
@@ -243,6 +328,7 @@ async function renderShape(
 
   switch (localName(shape)) {
     case "pic":
+      context.diagnostics.imageCount += 1;
       await renderPicture(wrapperEl, shape, layer, context);
       break;
     case "graphicFrame":
@@ -312,6 +398,7 @@ function renderShapeText(
   if (!textBody || descendantsNamed(textBody, "t").length === 0) {
     return;
   }
+  context.diagnostics.textShapeCount += 1;
 
   const bodyProperties = firstChildNamed(textBody, "bodyPr");
   const textEl = context.ownerDocument.createElement("div");
@@ -364,12 +451,12 @@ function renderShapeText(
       applyRunStyle(
         spanEl,
         getDefaultRunProperties(textBody, paragraph, fallbackShape),
-        context.theme,
+        context,
       );
       applyRunStyle(
         spanEl,
         firstChildNamed(run, "rPr"),
-        context.theme,
+        context,
       );
       paragraphEl.appendChild(spanEl);
     }
@@ -387,6 +474,7 @@ async function renderPicture(
   layer: LayerContext,
   context: RenderContext,
 ): Promise<void> {
+  ensureRenderActive(context);
   const blip = firstDescendantNamed(shape, "blip");
   const relationshipId = namespacedAttribute(
     blip,
@@ -397,20 +485,21 @@ async function renderPicture(
     ? layer.relationships.get(relationshipId)
     : undefined;
   if (!relationship || relationship.external) {
-    renderUnsupportedPlaceholder(wrapperEl, context.ownerDocument, "Image");
+    renderUnsupportedPlaceholder(wrapperEl, context, "Image");
     return;
   }
   const imagePath = resolvePackagePath(layer.path, relationship.target);
   const bytes = await context.pptx.getBinary(imagePath);
+  ensureRenderActive(context);
   if (!bytes) {
-    renderUnsupportedPlaceholder(wrapperEl, context.ownerDocument, "Image");
+    renderUnsupportedPlaceholder(wrapperEl, context, "Image");
     return;
   }
   const mimeType = context.pptx.getImageMimeType(imagePath);
   if (!mimeType) {
     renderUnsupportedPlaceholder(
       wrapperEl,
-      context.ownerDocument,
+      context,
       "Unsupported image",
     );
     return;
@@ -437,13 +526,20 @@ function renderGraphicFrame(
 ): void {
   const table = firstDescendantNamed(shape, "tbl");
   if (!table) {
+    const objectType = getGraphicFrameObjectType(shape);
+    if (objectType === "Chart") {
+      context.diagnostics.chartCount += 1;
+    } else if (objectType === "SmartArt") {
+      context.diagnostics.smartArtCount += 1;
+    }
     renderUnsupportedPlaceholder(
       wrapperEl,
-      context.ownerDocument,
-      "Unsupported object",
+      context,
+      objectType,
     );
     return;
   }
+  context.diagnostics.tableCount += 1;
 
   const tableEl = context.ownerDocument.createElement("table");
   tableEl.className = "pptx-reader-table";
@@ -506,9 +602,9 @@ function renderCellText(
       applyRunStyle(
         spanEl,
         getDefaultRunProperties(textBody, paragraph, null),
-        context.theme,
+        context,
       );
-      applyRunStyle(spanEl, firstChildNamed(run, "rPr"), context.theme);
+      applyRunStyle(spanEl, firstChildNamed(run, "rPr"), context);
       paragraphEl.appendChild(spanEl);
     }
     cellEl.appendChild(paragraphEl);
@@ -517,10 +613,11 @@ function renderCellText(
 
 function renderUnsupportedPlaceholder(
   wrapperEl: HTMLElement,
-  ownerDocument: Document,
+  context: RenderContext,
   label: string,
 ): void {
-  const placeholderEl = ownerDocument.createElement("div");
+  context.diagnostics.unsupportedObjectCount += 1;
+  const placeholderEl = context.ownerDocument.createElement("div");
   placeholderEl.className = "pptx-reader-unsupported-object";
   placeholderEl.textContent = label;
   wrapperEl.appendChild(placeholderEl);
@@ -529,7 +626,7 @@ function renderUnsupportedPlaceholder(
 function applyRunStyle(
   spanEl: HTMLSpanElement,
   runProperties: Element | null,
-  theme: ThemeColors,
+  context: RenderContext,
 ): void {
   if (!runProperties) {
     return;
@@ -554,8 +651,9 @@ function applyRunStyle(
   const typeface = attribute(latin, "typeface");
   if (typeface && !typeface.startsWith("+")) {
     spanEl.style.fontFamily = typeface;
+    context.diagnostics.fontFamilies.add(typeface);
   }
-  const color = readFillColor(runProperties, theme);
+  const color = readFillColor(runProperties, context.theme);
   if (color && color !== "none") {
     spanEl.style.color = color;
   }
@@ -1105,4 +1203,22 @@ function createBlob(bytes: Uint8Array, type: string): Blob {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return new Blob([buffer], { type });
+}
+
+function getGraphicFrameObjectType(shape: Element): string {
+  if (firstDescendantNamed(shape, "chart")) {
+    return "Chart";
+  }
+  const graphicData = firstDescendantNamed(shape, "graphicData");
+  const uri = attribute(graphicData, "uri") ?? "";
+  if (uri.includes("/diagram")) {
+    return "SmartArt";
+  }
+  return "Unsupported object";
+}
+
+function ensureRenderActive(context: RenderContext): void {
+  if (context.isCancelled()) {
+    throw new PptxRenderCancelledError();
+  }
 }

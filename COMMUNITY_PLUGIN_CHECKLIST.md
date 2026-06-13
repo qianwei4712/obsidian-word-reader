@@ -44,8 +44,12 @@ Community directory and before publishing later releases.
   bundle contains no network request code.
 - [ ] Confirm PPTX search, text copy, speaker notes, and summary-note creation
   operate only on locally parsed presentation content.
-- [ ] Confirm presentation thumbnails release generated Blob URLs after
-  reload, file switch, and view close.
+- [ ] Confirm presentation thumbnails mount only for visible and nearby
+  entries, with a fixed upper bound on concurrent previews.
+- [ ] Confirm presentation Blob URLs are released after thumbnail unmount,
+  cancelled rendering, reload, file switch, and view close.
+- [ ] Confirm copied PPTX render diagnostics exclude document text, speaker
+  notes, internal XML, and absolute vault paths.
 - [ ] Confirm UI text uses sentence case and settings do not repeat the plugin
   name as a heading.
 - [ ] Confirm desktop-only Electron and Node.js access is guarded.
@@ -53,7 +57,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `2.1.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `2.2.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

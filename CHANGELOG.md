@@ -1,5 +1,48 @@
 # Changelog
 
+## 2.2.0 - 2026-06-14
+
+### English
+
+#### Added
+
+- Added viewport-driven, bounded thumbnail mounting so large presentations
+  render only visible and nearby slide previews.
+- Added a privacy-safe render diagnostics action and command with slide,
+  package, object, resource, font, and timing metrics.
+- Added generated compatibility fixtures and structural visual regression
+  coverage for tables, charts, SmartArt, themes, layouts, and masters.
+
+#### Changed
+
+- PPTX slide and thumbnail rendering now cooperatively cancels stale work and
+  releases generated image resources after cancellation, unmount, reload,
+  file switch, or view close.
+- Chart and SmartArt frames now render explicit local placeholders and appear
+  as separate diagnostic counters in addition to the overall placeholder
+  count.
+- Development builds now log PPTX render performance and compatibility
+  counters to the developer console.
+
+### 中文
+
+#### 新增
+
+- 新增由可视区域驱动且数量有界的缩略图挂载机制，大型演示文稿只渲染当前可见
+  及邻近的幻灯片预览。
+- 新增注重隐私的渲染诊断操作和命令，包含幻灯片、文档包、对象、资源、字体与
+  耗时指标。
+- 新增运行时生成的兼容性样本和结构化视觉回归测试，覆盖表格、图表、SmartArt、
+  主题、版式和母版。
+
+#### 变更
+
+- PPTX 幻灯片和缩略图渲染现在会协作取消过期任务，并在取消、卸载、重新加载、
+  切换文件或关闭视图后释放生成的图片资源。
+- 图表和 SmartArt 框架现在显示明确的本地占位，并在总占位数量之外提供独立的
+  诊断计数。
+- 开发构建会在开发者控制台记录 PPTX 渲染性能和兼容性计数。
+
 ## 2.1.0 - 2026-06-13
 
 ### English

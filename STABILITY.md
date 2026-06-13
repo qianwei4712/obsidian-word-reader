@@ -41,6 +41,23 @@ The 2.1.0 line adds presentation reading and knowledge-capture workflows:
 - Support arrow keys, page keys, `Space`/`Shift` + `Space`, `Home`, `End`, and
   `Ctrl`/`Cmd` + `F` presentation shortcuts.
 
+## 2.2.0 PPTX Quality and Performance Scope
+
+The 2.2.0 line bounds presentation rendering work and adds compatibility
+diagnostics:
+
+- Mount thumbnails only for visible and nearby navigation entries, with a
+  fixed upper bound on concurrently rendered previews.
+- Cooperatively cancel stale slide and thumbnail work before it can commit.
+- Release generated image resources after cancellation, thumbnail unmount,
+  reload, file switch, and view close.
+- Copy privacy-safe render diagnostics with package, slide, object, resource,
+  font, and timing metrics, excluding content and absolute vault paths.
+- Maintain generated compatibility fixtures and a structural visual baseline
+  for tables, charts, SmartArt, themes, layouts, and masters.
+- Keep charts and SmartArt outside native-fidelity support while identifying
+  them with explicit placeholders and separate diagnostics.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -71,6 +88,12 @@ Run this checklist before publishing a stable release:
     fullscreen reading, keyboard navigation, and external open.
   - Confirm the sidebar shows rendered thumbnails, extracted titles, and the
     active slide, and that clicking an entry navigates to the correct slide.
+  - Scroll a presentation with at least 50 slides and confirm only visible and
+    nearby thumbnails are mounted; off-screen thumbnails return to placeholders.
+  - Rapidly scroll, search, and navigate while thumbnails are rendering and
+    confirm stale previews do not replace current entries.
+  - Confirm off-screen thumbnail images release their Blob URLs and render
+    again when their entries return to the visible range.
   - Search for text in slide titles, body text, tables, and speaker notes;
     confirm matching snippets and note-only matches are identified correctly.
   - Copy selected rendered text, then clear the selection and copy all
@@ -89,6 +112,14 @@ Run this checklist before publishing a stable release:
     presentations and confirm each shows understandable recovery guidance.
   - Confirm presentations with external image relationships do not make
     network requests.
+  - Open fixtures containing tables, chart frames, SmartArt frames, theme
+    colors, layouts, and masters; confirm supported content renders and chart
+    or SmartArt frames show explicit placeholders.
+  - Copy PPTX render diagnostics from the toolbar and command palette. Confirm
+    the JSON contains package, slide, object, resource, font, and timing
+    metrics but no slide text, speaker notes, XML, or absolute vault paths.
+  - In a development build, confirm the console logs PPTX render duration,
+    object counts, generated resources, and explicit font families.
 - Error diagnostics:
   - Open encrypted, invalid, and damaged test documents where available.
   - Confirm error pages show an appropriate category and recovery guidance.
@@ -152,6 +183,8 @@ Supported:
   tables, themes, layouts, and masters.
 - `.pptx` thumbnail/title navigation, local full-presentation search, current
   slide text copy, speaker-note viewing, and numbered presentation summary notes.
+- `.pptx` on-demand thumbnail mounting, cooperative render cancellation,
+  generated-resource cleanup, and privacy-safe render diagnostics.
 - Plain text and Markdown extraction through `mammoth`.
 - `.doc` detection with external-open and conversion guidance.
 
@@ -215,6 +248,19 @@ Not supported:
 - 支持方向键、翻页键、`Space`/`Shift` + `Space`、`Home`、`End` 和
   `Ctrl`/`Cmd` + `F` 快捷键。
 
+### 2.2.0 PPTX 质量与性能范围
+
+2.2.0 稳定线限制演示文稿渲染开销，并增加兼容性诊断：
+
+- 只为可见及邻近的导航条目挂载缩略图，并限制同时渲染的预览数量。
+- 过期的幻灯片和缩略图任务会在提交前被协作取消。
+- 取消任务、卸载缩略图、重新加载、切换文件或关闭视图后释放生成的图片资源。
+- 可复制包含文档包、幻灯片、对象、资源、字体和耗时指标的隐私安全诊断，不包含
+  文档内容和 vault 绝对路径。
+- 维护运行时生成的兼容性样本和结构化视觉基线，覆盖表格、图表、SmartArt、
+  主题、版式和母版。
+- 图表和 SmartArt 仍不承诺原生外观还原，但会显示明确占位并在诊断中单独统计。
+
 ### 支持边界
 
 支持：
@@ -224,6 +270,7 @@ Not supported:
 - 基于 `docx-preview` 的 `.docx` 只读预览。
 - `.pptx` 文本、内嵌图片、常见形状、表格、主题、版式和母版的本地只读预览。
 - `.pptx` 缩略图/标题导航、本地全文搜索、当前页文本复制、演讲者备注查看和带页码摘要笔记。
+- `.pptx` 按需缩略图挂载、协作取消渲染、生成资源清理和隐私安全渲染诊断。
 - 基于 `mammoth` 的纯文本和 Markdown 提取。
 - `.doc` 检测、外部打开和转换说明。
 

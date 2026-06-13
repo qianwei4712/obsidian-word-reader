@@ -18,6 +18,8 @@ keeping the original files unchanged.
   zoom, fit to window, fullscreen reading, and external open.
 - Search presentation titles, slide text, tables, and speaker notes; copy the
   current slide text and view speaker notes without leaving Obsidian.
+- Copy privacy-safe PPTX render diagnostics for compatibility reports without
+  including document content, speaker notes, or absolute vault paths.
 - Render headings, paragraphs, lists, tables, images, and page breaks where supported by `docx-preview`.
 - Keep the original Word file unchanged.
 - Follow Obsidian light and dark themes for the Word preview surface. Complex Word documents with explicit colors may still affect the final rendered appearance.
@@ -79,6 +81,8 @@ keeping the original files unchanged.
 - Show or hide the current slide's speaker notes.
 - Create a same-name presentation summary note with the current slide and
   numbered references for every slide.
+- Copy render diagnostics from the toolbar or command palette when reporting a
+  presentation compatibility or performance issue.
 - The current slide, zoom, fit mode, scroll position, navigation visibility,
   and speaker-note visibility are restored per file.
 
@@ -145,6 +149,10 @@ Available settings:
   compression ratios.
 - Error pages provide a collapsed diagnostic section and a copy action for issue reports.
 - Copied diagnostics use JSON and include only the error category, file name, size, modification time, and a privacy-safe summary with an error fingerprint. Raw renderer errors, document content, internal XML, and absolute vault paths are excluded.
+- Successful PPTX previews also expose copyable JSON render diagnostics with
+  package sizes, slide dimensions, object counts, generated-resource counts,
+  explicit font families, and render duration. Document text, speaker notes,
+  internal XML, and absolute vault paths are excluded.
 - Large file warnings include the file size and use the configured threshold from settings.
 
 ## Performance and Stability
@@ -157,7 +165,11 @@ Available settings:
   file switching and page navigation cannot commit stale slides.
 - Presentation metadata and speaker notes are indexed locally for navigation,
   search, text copy, and summary-note creation.
-- Generated slide-thumbnail resources are released when a presentation is
+- Presentation thumbnails are mounted only for visible and nearby navigation
+  entries, with a fixed upper bound on concurrently mounted previews.
+- Off-screen thumbnails are unmounted and their generated image resources are
+  released; stale slide and thumbnail renders are cancelled cooperatively.
+- Generated presentation resources are also released when a presentation is
   reloaded, switched, or closed.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
 - Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
@@ -167,7 +179,9 @@ Available settings:
 - Search highlighting is debounced and processed in cancellable chunks to reduce work on large documents.
 - Reading state uses a bounded 50-file LRU store so persisted plugin data does
   not grow without limit.
-- Development builds log file reading, rendering, DOM commit, outline, and total preview timings to the developer console.
+- Development builds log Word file reading, rendering, DOM commit, outline,
+  and total preview timings, plus PPTX render duration, object counts,
+  resources, and fonts, to the developer console.
 - Closing or unloading a file releases document buffers, generated Blob URLs, search timers, and search result references.
 
 ## Stability and Support
@@ -290,11 +304,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag 2.1.0
-git push origin 2.1.0
+git tag 2.2.0
+git push origin 2.2.0
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-2.1.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-2.2.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 
@@ -356,8 +370,10 @@ CI and release workflows use Node.js 20.19.0.
 - PPTX animation, transitions, audio/video playback, macros, editing, charts,
   SmartArt, SVG/GIF/WebP media, and pixel-perfect PowerPoint fidelity are not
   supported.
-- Presentation thumbnails are generated locally when a presentation is opened;
-  very large or image-heavy decks can take longer to finish thumbnail rendering.
+- Charts and SmartArt are identified with local placeholders and diagnostics;
+  their native PowerPoint appearance is not rendered.
+- Presentation thumbnails are generated locally on demand. Very large or
+  image-heavy slides can still take longer when they enter the visible range.
 - Word previews follow the current Obsidian theme, but explicit colors stored in the Word document may still influence the rendered result.
 - Very large files or files with many images may render slowly.
 - Mobile support is not included in this version.

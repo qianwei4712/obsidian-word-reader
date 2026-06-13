@@ -192,6 +192,20 @@ export default class WordReaderPlugin extends Plugin {
       },
     });
     this.addCommand({
+      id: "copy-presentation-render-diagnostics",
+      name: pptxText.commands.copyRenderDiagnostics,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          void view.copyRenderDiagnostics();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
       id: "create-presentation-note",
       name: pptxText.commands.createSummaryNote,
       checkCallback: (checking) => {
