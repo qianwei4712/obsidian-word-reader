@@ -25,6 +25,12 @@ void test("PptxPackage resolves slide, layout, master, theme, and media", async 
     "../media/image1.png",
   );
   assert.ok(await pptx.getBinary("ppt/media/image1.png"));
+
+  const metadata = await pptx.getSlideMetadata(0);
+  assert.equal(metadata.title, "Hello PPTX");
+  assert.match(metadata.text, /A1/);
+  assert.equal(metadata.notes, "Discuss the quarterly trend.");
+  assert.deepEqual(await pptx.getAllSlideMetadata(), [metadata]);
 });
 
 void test("PowerPoint relationship paths stay inside the package", () => {

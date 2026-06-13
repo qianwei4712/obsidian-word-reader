@@ -1,5 +1,45 @@
 # Changelog
 
+## 2.1.0 - 2026-06-13
+
+### English
+
+#### Added
+
+- Added a presentation sidebar with rendered slide thumbnails, extracted slide
+  titles, active-slide tracking, and direct slide navigation.
+- Added presentation-wide search across slide text, tables, titles, and speaker
+  notes, with matching snippets and note-only result indicators.
+- Added current-slide text copy, speaker-note viewing, and presentation summary
+  notes that record the current slide and include numbered references for every
+  slide.
+- Added `Space`/`Shift` + `Space`, `Home`, `End`, and `Ctrl`/`Cmd` + `F`
+  presentation shortcuts alongside the existing arrow and page-key navigation.
+- Added PPTX metadata, speaker-note, search, summary-note, and reading-state
+  test coverage.
+
+#### Changed
+
+- Restored slide navigation and speaker-note visibility per presentation.
+- Released thumbnail image resources when presentations are reloaded, switched,
+  or closed.
+
+### 中文
+
+#### 新增
+
+- 新增演示文稿侧边栏，提供真实幻灯片缩略图、标题提取、当前页高亮和直接跳转。
+- 新增覆盖幻灯片标题、正文、表格和演讲者备注的全文搜索，并显示匹配摘要及仅备注命中提示。
+- 新增当前幻灯片文本复制、演讲者备注查看，以及记录当前页并列出全部幻灯片页码引用的演示文稿摘要笔记。
+- 在原有方向键和翻页键之外，新增 `Space`/`Shift` + `Space`、`Home`、
+  `End` 和 `Ctrl`/`Cmd` + `F` 演示文稿快捷键。
+- 新增 PPTX 元数据、演讲者备注、搜索、摘要笔记和阅读状态测试。
+
+#### 变更
+
+- 按演示文稿恢复幻灯片导航和演讲者备注的显示状态。
+- 重新加载、切换或关闭演示文稿时释放缩略图图片资源。
+
 ## 2.0.2 - 2026-06-13
 
 ### English

@@ -27,6 +27,20 @@ The 2.0.0 line adds local, read-only `.pptx` preview:
   SmartArt, SVG/GIF/WebP media, and exact PowerPoint layout fidelity outside
   the supported scope.
 
+## 2.1.0 PPTX Workflow Scope
+
+The 2.1.0 line adds presentation reading and knowledge-capture workflows:
+
+- Show rendered thumbnails and extracted titles in a slide navigation panel.
+- Search slide titles, body text, tables, and speaker notes locally.
+- Copy selected rendered text or all extracted text from the current slide.
+- Show speaker notes for the current slide without changing the source file.
+- Create or open a same-name Markdown presentation note that records the
+  current slide and includes numbered references for every slide.
+- Restore navigation-panel and speaker-note visibility per presentation.
+- Support arrow keys, page keys, `Space`/`Shift` + `Space`, `Home`, `End`, and
+  `Ctrl`/`Cmd` + `F` presentation shortcuts.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -55,8 +69,20 @@ Run this checklist before publishing a stable release:
     theme colors, layouts, and masters.
   - Test previous/next navigation, page-number jump, zoom, fit to window,
     fullscreen reading, keyboard navigation, and external open.
+  - Confirm the sidebar shows rendered thumbnails, extracted titles, and the
+    active slide, and that clicking an entry navigates to the correct slide.
+  - Search for text in slide titles, body text, tables, and speaker notes;
+    confirm matching snippets and note-only matches are identified correctly.
+  - Copy selected rendered text, then clear the selection and copy all
+    extracted text from the current slide.
+  - Show and hide speaker notes, navigate between slides, and confirm the
+    displayed notes follow the current slide.
+  - Create a same-name presentation summary note and confirm it records the
+    current slide and contains numbered references for every slide.
+  - Confirm an existing same-name Markdown note opens without being overwritten.
+  - Test `Space`, `Shift` + `Space`, `Home`, `End`, and `Ctrl`/`Cmd` + `F`.
   - Reopen a presentation and confirm page, zoom, fit mode, and scroll position
-    are restored.
+    are restored together with navigation and speaker-note visibility.
   - Rapidly switch files, pages, and zoom levels and confirm no stale slide is
     displayed.
   - Open damaged, encrypted, renamed non-PPTX, over-limit, and unsupported
@@ -124,6 +150,8 @@ Supported:
 - `.docx` read-only preview through `docx-preview`.
 - `.pptx` local, read-only preview for text, embedded images, common shapes,
   tables, themes, layouts, and masters.
+- `.pptx` thumbnail/title navigation, local full-presentation search, current
+  slide text copy, speaker-note viewing, and numbered presentation summary notes.
 - Plain text and Markdown extraction through `mammoth`.
 - `.doc` detection with external-open and conversion guidance.
 
@@ -164,6 +192,29 @@ Not supported:
 
 新的阅读器功能放到 1.0.0 之后的小版本中规划。补丁版本优先修复回归、兼容性、文档和打包问题。
 
+### 2.0.0 PPTX 范围
+
+2.0.0 稳定线新增本地只读 `.pptx` 预览：
+
+- 在不加载远程资源的前提下渲染文本、内嵌图片、常见形状、表格、主题颜色、版式和母版。
+- 支持上一张/下一张、页码跳转、缩放、适应窗口、全屏阅读、外部打开和按文件恢复阅读页码。
+- 解压前校验条目数量、单条目大小、总解压大小、加密、ZIP64 和异常压缩率。
+- 动画、切换效果、音视频播放、宏、编辑、图表、SmartArt、SVG/GIF/WebP 媒体和
+  PowerPoint 像素级还原不在支持范围内。
+
+### 2.1.0 PPTX 阅读工作流范围
+
+2.1.0 稳定线新增演示文稿阅读和知识整理能力：
+
+- 在幻灯片导航面板显示真实缩略图和提取标题。
+- 在本地搜索幻灯片标题、正文、表格和演讲者备注。
+- 复制选中的渲染文本，或复制当前幻灯片的全部提取文本。
+- 查看当前幻灯片的演讲者备注，不修改源文件。
+- 创建或打开同名 Markdown 演示文稿笔记，记录当前页并为全部幻灯片生成页码引用。
+- 按演示文稿恢复导航面板和演讲者备注的显示状态。
+- 支持方向键、翻页键、`Space`/`Shift` + `Space`、`Home`、`End` 和
+  `Ctrl`/`Cmd` + `F` 快捷键。
+
 ### 支持边界
 
 支持：
@@ -171,6 +222,8 @@ Not supported:
 - Obsidian 桌面端。
 - 本地桌面 vault。
 - 基于 `docx-preview` 的 `.docx` 只读预览。
+- `.pptx` 文本、内嵌图片、常见形状、表格、主题、版式和母版的本地只读预览。
+- `.pptx` 缩略图/标题导航、本地全文搜索、当前页文本复制、演讲者备注查看和带页码摘要笔记。
 - 基于 `mammoth` 的纯文本和 Markdown 提取。
 - `.doc` 检测、外部打开和转换说明。
 
@@ -180,5 +233,8 @@ Not supported:
 - 移动端专项支持。
 - 直接渲染旧版 `.doc` 二进制文件。
 - 密码保护或加密 Word 文档。
+- 密码保护或加密 PowerPoint 演示文稿。
+- PPTX 动画、切换效果、音视频播放、宏、编辑、图表、SmartArt、
+  SVG/GIF/WebP 媒体和 PowerPoint 像素级还原。
 - 复杂 Word 排版与 Microsoft Word 完全一致。
 - 不提供本地路径的远程 vault 适配器外部打开。

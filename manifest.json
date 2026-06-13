@@ -1,7 +1,7 @@
 {
   "id": "word-reader",
   "name": "Office Reader",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "minAppVersion": "1.13.0",
   "description": "Open .docx and .pptx files as safe, read-only documents.",
   "author": "qianw",

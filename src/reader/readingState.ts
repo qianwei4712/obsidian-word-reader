@@ -9,6 +9,7 @@ export interface ReaderViewState {
   scrollTop: number;
   collapsedOutlineIds: string[];
   page?: number;
+  notesVisible?: boolean;
 }
 
 export interface PersistedReaderViewState {
@@ -106,6 +107,9 @@ export function normalizeReaderViewState(value: unknown): ReaderViewState {
   const page = readFiniteNumber(source.page, 0);
   if (page >= 1) {
     state.page = Math.floor(page);
+  }
+  if (typeof source.notesVisible === "boolean") {
+    state.notesVisible = source.notesVisible;
   }
   return state;
 }

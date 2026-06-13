@@ -13,6 +13,10 @@ import {
   type ZipSafetyLimits,
   type ZipSafetySummary,
 } from "./zipLimits";
+import {
+  extractSlideMetadata,
+  type PptxSlideMetadata,
+} from "./pptxMetadata";
 
 const DEFAULT_SLIDE_WIDTH = 12_192_000;
 const DEFAULT_SLIDE_HEIGHT = 6_858_000;
@@ -59,6 +63,8 @@ export class PptxPackage {
   private readonly xmlCache = new Map<string, Promise<Document>>();
   private readonly relationshipCache =
     new Map<string, Promise<Map<string, PptxRelationship>>>();
+  private readonly metadataCache =
+    new Map<number, Promise<PptxSlideMetadata>>();
 
   private constructor(
     private readonly zip: JSZip,
@@ -222,6 +228,21 @@ export class PptxPackage {
     };
   }
 
+  getSlideMetadata(index: number): Promise<PptxSlideMetadata> {
+    let pending = this.metadataCache.get(index);
+    if (!pending) {
+      pending = this.readSlideMetadata(index);
+      this.metadataCache.set(index, pending);
+    }
+    return pending;
+  }
+
+  async getAllSlideMetadata(): Promise<PptxSlideMetadata[]> {
+    return Promise.all(
+      this.slidePaths.map((_, index) => this.getSlideMetadata(index)),
+    );
+  }
+
   async getBinary(path: string): Promise<Uint8Array | null> {
     const entry = this.zip.file(path);
     return entry ? entry.async("uint8array") : null;
@@ -266,6 +287,27 @@ export class PptxPackage {
       this.relationshipCache.set(path, pending);
     }
     return pending;
+  }
+
+  private async readSlideMetadata(index: number): Promise<PptxSlideMetadata> {
+    const slidePath = this.slidePaths[index];
+    if (!slidePath) {
+      throw new RangeError(`Slide index ${index} is outside the presentation.`);
+    }
+    const slide = await this.getXml(slidePath);
+    const relationships = await this.getRelationships(slidePath);
+    const notesRelationship = findRelationship(relationships, "/notesSlide");
+    const notesPath =
+      notesRelationship && !notesRelationship.external
+        ? resolvePackagePath(slidePath, notesRelationship.target)
+        : null;
+    const notes = notesPath ? await this.getOptionalXml(notesPath) : null;
+    return extractSlideMetadata(
+      index,
+      slide,
+      notes,
+      "",
+    );
   }
 }
 

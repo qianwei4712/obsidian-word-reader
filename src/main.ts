@@ -177,6 +177,62 @@ export default class WordReaderPlugin extends Plugin {
         return true;
       },
     });
+    this.addCommand({
+      id: "copy-presentation-text",
+      name: pptxText.commands.copySlideText,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          void view.copyText();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "create-presentation-note",
+      name: pptxText.commands.createSummaryNote,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          void view.createSummaryNote();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "toggle-presentation-notes",
+      name: pptxText.commands.toggleNotes,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          view.toggleNotes();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "search-presentation",
+      name: pptxText.commands.focusSearch,
+      checkCallback: (checking) => {
+        const view = this.getActivePptxView();
+        if (!view?.file) {
+          return false;
+        }
+        if (!checking) {
+          view.focusSearch();
+        }
+        return true;
+      },
+    });
   }
 
   onunload(): void {

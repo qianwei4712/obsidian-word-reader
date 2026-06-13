@@ -52,3 +52,11 @@ void test("ReadingStateStore preserves a normalized presentation page", () => {
   });
   assert.equal(normalized.page, 4);
 });
+
+void test("ReadingStateStore preserves presentation panel visibility", () => {
+  const normalized = normalizeReaderViewState({
+    ...state,
+    notesVisible: true,
+  });
+  assert.equal(normalized.notesVisible, true);
+});

@@ -16,6 +16,7 @@ export async function createMinimalPptx(): Promise<ArrayBuffer> {
   <Default Extension="png" ContentType="image/png"/>
   <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
   <Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
+  <Override PartName="/ppt/notesSlides/notesSlide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>
   <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
   <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
   <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
@@ -88,7 +89,31 @@ export async function createMinimalPptx(): Promise<ArrayBuffer> {
         `${OFFICE_RELATIONSHIP}/image`,
         "../media/image1.png",
       ],
+      [
+        "rId3",
+        `${OFFICE_RELATIONSHIP}/notesSlide`,
+        "../notesSlides/notesSlide1.xml",
+      ],
     ]),
+  );
+  zip.file(
+    "ppt/notesSlides/notesSlide1.xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+ xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Notes"/><p:cNvSpPr/><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr>
+      <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Discuss the quarterly trend.</a:t></a:r></a:p></p:txBody>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="3" name="Slide Number"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum"/></p:nvPr></p:nvSpPr>
+      <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld><a:t>1</a:t></a:fld></a:p></p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:notes>`,
   );
   zip.file(
     "ppt/slideLayouts/slideLayout1.xml",

@@ -453,6 +453,165 @@
   white-space: nowrap;
 }
 
+.pptx-reader-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.pptx-reader-navigation {
+  display: flex;
+  flex: 0 0 224px;
+  flex-direction: column;
+  min-width: 180px;
+  max-width: 32%;
+  min-height: 0;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.pptx-reader-navigation.is-hidden {
+  display: none;
+}
+
+.pptx-reader-navigation-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.pptx-reader-navigation-title,
+.pptx-reader-notes-title {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+}
+
+.pptx-reader-search {
+  width: 100%;
+}
+
+.pptx-reader-search-count,
+.pptx-reader-slide-page,
+.pptx-reader-slide-match {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.pptx-reader-slide-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.pptx-reader-slide-entry {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  background: transparent;
+  text-align: left;
+}
+
+.pptx-reader-slide-entry:hover,
+.pptx-reader-slide-entry:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-modifier-hover);
+}
+
+.pptx-reader-slide-entry.is-active {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-active-hover);
+}
+
+.pptx-reader-slide-entry.is-hidden {
+  display: none;
+}
+
+.pptx-reader-thumbnail {
+  position: relative;
+  width: 140px;
+  max-width: 100%;
+  min-height: 90px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  background: #202124;
+  pointer-events: none;
+}
+
+.pptx-reader-thumbnail-stage {
+  box-shadow: none;
+  transform-origin: top left;
+  user-select: none;
+}
+
+.pptx-reader-thumbnail-placeholder {
+  display: flex;
+  min-height: 90px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: var(--font-ui-large);
+}
+
+.pptx-reader-slide-details {
+  min-width: 0;
+}
+
+.pptx-reader-slide-title {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pptx-reader-slide-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pptx-reader-slide-match {
+  margin-top: 4px;
+  color: var(--text-accent);
+}
+
+.pptx-reader-navigation-empty {
+  display: none;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  text-align: center;
+}
+
+.pptx-reader-navigation-empty.is-visible {
+  display: block;
+}
+
+.pptx-reader-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .pptx-reader-viewport {
   position: relative;
   flex: 1;
@@ -460,6 +619,31 @@
   overflow: auto;
   padding: 24px;
   background: #202124;
+}
+
+.pptx-reader-notes {
+  flex: 0 0 auto;
+  max-height: 34%;
+  overflow: auto;
+  padding: 10px 14px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.pptx-reader-notes.is-hidden {
+  display: none;
+}
+
+.pptx-reader-notes-content {
+  margin-top: 6px;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.pptx-reader-notes-content.is-empty {
+  color: var(--text-muted);
 }
 
 .pptx-reader-canvas {
@@ -584,4 +768,12 @@
   font-size: var(--font-ui-smaller);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .pptx-reader-navigation {
+    flex-basis: 184px;
+    max-width: 42%;
+  }
+
 }

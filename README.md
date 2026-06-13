@@ -13,8 +13,11 @@ keeping the original files unchanged.
 - Open `.docx` files in an Obsidian tab.
 - Open `.pptx` files in an Obsidian tab with local rendering for text, images,
   common shapes, tables, themes, layouts, and masters.
-- Navigate presentations with previous/next controls, page-number jump,
-  continuous zoom, fit to window, fullscreen reading, and external open.
+- Navigate presentations with rendered slide thumbnails, extracted titles,
+  previous/next controls, page-number jump, keyboard shortcuts, continuous
+  zoom, fit to window, fullscreen reading, and external open.
+- Search presentation titles, slide text, tables, and speaker notes; copy the
+  current slide text and view speaker notes without leaving Obsidian.
 - Render headings, paragraphs, lists, tables, images, and page breaks where supported by `docx-preview`.
 - Keep the original Word file unchanged.
 - Follow Obsidian light and dark themes for the Word preview surface. Complex Word documents with explicit colors may still affect the final rendered appearance.
@@ -32,7 +35,9 @@ keeping the original files unchanged.
 - Show a clear fallback page for legacy `.doc` files with external-open and conversion guidance.
 - Show clearer messages for encrypted, damaged, or unsupported Word documents.
 - Avoid stale render results when switching or reloading documents.
-- Create or open a same-name Markdown summary note linked back to the source `.docx`.
+- Create or open same-name Markdown summary notes linked back to source
+  `.docx` and `.pptx` files. Presentation notes include numbered slide
+  references.
 
 ## Supported Files
 
@@ -47,7 +52,8 @@ keeping the original files unchanged.
 1. Put a `.docx` or `.pptx` file into your Obsidian vault.
 2. Click the file in the file explorer.
 3. Read the document in the Obsidian tab opened by the plugin.
-4. Use the toolbar to reload, zoom, fit width, show the outline, search, copy text, copy Markdown, create a summary note, or open the file externally.
+4. Use the toolbar and navigation panels to reload, navigate, zoom, search,
+   copy text, inspect notes, create a summary note, or open the file externally.
 
 ### Zoom
 
@@ -57,13 +63,24 @@ keeping the original files unchanged.
 
 ### PowerPoint Reading
 
-- Use the arrow buttons, `Page Up`/`Page Down`, or `Left`/`Right` to change
-  slides.
+- Use the thumbnail and title sidebar to inspect the presentation and jump
+  directly to a slide.
+- Search all slide titles, body text, tables, and speaker notes from the
+  sidebar. Press `Ctrl`/`Cmd` + `F` to focus presentation search.
+- Use the arrow buttons, `Page Up`/`Page Down`, `Left`/`Right`, or
+  `Space`/`Shift` + `Space` to change slides. Press `Home` or `End` to jump to
+  the first or last slide.
 - Enter a slide number to jump directly to it.
 - Use the percentage input or `Ctrl` + mouse wheel to zoom.
 - Use fit window to keep the complete slide visible while resizing a pane.
 - Use fullscreen for presentation-focused reading.
-- The current slide, zoom, fit mode, and scroll position are restored per file.
+- Copy selected text from the rendered slide, or copy all extracted text from
+  the current slide when no selection is active.
+- Show or hide the current slide's speaker notes.
+- Create a same-name presentation summary note with the current slide and
+  numbered references for every slide.
+- The current slide, zoom, fit mode, scroll position, navigation visibility,
+  and speaker-note visibility are restored per file.
 
 ### Image Preview
 
@@ -138,6 +155,10 @@ Available settings:
 - Rendering work is guarded by a cancellation token so stale results are discarded.
 - PPTX file and slide rendering use separate cancellation generations so rapid
   file switching and page navigation cannot commit stale slides.
+- Presentation metadata and speaker notes are indexed locally for navigation,
+  search, text copy, and summary-note creation.
+- Generated slide-thumbnail resources are released when a presentation is
+  reloaded, switched, or closed.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
 - Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
 - Long previews defer off-screen page painting until pages approach the viewport.
@@ -155,13 +176,16 @@ The stable reader scope, manual test checklist, support boundaries, and maintena
 
 ### Summary Notes
 
-The summary note action creates a same-name Markdown file next to the Word document.
+The summary note action creates a same-name Markdown file next to a Word
+document or PowerPoint presentation.
 
 Example:
 
 ```text
 Report.docx
 Report.md
+Quarterly review.pptx
+Quarterly review.md
 ```
 
 The generated note includes frontmatter and starter sections:
@@ -186,7 +210,9 @@ Source: [[Report.docx]]
 ## Quoted excerpts
 ```
 
-If the same-name Markdown file already exists, the plugin opens it without overwriting content.
+Presentation notes use `type: presentation-note`, record the current slide,
+and include a numbered reference list for every slide. If the same-name
+Markdown file already exists, the plugin opens it without overwriting content.
 
 ## Installation
 
@@ -264,11 +290,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag 1.1.1
-git push origin 1.1.1
+git tag 2.1.0
+git push origin 2.1.0
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-1.1.1.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-2.1.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 
@@ -330,6 +356,8 @@ CI and release workflows use Node.js 20.19.0.
 - PPTX animation, transitions, audio/video playback, macros, editing, charts,
   SmartArt, SVG/GIF/WebP media, and pixel-perfect PowerPoint fidelity are not
   supported.
+- Presentation thumbnails are generated locally when a presentation is opened;
+  very large or image-heavy decks can take longer to finish thumbnail rendering.
 - Word previews follow the current Obsidian theme, but explicit colors stored in the Word document may still influence the rendered result.
 - Very large files or files with many images may render slowly.
 - Mobile support is not included in this version.
@@ -355,6 +383,7 @@ Use Word, WPS, or another external editor when the source document needs to be c
 
 ## Recommended Workflow
 
-Keep original Word files in the vault, open them for reading, and create Markdown summary notes for long-term knowledge management.
+Keep original Office files in the vault, open them for reading, and create
+Markdown summary notes for long-term knowledge management.
 
 This keeps the original document format intact while bringing summaries, decisions, tasks, and quotes into your Obsidian workflow.

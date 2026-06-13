@@ -7,6 +7,7 @@ import {
 } from "obsidian";
 
 import type WordReaderPlugin from "./main";
+import { createNoteFromPptx } from "./commands/createNoteFromPptx";
 import { openExternalFile } from "./commands/openExternal";
 import { PptxPackage } from "./pptx/pptxPackage";
 import { classifyPptxError } from "./pptx/pptxErrors";
@@ -14,6 +15,11 @@ import {
   getPptxReaderText,
   type PptxReaderText,
 } from "./pptx/pptxI18n";
+import {
+  formatSlideText,
+  searchPptxSlides,
+  type PptxSlideMetadata,
+} from "./pptx/pptxMetadata";
 import { renderPptxSlide } from "./pptx/pptxRenderer";
 import { ReaderLifecycle } from "./reader/lifecycle";
 import type { ReaderViewState } from "./reader/readingState";
@@ -33,6 +39,7 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.05;
 const FIT_PADDING = 48;
+const THUMBNAIL_WIDTH = 140;
 
 interface RenderOptions {
   restoreScroll?: boolean;
@@ -42,8 +49,16 @@ export class PptxView extends FileView {
   private readonly plugin: WordReaderPlugin;
   private rootEl: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
+  private bodyEl: HTMLElement | null = null;
+  private navigationEl: HTMLElement | null = null;
+  private slideListEl: HTMLElement | null = null;
+  private navigationEmptyEl: HTMLElement | null = null;
+  private searchInputEl: HTMLInputElement | null = null;
+  private searchCountEl: HTMLElement | null = null;
   private viewportEl: HTMLElement | null = null;
   private canvasEl: HTMLElement | null = null;
+  private notesEl: HTMLElement | null = null;
+  private notesContentEl: HTMLElement | null = null;
   private stageEl: HTMLElement | null = null;
   private pageInputEl: HTMLInputElement | null = null;
   private pageCountEl: HTMLElement | null = null;
@@ -52,17 +67,34 @@ export class PptxView extends FileView {
   private nextButtonEl: HTMLButtonElement | null = null;
   private fitButtonEl: HTMLButtonElement | null = null;
   private fullscreenButtonEl: HTMLButtonElement | null = null;
+  private navigationButtonEl: HTMLButtonElement | null = null;
+  private notesButtonEl: HTMLButtonElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private presentation: PptxPackage | null = null;
+  private slideMetadata: PptxSlideMetadata[] = [];
+  private readonly navigationEntries = new Map<
+    number,
+    {
+      element: HTMLElement;
+      snippetEl: HTMLElement;
+      matchEl: HTMLElement;
+      thumbnailEl: HTMLElement;
+    }
+  >();
   private currentSlideIndex = 0;
   private activeFilePath: string | null = null;
   private pendingScrollPosition: { left: number; top: number } | null = null;
   private zoom = 1;
   private fitWindow = true;
+  private navigationVisible = true;
+  private notesVisible = false;
+  private searchQuery = "";
   private renderedWidth = 0;
   private renderedHeight = 0;
   private readonly loadLifecycle = new ReaderLifecycle();
   private readonly slideLifecycle = new ReaderLifecycle();
+  private readonly thumbnailLifecycle = new ReaderLifecycle();
+  private readonly thumbnailResources = new Set<string>();
   private readonly slideResources = new RetainedResourceRegistry((resource) => {
     URL.revokeObjectURL(resource);
   });
@@ -121,11 +153,16 @@ export class PptxView extends FileView {
     this.resizeObserver = null;
     this.loadLifecycle.cancel();
     this.slideLifecycle.cancel();
+    this.thumbnailLifecycle.cancel();
     this.releasePresentation();
     this.clearCanvas();
   }
 
   async onLoadFile(file: TFile): Promise<void> {
+    this.searchQuery = "";
+    if (this.searchInputEl) {
+      this.searchInputEl.value = "";
+    }
     this.restoreReadingState(file.path);
     await this.loadPresentation(file);
   }
@@ -136,6 +173,7 @@ export class PptxView extends FileView {
     this.activeFilePath = null;
     this.loadLifecycle.cancel();
     this.slideLifecycle.cancel();
+    this.thumbnailLifecycle.cancel();
     this.releasePresentation();
     this.clearCanvas();
     this.setStatus("");
@@ -169,6 +207,55 @@ export class PptxView extends FileView {
     await this.goToSlide(this.currentSlideIndex + 1);
   }
 
+  async copyText(): Promise<void> {
+    const metadata = this.slideMetadata[this.currentSlideIndex];
+    if (!metadata) {
+      return;
+    }
+    try {
+      const selectedText = this.getSelectedSlideText();
+      await navigator.clipboard.writeText(
+        selectedText || formatSlideText(metadata),
+      );
+      new Notice(
+        selectedText
+          ? this.text.notices.copiedSelectedText
+          : this.text.notices.copiedSlideText,
+      );
+    } catch (error) {
+      new Notice(this.text.notices.copyFailed(getErrorMessage(error)));
+    }
+  }
+
+  async createSummaryNote(): Promise<void> {
+    if (!this.file || this.slideMetadata.length === 0) {
+      return;
+    }
+    await createNoteFromPptx(
+      this.app,
+      this.file,
+      this.slideMetadata,
+      this.currentSlideIndex,
+      this.text,
+    );
+  }
+
+  toggleNotes(): void {
+    this.notesVisible = !this.notesVisible;
+    this.applyNotesVisibility();
+    this.saveReadingState();
+  }
+
+  focusSearch(): void {
+    if (!this.navigationVisible) {
+      this.navigationVisible = true;
+      this.applyNavigationVisibility();
+      this.saveReadingState();
+    }
+    this.searchInputEl?.focus();
+    this.searchInputEl?.select();
+  }
+
   async toggleFullscreen(): Promise<void> {
     if (!this.rootEl) {
       return;
@@ -188,9 +275,14 @@ export class PptxView extends FileView {
     const file = this.file;
     this.saveReadingState();
     this.slideLifecycle.cancel();
+    this.thumbnailLifecycle.cancel();
+    this.releaseThumbnailResources();
     this.buildLayout();
     if (file && this.presentation) {
+      this.buildNavigationList();
+      this.updateNotes();
       void this.renderCurrentSlide({ restoreScroll: true });
+      void this.renderThumbnails(this.presentation);
     }
   }
 
@@ -202,21 +294,7 @@ export class PptxView extends FileView {
     });
     this.rootEl.tabIndex = 0;
     this.rootEl.addEventListener("keydown", (event) => {
-      if (
-        (event.target as Node | null)?.instanceOf(HTMLInputElement) ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      ) {
-        return;
-      }
-      if (event.key === "ArrowLeft" || event.key === "PageUp") {
-        event.preventDefault();
-        void this.previousSlide();
-      } else if (event.key === "ArrowRight" || event.key === "PageDown") {
-        event.preventDefault();
-        void this.nextSlide();
-      }
+      this.handleKeyDown(event);
     });
 
     const toolbarEl = this.rootEl.createDiv({
@@ -225,6 +303,16 @@ export class PptxView extends FileView {
     this.createIconButton(toolbarEl, "refresh-cw", text.toolbar.reload, () => {
       void this.reload();
     });
+    this.navigationButtonEl = this.createIconButton(
+      toolbarEl,
+      "panel-left",
+      text.toolbar.hideNavigation,
+      () => {
+        this.navigationVisible = !this.navigationVisible;
+        this.applyNavigationVisibility();
+        this.saveReadingState();
+      },
+    );
     this.previousButtonEl = this.createIconButton(
       toolbarEl,
       "chevron-left",
@@ -293,6 +381,25 @@ export class PptxView extends FileView {
         this.saveReadingState();
       },
     );
+    this.createIconButton(toolbarEl, "copy", text.toolbar.copyText, () => {
+      void this.copyText();
+    });
+    this.createIconButton(
+      toolbarEl,
+      "notebook-pen",
+      text.toolbar.createSummaryNote,
+      () => {
+        void this.createSummaryNote();
+      },
+    );
+    this.notesButtonEl = this.createIconButton(
+      toolbarEl,
+      "sticky-note",
+      text.toolbar.showNotes,
+      () => {
+        this.toggleNotes();
+      },
+    );
     this.fullscreenButtonEl = this.createIconButton(
       toolbarEl,
       "fullscreen",
@@ -313,7 +420,60 @@ export class PptxView extends FileView {
     this.statusEl = this.rootEl.createDiv({
       cls: "word-reader-status pptx-reader-status",
     });
-    this.viewportEl = this.rootEl.createDiv({
+
+    this.bodyEl = this.rootEl.createDiv({
+      cls: "pptx-reader-body",
+    });
+    this.navigationEl = this.bodyEl.createDiv({
+      cls: "pptx-reader-navigation",
+    });
+    const navigationHeaderEl = this.navigationEl.createDiv({
+      cls: "pptx-reader-navigation-header",
+    });
+    navigationHeaderEl.createDiv({
+      cls: "pptx-reader-navigation-title",
+      text: text.navigation.title,
+    });
+    this.searchInputEl = navigationHeaderEl.createEl("input", {
+      cls: "pptx-reader-search",
+      attr: {
+        type: "search",
+        placeholder: text.toolbar.searchPlaceholder,
+        "aria-label": text.toolbar.searchPresentation,
+      },
+    });
+    this.searchInputEl.value = this.searchQuery;
+    this.searchInputEl.addEventListener("input", () => {
+      this.searchQuery = this.searchInputEl?.value ?? "";
+      this.applyNavigationSearch();
+    });
+    this.searchInputEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && this.searchQuery.trim()) {
+        const firstResult = searchPptxSlides(
+          this.slideMetadata,
+          this.searchQuery,
+        )[0];
+        if (firstResult) {
+          event.preventDefault();
+          void this.goToSlide(firstResult.slideIndex);
+        }
+      }
+    });
+    this.searchCountEl = navigationHeaderEl.createDiv({
+      cls: "pptx-reader-search-count",
+    });
+    this.slideListEl = this.navigationEl.createDiv({
+      cls: "pptx-reader-slide-list",
+    });
+    this.navigationEmptyEl = this.navigationEl.createDiv({
+      cls: "pptx-reader-navigation-empty",
+      text: text.navigation.noMatches,
+    });
+
+    const mainEl = this.bodyEl.createDiv({
+      cls: "pptx-reader-main",
+    });
+    this.viewportEl = mainEl.createDiv({
       cls: "pptx-reader-viewport",
     });
     this.viewportEl.addEventListener("wheel", (event) => {
@@ -322,15 +482,74 @@ export class PptxView extends FileView {
     this.canvasEl = this.viewportEl.createDiv({
       cls: "pptx-reader-canvas",
     });
+    this.notesEl = mainEl.createDiv({
+      cls: "pptx-reader-notes",
+    });
+    this.notesEl.createDiv({
+      cls: "pptx-reader-notes-title",
+      text: text.notes.title,
+    });
+    this.notesContentEl = this.notesEl.createDiv({
+      cls: "pptx-reader-notes-content",
+    });
+
     this.updateNavigationControls();
+    this.applyNavigationVisibility();
+    this.applyNotesVisibility();
+    this.applyNavigationSearch();
+    this.updateNotes();
     this.updateFullscreenControl();
     this.applyScale();
     this.readerStatus.refresh();
   }
 
+  private handleKeyDown(event: KeyboardEvent): void {
+    const target = event.target as Node | null;
+    if (
+      target?.instanceOf(HTMLElement) &&
+      target.closest("input, textarea, select, button, a, [contenteditable='true']")
+    ) {
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      this.focusSearch();
+      return;
+    }
+    if (event.altKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
+
+    switch (event.key) {
+      case "ArrowLeft":
+      case "PageUp":
+        event.preventDefault();
+        void this.previousSlide();
+        break;
+      case "ArrowRight":
+      case "PageDown":
+        event.preventDefault();
+        void this.nextSlide();
+        break;
+      case " ":
+        event.preventDefault();
+        void (event.shiftKey ? this.previousSlide() : this.nextSlide());
+        break;
+      case "Home":
+        event.preventDefault();
+        void this.goToSlide(0);
+        break;
+      case "End":
+        event.preventDefault();
+        void this.goToSlide((this.presentation?.slideCount ?? 1) - 1);
+        break;
+    }
+  }
+
   private async loadPresentation(file: TFile): Promise<void> {
     const token = this.loadLifecycle.begin();
     this.slideLifecycle.cancel();
+    this.thumbnailLifecycle.cancel();
     this.releasePresentation();
     this.clearCanvas();
     this.setStatus(this.text.status.reading(file.name), false, true);
@@ -345,13 +564,25 @@ export class PptxView extends FileView {
         return;
       }
       this.presentation = presentation;
+      this.setStatus(this.text.status.indexing(file.name), false, true);
+      const metadata = await presentation.getAllSlideMetadata();
+      if (
+        !this.loadLifecycle.isCurrent(token) ||
+        this.presentation !== presentation
+      ) {
+        return;
+      }
+      this.slideMetadata = metadata;
       this.currentSlideIndex = clamp(
         this.currentSlideIndex,
         0,
         presentation.slideCount - 1,
       );
+      this.buildNavigationList();
+      this.updateNotes();
       this.updateNavigationControls();
       await this.renderCurrentSlide({ restoreScroll: true });
+      void this.renderThumbnails(presentation);
     } catch (error) {
       if (!this.loadLifecycle.isCurrent(token)) {
         return;
@@ -376,6 +607,8 @@ export class PptxView extends FileView {
     this.currentSlideIndex = nextIndex;
     this.pendingScrollPosition = { left: 0, top: 0 };
     this.updateNavigationControls();
+    this.updateActiveNavigationEntry();
+    this.updateNotes();
     this.saveReadingState();
     await this.renderCurrentSlide({ restoreScroll: true });
   }
@@ -453,6 +686,241 @@ export class PptxView extends FileView {
         });
       }
     }
+  }
+
+  private buildNavigationList(): void {
+    this.slideListEl?.empty();
+    this.navigationEntries.clear();
+    if (!this.slideListEl) {
+      return;
+    }
+
+    for (const metadata of this.slideMetadata) {
+      const title =
+        metadata.title ||
+        this.text.navigation.slideLabel(metadata.index + 1);
+      const entryEl = this.slideListEl.createEl("button", {
+        cls: "pptx-reader-slide-entry",
+        attr: {
+          type: "button",
+          "aria-label": `${this.text.navigation.slideLabel(
+            metadata.index + 1,
+          )}: ${title}`,
+        },
+      });
+      entryEl.addEventListener("click", () => {
+        void this.goToSlide(metadata.index);
+      });
+      const thumbnailEl = entryEl.createDiv({
+        cls: "pptx-reader-thumbnail",
+      });
+      thumbnailEl.createDiv({
+        cls: "pptx-reader-thumbnail-placeholder",
+        text: String(metadata.index + 1),
+      });
+      const detailsEl = entryEl.createDiv({
+        cls: "pptx-reader-slide-details",
+      });
+      detailsEl.createDiv({
+        cls: "pptx-reader-slide-page",
+        text: this.text.navigation.slideLabel(metadata.index + 1),
+      });
+      detailsEl.createDiv({
+        cls: "pptx-reader-slide-title",
+        text: title,
+      });
+      const snippetEl = detailsEl.createDiv({
+        cls: "pptx-reader-slide-snippet",
+      });
+      const matchEl = detailsEl.createDiv({
+        cls: "pptx-reader-slide-match",
+      });
+      this.navigationEntries.set(metadata.index, {
+        element: entryEl,
+        snippetEl,
+        matchEl,
+        thumbnailEl,
+      });
+    }
+    this.applyNavigationSearch();
+    this.updateActiveNavigationEntry();
+  }
+
+  private applyNavigationSearch(): void {
+    const results = searchPptxSlides(this.slideMetadata, this.searchQuery);
+    const resultBySlide = new Map(
+      results.map((result) => [result.slideIndex, result]),
+    );
+    const searching = this.searchQuery.trim().length > 0;
+    let totalMatches = 0;
+
+    for (const metadata of this.slideMetadata) {
+      const entry = this.navigationEntries.get(metadata.index);
+      if (!entry) {
+        continue;
+      }
+      const result = resultBySlide.get(metadata.index);
+      entry.element.toggleClass("is-hidden", !result);
+      entry.snippetEl.setText(result?.snippet ?? "");
+      totalMatches += result?.matchCount ?? 0;
+      entry.matchEl.setText(
+        searching && result
+          ? [
+              `${result.matchCount}`,
+              result.matchedNotes ? this.text.navigation.notesMatch : "",
+            ]
+              .filter(Boolean)
+              .join(" - ")
+          : "",
+      );
+    }
+
+    this.navigationEmptyEl?.toggleClass("is-visible", results.length === 0);
+    this.searchCountEl?.setText(
+      searching
+        ? this.text.navigation.searchCount(totalMatches, results.length)
+        : this.text.navigation.slideCount(this.slideMetadata.length),
+    );
+  }
+
+  private updateActiveNavigationEntry(): void {
+    for (const [index, entry] of this.navigationEntries) {
+      entry.element.toggleClass("is-active", index === this.currentSlideIndex);
+      entry.element.setAttribute(
+        "aria-current",
+        index === this.currentSlideIndex ? "true" : "false",
+      );
+    }
+    if (this.navigationVisible) {
+      this.navigationEntries
+        .get(this.currentSlideIndex)
+        ?.element.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  private async renderThumbnails(presentation: PptxPackage): Promise<void> {
+    const token = this.thumbnailLifecycle.begin();
+    this.releaseThumbnailResources();
+
+    for (let index = 0; index < presentation.slideCount; index += 1) {
+      if (
+        !this.thumbnailLifecycle.isCurrent(token) ||
+        this.presentation !== presentation
+      ) {
+        return;
+      }
+      const entry = this.navigationEntries.get(index);
+      if (!entry) {
+        continue;
+      }
+
+      let resources = new Set<string>();
+      let adopted = false;
+      try {
+        const context = await presentation.getSlideContext(index);
+        const rendered = await renderPptxSlide(
+          presentation,
+          context,
+          entry.thumbnailEl.ownerDocument,
+        );
+        resources = rendered.resources;
+        if (
+          !this.thumbnailLifecycle.isCurrent(token) ||
+          this.presentation !== presentation ||
+          !entry.thumbnailEl.isConnected
+        ) {
+          continue;
+        }
+        for (const resource of resources) {
+          this.thumbnailResources.add(resource);
+        }
+        adopted = true;
+        const scale = THUMBNAIL_WIDTH / rendered.width;
+        rendered.element.addClass("pptx-reader-thumbnail-stage");
+        rendered.element.setAttribute("aria-hidden", "true");
+        rendered.element.style.transform = `scale(${scale})`;
+        entry.thumbnailEl.empty();
+        entry.thumbnailEl.style.height = `${rendered.height * scale}px`;
+        entry.thumbnailEl.appendChild(rendered.element);
+      } catch {
+        entry.thumbnailEl.empty();
+        entry.thumbnailEl.createDiv({
+          cls: "pptx-reader-thumbnail-placeholder",
+          text: String(index + 1),
+        });
+      } finally {
+        if (!adopted) {
+          releaseResources(resources, (resource) => {
+            URL.revokeObjectURL(resource);
+          });
+        }
+      }
+      await yieldToBrowser();
+    }
+  }
+
+  private updateNotes(): void {
+    if (!this.notesContentEl) {
+      return;
+    }
+    const notes = this.slideMetadata[this.currentSlideIndex]?.notes.trim();
+    this.notesContentEl.setText(notes || this.text.notes.empty);
+    this.notesContentEl.toggleClass("is-empty", !notes);
+  }
+
+  private applyNavigationVisibility(): void {
+    this.navigationEl?.toggleClass("is-hidden", !this.navigationVisible);
+    if (!this.navigationButtonEl) {
+      return;
+    }
+    const label = this.navigationVisible
+      ? this.text.toolbar.hideNavigation
+      : this.text.toolbar.showNavigation;
+    this.navigationButtonEl.setAttribute("aria-label", label);
+    this.navigationButtonEl.setAttribute("title", label);
+    this.navigationButtonEl.setAttribute(
+      "aria-pressed",
+      String(this.navigationVisible),
+    );
+    this.navigationButtonEl.toggleClass("is-active", this.navigationVisible);
+    if (this.fitWindow) {
+      this.applyScale();
+    }
+  }
+
+  private applyNotesVisibility(): void {
+    this.notesEl?.toggleClass("is-hidden", !this.notesVisible);
+    if (!this.notesButtonEl) {
+      return;
+    }
+    const label = this.notesVisible
+      ? this.text.toolbar.hideNotes
+      : this.text.toolbar.showNotes;
+    this.notesButtonEl.setAttribute("aria-label", label);
+    this.notesButtonEl.setAttribute("title", label);
+    this.notesButtonEl.setAttribute(
+      "aria-pressed",
+      String(this.notesVisible),
+    );
+    this.notesButtonEl.toggleClass("is-active", this.notesVisible);
+    if (this.fitWindow) {
+      this.applyScale();
+    }
+  }
+
+  private getSelectedSlideText(): string {
+    const selection = this.canvasEl?.ownerDocument.defaultView?.getSelection();
+    if (!selection || selection.isCollapsed || !this.stageEl) {
+      return "";
+    }
+    const anchorNode = selection.anchorNode;
+    const focusNode = selection.focusNode;
+    return anchorNode &&
+      focusNode &&
+      this.stageEl.contains(anchorNode) &&
+      this.stageEl.contains(focusNode)
+      ? selection.toString().trim()
+      : "";
   }
 
   private setZoom(value: number, anchor?: { left: number; top: number }): void {
@@ -566,6 +1034,8 @@ export class PptxView extends FileView {
       "disabled",
       count === 0 || this.currentSlideIndex >= count - 1,
     );
+    this.updateActiveNavigationEntry();
+    this.updateNotes();
   }
 
   private updateFullscreenControl(): void {
@@ -683,6 +1153,8 @@ export class PptxView extends FileView {
         step: ZOOM_STEP,
       }) ?? defaultZoom;
     this.fitWindow = state?.fitWidth ?? true;
+    this.navigationVisible = state?.outlineVisible ?? true;
+    this.notesVisible = state?.notesVisible ?? false;
     this.currentSlideIndex = Math.max(0, (state?.page ?? 1) - 1);
     this.pendingScrollPosition = {
       left: state?.scrollLeft ?? 0,
@@ -706,11 +1178,12 @@ export class PptxView extends FileView {
     const state: ReaderViewState = {
       zoom: this.zoom,
       fitWidth: this.fitWindow,
-      outlineVisible: false,
+      outlineVisible: this.navigationVisible,
       scrollLeft: this.viewportEl?.scrollLeft ?? 0,
       scrollTop: this.viewportEl?.scrollTop ?? 0,
       collapsedOutlineIds: [],
       page: this.currentSlideIndex + 1,
+      notesVisible: this.notesVisible,
     };
     this.plugin.updateReadingState(this.activeFilePath, state);
   }
@@ -725,8 +1198,22 @@ export class PptxView extends FileView {
 
   private releasePresentation(): void {
     this.presentation = null;
+    this.slideMetadata = [];
+    this.navigationEntries.clear();
+    this.slideListEl?.empty();
+    this.thumbnailLifecycle.cancel();
+    this.releaseThumbnailResources();
     this.slideResources.releaseActive();
+    this.applyNavigationSearch();
+    this.updateNotes();
     this.updateNavigationControls();
+  }
+
+  private releaseThumbnailResources(): void {
+    releaseResources(this.thumbnailResources, (resource) => {
+      URL.revokeObjectURL(resource);
+    });
+    this.thumbnailResources.clear();
   }
 }
 
@@ -736,4 +1223,12 @@ function clamp(value: number, min: number, max: number): number {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      resolve();
+    });
+  });
 }

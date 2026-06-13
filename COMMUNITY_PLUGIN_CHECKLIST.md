@@ -42,6 +42,10 @@ Community directory and before publishing later releases.
   `.pptx` files.
 - [ ] Confirm PPTX external relationships are ignored and the production
   bundle contains no network request code.
+- [ ] Confirm PPTX search, text copy, speaker notes, and summary-note creation
+  operate only on locally parsed presentation content.
+- [ ] Confirm presentation thumbnails release generated Blob URLs after
+  reload, file switch, and view close.
 - [ ] Confirm UI text uses sentence case and settings do not repeat the plugin
   name as a heading.
 - [ ] Confirm desktop-only Electron and Node.js access is guarded.
@@ -49,7 +53,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `2.0.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `2.1.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.
