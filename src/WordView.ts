@@ -21,7 +21,6 @@ import {
 import { createNoteFromDocx } from "./commands/createNoteFromDocx";
 import { openExternalDocx } from "./commands/openExternal";
 import { renderDocx } from "./renderer/docxRenderer";
-import { extractMarkdown, extractPlainText } from "./renderer/textExtractor";
 import type { WordReaderText } from "./i18n";
 import {
   classifyWordError,
@@ -47,6 +46,7 @@ import {
   normalizeZoom,
   preserveZoomAnchor,
 } from "./reader/zoom";
+import { TextSearchIndex } from "./reader/textSearchIndex";
 
 export const VIEW_TYPE_WORD_READER = "word-reader-view";
 
@@ -59,9 +59,10 @@ const IMAGE_ZOOM_STEP = 1.1;
 const SEARCH_DEBOUNCE_MS = 150;
 const DOM_COMMIT_CHUNK_SIZE = 4;
 const OUTLINE_CHUNK_SIZE = 50;
-const SEARCH_SCAN_CHUNK_SIZE = 500;
-const SEARCH_MUTATION_CHUNK_SIZE = 100;
 const LONG_DOCUMENT_PAGE_THRESHOLD = 12;
+const SEARCH_HIGHLIGHT_NAME = "word-reader-search";
+const CURRENT_SEARCH_HIGHLIGHT_NAME = "word-reader-search-current";
+let nextSearchHighlightId = 0;
 
 declare const __DEV__: boolean;
 
@@ -85,12 +86,17 @@ export class WordView extends FileView {
   private searchPreviousButtonEl: HTMLButtonElement | null = null;
   private searchNextButtonEl: HTMLButtonElement | null = null;
   private searchCountEl: HTMLElement | null = null;
-  private searchMatchEls: HTMLElement[] = [];
+  private searchMatchRanges: Range[] = [];
   private currentSearchIndex = -1;
   private searchHighlightTimer: number | null = null;
   private searchTaskToken = 0;
   private outlineTaskToken = 0;
+  private textSearchIndex: TextSearchIndex | null = null;
+  private readonly searchHighlightOwnerId =
+    `word-reader-view-${nextSearchHighlightId}`;
   private buffer: ArrayBuffer | null = null;
+  private extractedPlainText: string | null = null;
+  private extractedMarkdown: string | null = null;
   private readonly renderLifecycle = new ReaderLifecycle();
   private readonly readerStatus = new ReaderStatusController((status) => {
     this.renderStatus(status);
@@ -104,11 +110,13 @@ export class WordView extends FileView {
   );
   private outlineItems: ReaderOutlineItem<HTMLElement>[] = [];
   private outlineRows = new Map<string, HTMLElement>();
+  private documentHeadings: OutlineHeading[] = [];
   private collapsedOutlineIds = new Set<string>();
   private activeOutlineId: string | null = null;
   private activeFilePath: string | null = null;
   private pendingScrollPosition: ScrollPosition | null = null;
   private scrollFrameId: number | null = null;
+  private lastSavedReadingState = "";
   private zoom = 1;
   private fitWidth = false;
   private outlineVisible = false;
@@ -116,6 +124,7 @@ export class WordView extends FileView {
 
   constructor(leaf: WorkspaceLeaf, plugin: WordReaderPlugin) {
     super(leaf);
+    nextSearchHighlightId += 1;
     this.plugin = plugin;
     this.zoom = plugin.settings.defaultZoomPercent / 100;
     this.fitWidth = plugin.settings.defaultFitWidth;
@@ -187,12 +196,15 @@ export class WordView extends FileView {
       return;
     }
 
-    if (!this.buffer) {
-      this.buffer = await this.app.vault.readBinary(this.file);
+    if (!this.documentEl) {
+      return;
     }
 
     this.setStatus(text.status.extractingPlainText);
-    const plainText = await extractPlainText(this.buffer);
+    const plainText =
+      this.extractedPlainText ??
+      getRenderedPlainText(this.documentEl);
+    this.extractedPlainText = plainText;
     await navigator.clipboard.writeText(plainText);
     this.setStatus(this.text.status.copiedPlainTextFrom(this.file.name));
     new Notice(this.text.notices.copiedPlainText);
@@ -216,12 +228,17 @@ export class WordView extends FileView {
       return;
     }
 
-    if (!this.buffer) {
-      this.buffer = await this.app.vault.readBinary(this.file);
+    if (!this.documentEl) {
+      return;
     }
 
     this.setStatus(text.status.extractingMarkdown);
-    const markdown = await extractMarkdown(this.buffer);
+    const markdown =
+      this.extractedMarkdown ??
+      markdownForChildNodes(this.documentEl)
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    this.extractedMarkdown = markdown;
     await navigator.clipboard.writeText(markdown);
     this.setStatus(text.status.copiedMarkdownFrom(this.file.name));
     new Notice(text.notices.copiedMarkdown);
@@ -271,14 +288,10 @@ export class WordView extends FileView {
       this.captureScrollPosition();
       this.fitWidth = !this.fitWidth;
       this.saveReadingState();
-      if (this.buffer && this.file) {
-        void this.renderCurrentBuffer(
-          this.renderLifecycle.begin(),
-          this.getRenderKey(this.file),
-        );
-      } else {
-        this.applyDocumentOptions();
-      }
+      this.applyDocumentOptions();
+      this.restoreScrollPosition(this.renderLifecycle.currentToken).catch(
+        () => undefined,
+      );
     });
 
     this.outlineToggleButtonEl = this.createIconButton(
@@ -508,20 +521,11 @@ export class WordView extends FileView {
 
     try {
       const rendererStartedAt = performance.now();
-      await renderDocx(this.buffer, renderTargetEl, {
-        fitWidth: this.fitWidth,
-      });
+      await renderDocx(this.buffer, renderTargetEl);
       const rendererDurationMs = performance.now() - rendererStartedAt;
-      renderedBlobUrls = collectBlobUrls(renderTargetEl);
-
-      if (!this.renderLifecycle.isCurrent(token)) {
-        return;
-      }
-
-      const imageCount = prepareRenderedImages(renderTargetEl);
-      const pageCount = renderTargetEl.querySelectorAll(
-        ".docx-wrapper > section.docx",
-      ).length;
+      const analysis = analyzeRenderedDocument(renderTargetEl);
+      renderedBlobUrls = analysis.blobUrls;
+      const { imageCount, pageCount } = analysis;
       const commitStartedAt = performance.now();
 
       this.clearRenderedDocument();
@@ -534,6 +538,8 @@ export class WordView extends FileView {
       }
 
       const commitDurationMs = performance.now() - commitStartedAt;
+      this.textSearchIndex = analysis.textSearchIndex;
+      this.documentHeadings = analysis.headings;
       this.renderedDocumentKey = renderKey;
       this.pendingRenderKey = null;
       this.applyDocumentOptions();
@@ -722,7 +728,7 @@ export class WordView extends FileView {
     outlineListEl.empty();
     this.outlineRows.clear();
     this.activeOutlineId = null;
-    this.outlineItems = buildReaderOutline(getDocumentHeadings(documentEl));
+    this.outlineItems = buildReaderOutline(this.documentHeadings);
 
     if (this.outlineItems.length === 0) {
       outlineListEl.createDiv({
@@ -832,7 +838,6 @@ export class WordView extends FileView {
   }
 
   private scheduleScrollUpdate(): void {
-    this.saveReadingState();
     if (this.scrollFrameId !== null) {
       return;
     }
@@ -840,6 +845,7 @@ export class WordView extends FileView {
     const scrollWindow = this.scrollEl?.win ?? window;
     this.scrollFrameId = scrollWindow.requestAnimationFrame(() => {
       this.scrollFrameId = null;
+      this.saveReadingState();
       this.updateCurrentSection();
     });
   }
@@ -1207,18 +1213,13 @@ export class WordView extends FileView {
   }
 
   private async updateSearchHighlights(taskToken: number): Promise<void> {
-    if (!this.documentEl) {
+    if (!this.documentEl || !this.textSearchIndex) {
       return;
     }
 
     const documentEl = this.documentEl;
     const shouldContinue = (): boolean =>
       taskToken === this.searchTaskToken && this.documentEl === documentEl;
-
-    await clearSearchHighlights(documentEl, shouldContinue);
-    if (!shouldContinue()) {
-      return;
-    }
 
     this.clearSearchHighlightsState();
 
@@ -1228,21 +1229,33 @@ export class WordView extends FileView {
       return;
     }
 
-    const matches = await highlightText(documentEl, query, shouldContinue);
+    const matches = await this.textSearchIndex.find(query, {
+      shouldContinue,
+      yieldControl: yieldToBrowser,
+    });
     if (!shouldContinue()) {
       return;
     }
 
-    this.searchMatchEls = matches;
-    if (this.searchMatchEls.length > 0) {
+    this.searchMatchRanges = matches.flatMap((match) => {
+      if (!match.node.isConnected || !documentEl.contains(match.node)) {
+        return [];
+      }
+      const range = documentEl.ownerDocument.createRange();
+      range.setStart(match.node, match.start);
+      range.setEnd(match.node, match.end);
+      return [range];
+    });
+    if (this.searchMatchRanges.length > 0) {
       this.currentSearchIndex = 0;
     }
 
+    this.installSearchHighlights();
     this.updateSearchState({ scrollToCurrent: this.currentSearchIndex >= 0 });
   }
 
   private navigateSearch(direction: number): void {
-    const matchCount = this.searchMatchEls.length;
+    const matchCount = this.searchMatchRanges.length;
     if (matchCount === 0) {
       this.scheduleSearchHighlights();
       return;
@@ -1256,14 +1269,8 @@ export class WordView extends FileView {
   }
 
   private updateSearchState(options?: { scrollToCurrent?: boolean }): void {
-    const matchCount = this.searchMatchEls.length;
-
-    for (const [index, matchEl] of this.searchMatchEls.entries()) {
-      matchEl.toggleClass(
-        "is-current",
-        index === this.currentSearchIndex && matchCount > 0,
-      );
-    }
+    const matchCount = this.searchMatchRanges.length;
+    this.installCurrentSearchHighlight();
 
     if (matchCount === 0) {
       this.searchCountEl?.setText("0");
@@ -1278,15 +1285,37 @@ export class WordView extends FileView {
     this.searchNextButtonEl?.toggleAttribute("disabled", !hasMatches);
 
     if (options?.scrollToCurrent && this.currentSearchIndex >= 0) {
-      this.searchMatchEls[this.currentSearchIndex]?.scrollIntoView({
+      const range = this.searchMatchRanges[this.currentSearchIndex];
+      const target = range?.startContainer.parentElement;
+      target?.scrollIntoView({
         block: "center",
         inline: "nearest",
       });
     }
   }
 
+  private installSearchHighlights(): void {
+    setManagedHighlightRanges(
+      this.documentEl?.ownerDocument,
+      SEARCH_HIGHLIGHT_NAME,
+      this.searchHighlightOwnerId,
+      this.searchMatchRanges,
+    );
+  }
+
+  private installCurrentSearchHighlight(): void {
+    const range = this.searchMatchRanges[this.currentSearchIndex];
+    setManagedHighlightRanges(
+      this.documentEl?.ownerDocument,
+      CURRENT_SEARCH_HIGHLIGHT_NAME,
+      this.searchHighlightOwnerId,
+      range ? [range] : [],
+    );
+  }
+
   private restoreReadingState(path: string): void {
     this.activeFilePath = path;
+    this.lastSavedReadingState = "";
     const state = this.plugin.getReadingState(path);
     const defaultZoom = this.plugin.settings.defaultZoomPercent / 100;
     this.zoom =
@@ -1351,8 +1380,13 @@ export class WordView extends FileView {
       outlineVisible: this.outlineVisible,
       scrollLeft: position.left,
       scrollTop: position.top,
-      collapsedOutlineIds: Array.from(this.collapsedOutlineIds),
+      collapsedOutlineIds: Array.from(this.collapsedOutlineIds).sort(),
     };
+    const serializedState = JSON.stringify(state);
+    if (serializedState === this.lastSavedReadingState) {
+      return;
+    }
+    this.lastSavedReadingState = serializedState;
     this.plugin.updateReadingState(this.activeFilePath, state);
   }
 
@@ -1361,13 +1395,32 @@ export class WordView extends FileView {
   }
 
   private clearSearchHighlightsState(): void {
-    this.searchMatchEls = [];
+    setManagedHighlightRanges(
+      this.documentEl?.ownerDocument,
+      SEARCH_HIGHLIGHT_NAME,
+      this.searchHighlightOwnerId,
+      [],
+    );
+    setManagedHighlightRanges(
+      this.documentEl?.ownerDocument,
+      CURRENT_SEARCH_HIGHLIGHT_NAME,
+      this.searchHighlightOwnerId,
+      [],
+    );
+    for (const range of this.searchMatchRanges) {
+      range.detach();
+    }
+    this.searchMatchRanges = [];
     this.currentSearchIndex = -1;
   }
 
   private releaseDocumentState(): void {
     this.cancelSearchWork();
     this.buffer = null;
+    this.extractedPlainText = null;
+    this.extractedMarkdown = null;
+    this.textSearchIndex = null;
+    this.documentHeadings = [];
     this.renderedDocumentKey = null;
     this.pendingRenderKey = null;
     this.clearSearchHighlightsState();
@@ -1382,6 +1435,10 @@ export class WordView extends FileView {
     this.documentEl?.removeClass("is-long-document");
     this.outlineListEl?.empty();
     this.outlineItems = [];
+    this.documentHeadings = [];
+    this.textSearchIndex = null;
+    this.extractedPlainText = null;
+    this.extractedMarkdown = null;
     this.outlineRows.clear();
     this.activeOutlineId = null;
   }
@@ -1395,51 +1452,7 @@ export class WordView extends FileView {
       file.path,
       file.stat.mtime,
       file.stat.size,
-      this.fitWidth ? "fit" : "page",
     ].join(":");
-  }
-}
-
-async function clearSearchHighlights(
-  rootEl: HTMLElement,
-  shouldContinue: () => boolean,
-): Promise<void> {
-  const highlights = Array.from(
-    rootEl.querySelectorAll("span.word-reader-highlight"),
-  );
-
-  for (
-    let index = 0;
-    index < highlights.length;
-    index += SEARCH_MUTATION_CHUNK_SIZE
-  ) {
-    if (!shouldContinue()) {
-      return;
-    }
-
-    const parents = new Set<Node>();
-    for (const highlightEl of highlights.slice(
-      index,
-      index + SEARCH_MUTATION_CHUNK_SIZE,
-    )) {
-      const parentEl = highlightEl.parentNode;
-      if (!parentEl) {
-        continue;
-      }
-
-      while (highlightEl.firstChild) {
-        parentEl.insertBefore(highlightEl.firstChild, highlightEl);
-      }
-      parentEl.removeChild(highlightEl);
-      parents.add(parentEl);
-    }
-    for (const parentEl of parents) {
-      parentEl.normalize();
-    }
-
-    if (index + SEARCH_MUTATION_CHUNK_SIZE < highlights.length) {
-      await yieldToBrowser();
-    }
   }
 }
 
@@ -1462,15 +1475,6 @@ function formatFileSizeMb(sizeBytes: number): string {
   return (sizeBytes / 1024 / 1024).toFixed(1);
 }
 
-function prepareRenderedImages(rootEl: HTMLElement): number {
-  const imageEls = Array.from(rootEl.querySelectorAll("img"));
-  for (const imageEl of imageEls) {
-    imageEl.loading = "lazy";
-    imageEl.decoding = "async";
-  }
-  return imageEls.length;
-}
-
 function collectBlobUrls(rootEl: HTMLElement): Set<string> {
   const urls = new Set<string>();
   const blobUrlPattern = /blob:[^)'"\s]+/g;
@@ -1491,6 +1495,91 @@ function collectBlobUrls(rootEl: HTMLElement): Set<string> {
   }
 
   return urls;
+}
+
+interface RenderedDocumentAnalysis {
+  blobUrls: Set<string>;
+  headings: OutlineHeading[];
+  imageCount: number;
+  pageCount: number;
+  textSearchIndex: TextSearchIndex;
+}
+
+function analyzeRenderedDocument(
+  rootEl: HTMLElement,
+): RenderedDocumentAnalysis {
+  const ownerDocument = rootEl.ownerDocument;
+  const nodeFilter = ownerDocument.defaultView?.NodeFilter;
+  const showElement = nodeFilter?.SHOW_ELEMENT ?? 1;
+  const showText = nodeFilter?.SHOW_TEXT ?? 4;
+  const walker = ownerDocument.createTreeWalker(
+    rootEl,
+    showElement | showText,
+  );
+  const blobUrls = new Set<string>();
+  const headings: OutlineHeading[] = [];
+  const textNodes: Text[] = [];
+  let imageCount = 0;
+  let pageCount = 0;
+
+  analyzeRenderedElement(rootEl);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.nodeType === 1) {
+      analyzeRenderedElement(node as HTMLElement);
+    } else if (node.nodeType === 3) {
+      const textNode = node as Text;
+      if (!textNode.parentElement?.closest("style, script")) {
+        textNodes.push(textNode);
+      }
+    }
+  }
+
+  return {
+    blobUrls,
+    headings,
+    imageCount,
+    pageCount,
+    textSearchIndex: TextSearchIndex.fromTextNodes(textNodes),
+  };
+
+  function analyzeRenderedElement(element: HTMLElement): void {
+    for (const attribute of Array.from(element.attributes)) {
+      addBlobUrls(attribute.value, blobUrls);
+    }
+    if (element.tagName === "STYLE") {
+      addBlobUrls(element.textContent ?? "", blobUrls);
+    }
+    if (element.tagName === "IMG") {
+      const imageEl = element as HTMLImageElement;
+      imageEl.loading = "lazy";
+      imageEl.decoding = "async";
+      imageCount += 1;
+    }
+    if (element.matches(".docx-wrapper > section.docx")) {
+      pageCount += 1;
+    }
+    if (
+      element.matches(
+        "h1, h2, h3, h4, h5, h6, [class*='Heading'], [class*='heading']",
+      )
+    ) {
+      const text = normalizeWhitespace(element.textContent ?? "");
+      if (text) {
+        headings.push({
+          element,
+          level: getHeadingLevel(element),
+          text,
+        });
+      }
+    }
+  }
+}
+
+function addBlobUrls(value: string, urls: Set<string>): void {
+  for (const match of value.matchAll(/blob:[^)'"\s]+/g)) {
+    urls.add(match[0]);
+  }
 }
 
 function yieldToBrowser(): Promise<void> {
@@ -1539,137 +1628,10 @@ function logRenderPerformance(metrics: RenderPerformanceMetrics): void {
   });
 }
 
-async function highlightText(
-  rootEl: HTMLElement,
-  query: string,
-  shouldContinue: () => boolean,
-): Promise<HTMLElement[]> {
-  const normalizedQuery = query.toLowerCase();
-  const walker = activeDocument.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parentEl = node.parentElement;
-      if (
-        !parentEl ||
-        parentEl.closest("style, script, .word-reader-toolbar")
-      ) {
-        return NodeFilter.FILTER_REJECT;
-      }
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-
-  const textNodes: Text[] = [];
-  let scannedNodeCount = 0;
-  while (walker.nextNode()) {
-    const textNode = walker.currentNode as Text;
-    if (textNode.nodeValue?.toLowerCase().includes(normalizedQuery)) {
-      textNodes.push(textNode);
-    }
-    scannedNodeCount += 1;
-    if (scannedNodeCount % SEARCH_SCAN_CHUNK_SIZE === 0) {
-      await yieldToBrowser();
-      if (!shouldContinue()) {
-        return [];
-      }
-    }
-  }
-
-  const matches: HTMLElement[] = [];
-  const escapedQuery = escapeRegExp(query);
-  const regex = new RegExp(escapedQuery, "gi");
-
-  for (
-    let index = 0;
-    index < textNodes.length;
-    index += SEARCH_MUTATION_CHUNK_SIZE
-  ) {
-    if (!shouldContinue()) {
-      return [];
-    }
-
-    for (const textNode of textNodes.slice(
-      index,
-      index + SEARCH_MUTATION_CHUNK_SIZE,
-    )) {
-      if (!textNode.isConnected || !rootEl.contains(textNode)) {
-        continue;
-      }
-
-      const text = textNode.nodeValue ?? "";
-      const fragment = activeDocument.createDocumentFragment();
-      let lastIndex = 0;
-      let match: RegExpExecArray | null;
-      regex.lastIndex = 0;
-
-      while ((match = regex.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-          fragment.appendChild(
-            activeDocument.createTextNode(text.slice(lastIndex, match.index)),
-          );
-        }
-
-        // SECURITY: Only <span> elements are created for text highlighting.
-        // No script execution or external resource loading occurs.
-        const markEl = activeDocument.createElement("span");
-        markEl.className = "word-reader-highlight";
-        markEl.textContent = match[0];
-        fragment.appendChild(markEl);
-        matches.push(markEl);
-
-        lastIndex = match.index + match[0].length;
-      }
-
-      if (lastIndex < text.length) {
-        fragment.appendChild(
-          activeDocument.createTextNode(text.slice(lastIndex)),
-        );
-      }
-
-      textNode.replaceWith(fragment);
-    }
-
-    if (index + SEARCH_MUTATION_CHUNK_SIZE < textNodes.length) {
-      await yieldToBrowser();
-    }
-  }
-
-  return matches;
-}
-
 interface OutlineHeading {
   element: HTMLElement;
   level: number;
   text: string;
-}
-
-function getDocumentHeadings(rootEl: HTMLElement): OutlineHeading[] {
-  const headingEls = Array.from(
-    rootEl.querySelectorAll<HTMLElement>(
-      "h1, h2, h3, h4, h5, h6, [class*='Heading'], [class*='heading']",
-    ),
-  );
-  const seen = new Set<HTMLElement>();
-  const headings: OutlineHeading[] = [];
-
-  for (const headingEl of headingEls) {
-    if (seen.has(headingEl)) {
-      continue;
-    }
-    seen.add(headingEl);
-
-    const text = normalizeWhitespace(headingEl.textContent ?? "");
-    if (!text) {
-      continue;
-    }
-
-    headings.push({
-      element: headingEl,
-      level: getHeadingLevel(headingEl),
-      text,
-    });
-  }
-
-  return headings;
 }
 
 function getHeadingLevel(element: HTMLElement): number {
@@ -1778,8 +1740,84 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function getRenderedPlainText(rootEl: HTMLElement): string {
+  return (rootEl.innerText || rootEl.textContent || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+interface HighlightRegistryLike {
+  delete(name: string): boolean;
+  set(name: string, highlight: object): void;
+}
+
+type HighlightConstructor = new (...ranges: Range[]) => object;
+
+interface ManagedHighlightState {
+  rangesByName: Map<string, Map<string, readonly Range[]>>;
+}
+
+const managedHighlightStates = new WeakMap<Document, ManagedHighlightState>();
+
+function getHighlightApi(
+  ownerDocument: Document | undefined,
+): {
+  registry: HighlightRegistryLike;
+  HighlightConstructor: HighlightConstructor;
+} | null {
+  const view = ownerDocument?.defaultView as (Window & {
+    CSS?: { highlights?: HighlightRegistryLike };
+    Highlight?: HighlightConstructor;
+  }) | null;
+  const registry = view?.CSS?.highlights;
+  const HighlightConstructor = view?.Highlight;
+  return registry && HighlightConstructor
+    ? { registry, HighlightConstructor }
+    : null;
+}
+
+function setManagedHighlightRanges(
+  ownerDocument: Document | undefined,
+  highlightName: string,
+  ownerId: string,
+  ranges: readonly Range[],
+): void {
+  if (!ownerDocument) {
+    return;
+  }
+  const api = getHighlightApi(ownerDocument);
+  if (!api) {
+    return;
+  }
+  let state = managedHighlightStates.get(ownerDocument);
+  if (!state) {
+    state = { rangesByName: new Map() };
+    managedHighlightStates.set(ownerDocument, state);
+  }
+  let rangesByOwner = state.rangesByName.get(highlightName);
+  if (!rangesByOwner) {
+    rangesByOwner = new Map();
+    state.rangesByName.set(highlightName, rangesByOwner);
+  }
+  if (ranges.length === 0) {
+    rangesByOwner.delete(ownerId);
+  } else {
+    rangesByOwner.set(ownerId, ranges);
+  }
+
+  const combinedRanges = Array.from(rangesByOwner.values()).flat();
+  api.registry.delete(highlightName);
+  if (combinedRanges.length > 0) {
+    api.registry.set(
+      highlightName,
+      new api.HighlightConstructor(...combinedRanges),
+    );
+  } else {
+    state.rangesByName.delete(highlightName);
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {

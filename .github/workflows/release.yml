@@ -39,6 +39,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Performance budget
+        run: npm run performance:check
+
       - name: Security scan
         run: npm run security:scan
 

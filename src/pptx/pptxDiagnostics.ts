@@ -26,6 +26,7 @@ export interface PptxDiagnosticReport {
     zipFileCount: number;
     zipCompressedBytes: number;
     zipExpandedBytes: number;
+    cache: ReturnType<PptxPackage["getCacheDiagnostics"]>;
   };
   render: PptxRenderDiagnostics;
   thumbnails: PptxThumbnailDiagnostics;
@@ -54,6 +55,7 @@ export function createPptxDiagnosticReport(
       zipFileCount: presentation.zipSummary.fileCount,
       zipCompressedBytes: presentation.zipSummary.totalCompressedBytes,
       zipExpandedBytes: presentation.zipSummary.totalUncompressedBytes,
+      cache: presentation.getCacheDiagnostics(),
     },
     render,
     thumbnails,

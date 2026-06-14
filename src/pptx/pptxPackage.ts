@@ -17,11 +17,17 @@ import {
   extractSlideMetadata,
   type PptxSlideMetadata,
 } from "./pptxMetadata";
+import { LruCache } from "../reader/lruCache";
 
 const DEFAULT_SLIDE_WIDTH = 12_192_000;
 const DEFAULT_SLIDE_HEIGHT = 6_858_000;
 const OFFICE_RELATIONSHIP_NAMESPACE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const XML_CACHE_CAPACITY = 48;
+const RELATIONSHIP_CACHE_CAPACITY = 64;
+const SLIDE_CONTEXT_CACHE_CAPACITY = 12;
+const BINARY_CACHE_CAPACITY = 24;
+const MAX_METADATA_CONCURRENCY = 4;
 
 export interface PptxRelationship {
   id: string;
@@ -44,6 +50,26 @@ export interface PptxSlideContext {
   theme: Document | null;
 }
 
+export interface PptxMetadataIndexOptions {
+  concurrency?: number;
+  priorityIndex?: number;
+  isCancelled?: () => boolean;
+  onMetadata?: (metadata: PptxSlideMetadata) => void;
+}
+
+export interface PptxCacheDiagnostics {
+  xmlEntries: number;
+  relationshipEntries: number;
+  slideContextEntries: number;
+  binaryEntries: number;
+  limits: {
+    xmlEntries: number;
+    relationshipEntries: number;
+    slideContextEntries: number;
+    binaryEntries: number;
+  };
+}
+
 export class PptxPackageError extends Error {
   constructor(
     readonly kind: "damaged" | "unsupported",
@@ -54,15 +80,31 @@ export class PptxPackageError extends Error {
   }
 }
 
+export class PptxMetadataCancelledError extends Error {
+  constructor() {
+    super("PowerPoint metadata indexing was cancelled.");
+    this.name = "PptxMetadataCancelledError";
+  }
+}
+
 export class PptxPackage {
   readonly slideWidth: number;
   readonly slideHeight: number;
   readonly slidePaths: string[];
   readonly zipSummary: ZipSafetySummary;
 
-  private readonly xmlCache = new Map<string, Promise<Document>>();
+  private readonly xmlCache =
+    new LruCache<string, Promise<Document>>(XML_CACHE_CAPACITY);
   private readonly relationshipCache =
-    new Map<string, Promise<Map<string, PptxRelationship>>>();
+    new LruCache<string, Promise<Map<string, PptxRelationship>>>(
+      RELATIONSHIP_CACHE_CAPACITY,
+    );
+  private readonly slideContextCache =
+    new LruCache<number, Promise<PptxSlideContext>>(
+      SLIDE_CONTEXT_CACHE_CAPACITY,
+    );
+  private readonly binaryCache =
+    new LruCache<string, Promise<Uint8Array | null>>(BINARY_CACHE_CAPACITY);
   private readonly metadataCache =
     new Map<number, Promise<PptxSlideMetadata>>();
 
@@ -170,6 +212,13 @@ export class PptxPackage {
   }
 
   async getSlideContext(index: number): Promise<PptxSlideContext> {
+    return this.slideContextCache.getOrCreate(
+      index,
+      () => this.readSlideContext(index),
+    );
+  }
+
+  private async readSlideContext(index: number): Promise<PptxSlideContext> {
     const slidePath = this.slidePaths[index];
     if (!slidePath) {
       throw new RangeError(`Slide index ${index} is outside the presentation.`);
@@ -238,14 +287,72 @@ export class PptxPackage {
   }
 
   async getAllSlideMetadata(): Promise<PptxSlideMetadata[]> {
-    return Promise.all(
-      this.slidePaths.map((_, index) => this.getSlideMetadata(index)),
+    return this.indexSlideMetadata();
+  }
+
+  async indexSlideMetadata(
+    options: PptxMetadataIndexOptions = {},
+  ): Promise<PptxSlideMetadata[]> {
+    const isCancelled = options.isCancelled ?? (() => false);
+    const concurrency = Math.max(
+      1,
+      Math.min(
+        MAX_METADATA_CONCURRENCY,
+        Math.floor(options.concurrency ?? MAX_METADATA_CONCURRENCY),
+      ),
     );
+    const order = createPriorityOrder(
+      this.slideCount,
+      options.priorityIndex,
+    );
+    const results = new Array<PptxSlideMetadata>(this.slideCount);
+    let cursor = 0;
+
+    const worker = async (): Promise<void> => {
+      while (cursor < order.length) {
+        if (isCancelled()) {
+          throw new PptxMetadataCancelledError();
+        }
+        const index = order[cursor];
+        cursor += 1;
+        const metadata = await this.getSlideMetadata(index);
+        if (isCancelled()) {
+          throw new PptxMetadataCancelledError();
+        }
+        results[index] = metadata;
+        options.onMetadata?.(metadata);
+      }
+    };
+
+    await Promise.all(
+      Array.from(
+        { length: Math.min(concurrency, order.length) },
+        () => worker(),
+      ),
+    );
+    return results;
   }
 
   async getBinary(path: string): Promise<Uint8Array | null> {
-    const entry = this.zip.file(path);
-    return entry ? entry.async("uint8array") : null;
+    return this.binaryCache.getOrCreate(path, () => {
+      const entry = this.zip.file(path);
+      return entry ? entry.async("uint8array") : Promise.resolve(null);
+    });
+  }
+
+  getCacheDiagnostics(): PptxCacheDiagnostics {
+    return {
+      xmlEntries: this.xmlCache.size,
+      relationshipEntries: this.relationshipCache.size,
+      slideContextEntries: this.slideContextCache.size,
+      binaryEntries: this.binaryCache.size,
+      limits: {
+        xmlEntries: this.xmlCache.capacity,
+        relationshipEntries: this.relationshipCache.capacity,
+        slideContextEntries: this.slideContextCache.capacity,
+        binaryEntries: this.binaryCache.capacity,
+      },
+    };
   }
 
   getImageMimeType(path: string): string | null {
@@ -264,14 +371,11 @@ export class PptxPackage {
   }
 
   private getXml(path: string): Promise<Document> {
-    let pending = this.xmlCache.get(path);
-    if (!pending) {
-      pending = readZipText(this.zip, path).then((xml) =>
+    return this.xmlCache.getOrCreate(path, () =>
+      readZipText(this.zip, path).then((xml) =>
         parsePackageXml(xml, path),
-      );
-      this.xmlCache.set(path, pending);
-    }
-    return pending;
+      ),
+    );
   }
 
   private async getOptionalXml(path: string): Promise<Document | null> {
@@ -281,12 +385,10 @@ export class PptxPackage {
   private getRelationships(
     path: string,
   ): Promise<Map<string, PptxRelationship>> {
-    let pending = this.relationshipCache.get(path);
-    if (!pending) {
-      pending = readRelationships(this.zip, path);
-      this.relationshipCache.set(path, pending);
-    }
-    return pending;
+    return this.relationshipCache.getOrCreate(
+      path,
+      () => readRelationships(this.zip, path),
+    );
   }
 
   private async readSlideMetadata(index: number): Promise<PptxSlideMetadata> {
@@ -309,6 +411,24 @@ export class PptxPackage {
       "",
     );
   }
+}
+
+function createPriorityOrder(
+  slideCount: number,
+  priorityIndex?: number,
+): number[] {
+  const order = Array.from({ length: slideCount }, (_, index) => index);
+  if (
+    priorityIndex === undefined ||
+    priorityIndex < 0 ||
+    priorityIndex >= slideCount
+  ) {
+    return order;
+  }
+  return [
+    priorityIndex,
+    ...order.filter((index) => index !== priorityIndex),
+  ];
 }
 
 export function resolvePackagePath(basePath: string, target: string): string {

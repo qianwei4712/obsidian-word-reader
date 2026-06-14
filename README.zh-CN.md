@@ -7,6 +7,8 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
 
 插件不是 Office 编辑器，而是提供完全本地的阅读流程，同时保持原始文件不变。
 
+需要 Obsidian Desktop 1.12.7 或更新版本。
+
 ## 功能
 
 - 在 Obsidian 标签页中打开 `.docx` 文件。
@@ -148,17 +150,25 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
 - 渲染流程使用取消 token，过期渲染结果会被丢弃。
 - PPTX 文件读取和幻灯片渲染使用独立的取消代次，快速切换文件或页码时
   不会提交过期画面。
-- 演示文稿元数据和演讲者备注只在本地建立索引，用于导航、搜索、文本复制和摘要笔记。
-- 演示文稿缩略图只为可见及邻近的导航条目挂载，并限制同时挂载的预览数量。
+- PPTX 当前页会在全量元数据索引完成前开始渲染；后台元数据解析可取消，
+  且最多使用四个并发 worker。
+- 演示文稿搜索复用预计算的规范化索引；导航列表最多同时挂载 60 行，
+  缩略图渲染最多使用两个低优先级 worker。
 - 离开可视区域的缩略图会被卸载并释放生成的图片资源；过期的幻灯片和缩略图
   渲染会被协作取消。
+- PPTX 形状、文本和表格渲染会在有界时间片之间主动让出主线程；XML、关系、
+  幻灯片上下文和二进制缓存均有固定容量上限。
 - 重新加载、切换或关闭演示文稿时也会释放生成的演示文稿资源。
 - Word 内容会先渲染到临时缓冲区，再替换可见预览。
 - 长文档会分片提交渲染页面并生成导航，让界面可以在批次之间更新。
 - 长文档预览会推迟绘制尚未接近可视区域的页面。
 - 内嵌图片使用懒加载、异步解码和可回收 Blob URL，不再长期保存 base64 数据 URL。
 - 插件会跟踪当前已渲染的文件状态，避免不必要的重复渲染。
-- 搜索高亮在输入时会进行防抖和可取消分片处理，减少大文档中的重复计算。
+- DOCX 渲染后处理会在一次遍历中收集图片、页数、大纲、Blob URL 和可搜索文本。
+- DOCX 每次渲染只建立一次可复用文本索引，并使用 CSS Highlight，不再改写
+  文档 DOM；阅读状态按动画帧合并，未变化状态不会重复写入。
+- 适配宽度只切换 CSS 状态，不会重新渲染文档。
+- 生产构建强制执行 `dist/main.js` 不超过 500 KiB 的体积预算。
 - 阅读状态使用最多保留 50 个文件的 LRU 存储，避免插件持久化数据无限增长。
 - 开发构建会在开发者控制台记录 Word 文件读取、渲染、DOM 提交、大纲和预览
   总耗时，以及 PPTX 渲染耗时、对象数量、资源和字体指标。
@@ -284,11 +294,11 @@ styles.css
 推送不带 `v` 前缀的版本 tag 后，GitHub Actions 会自动创建 release：
 
 ```bash
-git tag 2.2.0
-git push origin 2.2.0
+git tag 2.3.0
+git push origin 2.3.0
 ```
 
-workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，然后构建插件、生成 `release/obsidian-word-reader-2.2.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.3.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
 
 ## 开发
 

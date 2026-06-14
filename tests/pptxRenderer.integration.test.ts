@@ -86,6 +86,8 @@ void test("renderPptxSlide renders theme shapes, text, image, and table", async 
   assert.equal(rendered.resources.size, 1);
   assert.deepEqual(rendered.diagnostics, {
     durationMs: rendered.diagnostics.durationMs,
+    yieldCount: rendered.diagnostics.yieldCount,
+    maxWorkSliceMs: rendered.diagnostics.maxWorkSliceMs,
     layerCount: 3,
     shapeCount: 4,
     textShapeCount: 1,
@@ -98,6 +100,35 @@ void test("renderPptxSlide renders theme shapes, text, image, and table", async 
     fontFamilies: [],
   });
   assert.ok(rendered.diagnostics.durationMs >= 0);
+  for (const resource of rendered.resources) {
+    URL.revokeObjectURL(resource);
+  }
+});
+
+void test("renderPptxSlide yields between bounded work slices", async () => {
+  const pptx = await PptxPackage.load(await createMinimalPptx());
+  const context = await pptx.getSlideContext(0);
+  let now = 0;
+  let yields = 0;
+  const rendered = await renderPptxSlide(
+    pptx,
+    context,
+    new MockDocument() as unknown as Document,
+    {
+      now: () => {
+        now += 3;
+        return now;
+      },
+      timeSliceMs: 8,
+      yieldControl: async () => {
+        yields += 1;
+      },
+    },
+  );
+
+  assert.ok(yields > 0);
+  assert.equal(rendered.diagnostics.yieldCount, yields);
+  assert.ok(rendered.diagnostics.maxWorkSliceMs >= 8);
   for (const resource of rendered.resources) {
     URL.revokeObjectURL(resource);
   }

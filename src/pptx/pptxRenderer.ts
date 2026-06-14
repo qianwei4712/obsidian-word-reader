@@ -33,6 +33,8 @@ export interface RenderedPptxSlide {
 
 export interface PptxRenderDiagnostics {
   durationMs: number;
+  yieldCount: number;
+  maxWorkSliceMs: number;
   layerCount: number;
   shapeCount: number;
   textShapeCount: number;
@@ -48,6 +50,8 @@ export interface PptxRenderDiagnostics {
 export interface PptxRenderOptions {
   isCancelled?: () => boolean;
   now?: () => number;
+  timeSliceMs?: number;
+  yieldControl?: () => Promise<void>;
 }
 
 export class PptxRenderCancelledError extends Error {
@@ -96,9 +100,15 @@ interface RenderContext {
   placeholderFallbacks: Map<string, Element>;
   diagnostics: MutablePptxRenderDiagnostics;
   isCancelled: () => boolean;
+  now: () => number;
+  yieldControl: () => Promise<void>;
+  timeSliceMs: number;
+  lastYieldAt: number;
 }
 
 interface MutablePptxRenderDiagnostics {
+  yieldCount: number;
+  maxWorkSliceMs: number;
   layerCount: number;
   shapeCount: number;
   textShapeCount: number;
@@ -146,6 +156,8 @@ export async function renderPptxSlide(
   stageEl.style.height = `${pixelHeight}px`;
   const resources = new Set<string>();
   const diagnostics: MutablePptxRenderDiagnostics = {
+    yieldCount: 0,
+    maxWorkSliceMs: 0,
     layerCount: 0,
     shapeCount: 0,
     textShapeCount: 0,
@@ -170,6 +182,11 @@ export async function renderPptxSlide(
     placeholderFallbacks,
     diagnostics,
     isCancelled: options.isCancelled ?? (() => false),
+    now,
+    yieldControl:
+      options.yieldControl ?? createRenderYield(ownerDocument),
+    timeSliceMs: Math.max(1, options.timeSliceMs ?? 8),
+    lastYieldAt: startedAt,
   };
 
   try {
@@ -220,6 +237,7 @@ export async function renderPptxSlide(
       false,
     );
     ensureRenderActive(context);
+    recordWorkSlice(context);
 
     return {
       element: stageEl,
@@ -228,6 +246,8 @@ export async function renderPptxSlide(
       height: pixelHeight,
       diagnostics: {
         durationMs: Math.max(0, now() - startedAt),
+        yieldCount: diagnostics.yieldCount,
+        maxWorkSliceMs: diagnostics.maxWorkSliceMs,
         layerCount: diagnostics.layerCount,
         shapeCount: diagnostics.shapeCount,
         textShapeCount: diagnostics.textShapeCount,
@@ -266,6 +286,7 @@ async function renderLayer(
   context.diagnostics.layerCount += 1;
   for (const shape of childElements(shapeTree)) {
     ensureRenderActive(context);
+    await yieldIfNeeded(context);
     if (
       !["sp", "pic", "graphicFrame", "cxnSp", "grpSp"].includes(
         localName(shape),
@@ -301,6 +322,7 @@ async function renderShape(
       return;
     }
     for (const child of childElements(shape)) {
+      await yieldIfNeeded(context);
       if (
         ["sp", "pic", "graphicFrame", "cxnSp", "grpSp"].includes(
           localName(child),
@@ -332,13 +354,13 @@ async function renderShape(
       await renderPicture(wrapperEl, shape, layer, context);
       break;
     case "graphicFrame":
-      renderGraphicFrame(wrapperEl, shape, context);
+      await renderGraphicFrame(wrapperEl, shape, context);
       break;
     case "cxnSp":
     case "sp":
     default:
       renderShapeGeometry(wrapperEl, shape, fallbackShape, context);
-      renderShapeText(wrapperEl, shape, fallbackShape, context);
+      await renderShapeText(wrapperEl, shape, fallbackShape, context);
       break;
   }
 }
@@ -388,12 +410,12 @@ function renderShapeGeometry(
   wrapperEl.appendChild(svgEl);
 }
 
-function renderShapeText(
+async function renderShapeText(
   wrapperEl: HTMLElement,
   shape: Element,
   fallbackShape: Element | null,
   context: RenderContext,
-): void {
+): Promise<void> {
   const textBody = firstChildNamed(shape, "txBody");
   if (!textBody || descendantsNamed(textBody, "t").length === 0) {
     return;
@@ -409,6 +431,7 @@ function renderShapeText(
   textEl.style.padding = `${emuToPixels(numberAttribute(bodyProperties, "tIns", 45_720), context)}px ${emuToPixels(numberAttribute(bodyProperties, "rIns", 91_440), context)}px ${emuToPixels(numberAttribute(bodyProperties, "bIns", 45_720), context)}px ${emuToPixels(numberAttribute(bodyProperties, "lIns", 91_440), context)}px`;
 
   for (const paragraph of childrenNamed(textBody, "p")) {
+    await yieldIfNeeded(context);
     const paragraphEl = context.ownerDocument.createElement("div");
     paragraphEl.className = "pptx-reader-paragraph";
     const paragraphProperties = firstChildNamed(paragraph, "pPr");
@@ -434,6 +457,7 @@ function renderShapeText(
     }
 
     for (const run of childElements(paragraph)) {
+      await yieldIfNeeded(context);
       const runName = localName(run);
       if (runName === "br") {
         paragraphEl.appendChild(context.ownerDocument.createElement("br"));
@@ -519,11 +543,11 @@ async function renderPicture(
   wrapperEl.appendChild(imageEl);
 }
 
-function renderGraphicFrame(
+async function renderGraphicFrame(
   wrapperEl: HTMLElement,
   shape: Element,
   context: RenderContext,
-): void {
+): Promise<void> {
   const table = firstDescendantNamed(shape, "tbl");
   if (!table) {
     const objectType = getGraphicFrameObjectType(shape);
@@ -551,6 +575,7 @@ function renderGraphicFrame(
   if (totalGridWidth > 0) {
     const columnGroupEl = context.ownerDocument.createElement("colgroup");
     for (const width of gridColumns) {
+      await yieldIfNeeded(context);
       const columnEl = context.ownerDocument.createElement("col");
       columnEl.style.width = `${(width / totalGridWidth) * 100}%`;
       columnGroupEl.appendChild(columnEl);
@@ -559,8 +584,10 @@ function renderGraphicFrame(
   }
 
   for (const row of childrenNamed(table, "tr")) {
+    await yieldIfNeeded(context);
     const rowEl = context.ownerDocument.createElement("tr");
     for (const cell of childrenNamed(row, "tc")) {
+      await yieldIfNeeded(context);
       const cellEl = context.ownerDocument.createElement("td");
       const gridSpan = numberAttribute(cell, "gridSpan", 1);
       const rowSpan = numberAttribute(cell, "rowSpan", 1);
@@ -577,7 +604,7 @@ function renderGraphicFrame(
       }
       const textBody = firstChildNamed(cell, "txBody");
       if (textBody) {
-        renderCellText(cellEl, textBody, context);
+        await renderCellText(cellEl, textBody, context);
       }
       rowEl.appendChild(cellEl);
     }
@@ -586,14 +613,16 @@ function renderGraphicFrame(
   wrapperEl.appendChild(tableEl);
 }
 
-function renderCellText(
+async function renderCellText(
   cellEl: HTMLTableCellElement,
   textBody: Element,
   context: RenderContext,
-): void {
+): Promise<void> {
   for (const paragraph of childrenNamed(textBody, "p")) {
+    await yieldIfNeeded(context);
     const paragraphEl = context.ownerDocument.createElement("div");
     for (const run of childElements(paragraph)) {
+      await yieldIfNeeded(context);
       if (!["r", "fld"].includes(localName(run))) {
         continue;
       }
@@ -609,6 +638,53 @@ function renderCellText(
     }
     cellEl.appendChild(paragraphEl);
   }
+}
+
+async function yieldIfNeeded(context: RenderContext): Promise<void> {
+  ensureRenderActive(context);
+  const elapsed = context.now() - context.lastYieldAt;
+  context.diagnostics.maxWorkSliceMs = Math.max(
+    context.diagnostics.maxWorkSliceMs,
+    elapsed,
+  );
+  if (elapsed < context.timeSliceMs) {
+    return;
+  }
+  await context.yieldControl();
+  context.diagnostics.yieldCount += 1;
+  context.lastYieldAt = context.now();
+  ensureRenderActive(context);
+}
+
+function recordWorkSlice(context: RenderContext): void {
+  context.diagnostics.maxWorkSliceMs = Math.max(
+    context.diagnostics.maxWorkSliceMs,
+    context.now() - context.lastYieldAt,
+  );
+}
+
+function createRenderYield(ownerDocument: Document): () => Promise<void> {
+  return async () => {
+    const renderWindow = ownerDocument.defaultView;
+    if (!renderWindow) {
+      await Promise.resolve();
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      let completed = false;
+      const finish = (): void => {
+        if (completed) {
+          return;
+        }
+        completed = true;
+        renderWindow.clearTimeout(timeoutId);
+        renderWindow.cancelAnimationFrame(frameId);
+        resolve();
+      };
+      const timeoutId = renderWindow.setTimeout(finish, 50);
+      const frameId = renderWindow.requestAnimationFrame(finish);
+    });
+  };
 }
 
 function renderUnsupportedPlaceholder(

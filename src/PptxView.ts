@@ -21,18 +21,16 @@ import {
 } from "./pptx/pptxI18n";
 import {
   formatSlideText,
-  searchPptxSlides,
+  PptxSearchIndex,
   type PptxSlideMetadata,
 } from "./pptx/pptxMetadata";
+import { PptxNavigationWindow } from "./pptx/pptxNavigationWindow";
 import {
   PptxRenderCancelledError,
   renderPptxSlide,
   type PptxRenderDiagnostics,
 } from "./pptx/pptxRenderer";
-import {
-  PptxThumbnailWindow,
-  type PptxThumbnailWindowChange,
-} from "./pptx/pptxThumbnailWindow";
+import { PptxTaskQueue } from "./pptx/pptxTaskQueue";
 import { ReaderLifecycle } from "./reader/lifecycle";
 import type { ReaderViewState } from "./reader/readingState";
 import {
@@ -54,6 +52,7 @@ const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.05;
 const FIT_PADDING = 48;
 const THUMBNAIL_WIDTH = 140;
+const PPTX_SEARCH_DEBOUNCE_MS = 150;
 
 interface RenderOptions {
   restoreScroll?: boolean;
@@ -61,6 +60,7 @@ interface RenderOptions {
 
 interface PptxNavigationEntry {
   element: HTMLElement;
+  titleEl: HTMLElement;
   snippetEl: HTMLElement;
   matchEl: HTMLElement;
   thumbnailEl: HTMLElement;
@@ -79,6 +79,9 @@ export class PptxView extends FileView {
   private navigationEl: HTMLElement | null = null;
   private slideListEl: HTMLElement | null = null;
   private navigationEmptyEl: HTMLElement | null = null;
+  private navigationTopSpacerEl: HTMLElement | null = null;
+  private navigationRowsEl: HTMLElement | null = null;
+  private navigationBottomSpacerEl: HTMLElement | null = null;
   private searchInputEl: HTMLInputElement | null = null;
   private searchCountEl: HTMLElement | null = null;
   private viewportEl: HTMLElement | null = null;
@@ -96,11 +99,22 @@ export class PptxView extends FileView {
   private navigationButtonEl: HTMLButtonElement | null = null;
   private notesButtonEl: HTMLButtonElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private thumbnailObserver: IntersectionObserver | null = null;
   private presentation: PptxPackage | null = null;
   private slideMetadata: PptxSlideMetadata[] = [];
+  private readonly loadedMetadataIndices = new Set<number>();
+  private metadataPromise: Promise<PptxSlideMetadata[]> | null = null;
+  private readonly searchIndex = new PptxSearchIndex();
+  private filteredSlideIndices: number[] = [];
+  private navigationResults = new Map<
+    number,
+    ReturnType<PptxSearchIndex["search"]>[number]
+  >();
   private readonly navigationEntries = new Map<number, PptxNavigationEntry>();
-  private readonly thumbnailWindow = new PptxThumbnailWindow(0);
+  private readonly navigationWindow = new PptxNavigationWindow();
+  private readonly thumbnailQueue = new PptxTaskQueue(2);
+  private navigationRenderFrameId: number | null = null;
+  private searchTimer: number | null = null;
+  private metadataUiFrameId: number | null = null;
   private currentSlideIndex = 0;
   private activeFilePath: string | null = null;
   private pendingScrollPosition: { left: number; top: number } | null = null;
@@ -228,7 +242,7 @@ export class PptxView extends FileView {
   }
 
   async copyText(): Promise<void> {
-    const metadata = this.slideMetadata[this.currentSlideIndex];
+    const metadata = await this.getCurrentSlideMetadata();
     if (!metadata) {
       return;
     }
@@ -282,13 +296,18 @@ export class PptxView extends FileView {
   }
 
   async createSummaryNote(): Promise<void> {
-    if (!this.file || this.slideMetadata.length === 0) {
+    const presentation = this.presentation;
+    if (!this.file || !presentation) {
+      return;
+    }
+    const metadata = await this.getCompleteMetadata(presentation);
+    if (metadata.length === 0 || this.presentation !== presentation) {
       return;
     }
     await createNoteFromPptx(
       this.app,
       this.file,
-      this.slideMetadata,
+      metadata,
       this.currentSlideIndex,
       this.text,
     );
@@ -330,7 +349,7 @@ export class PptxView extends FileView {
     this.saveReadingState();
     this.slideLifecycle.cancel();
     this.thumbnailLifecycle.cancel();
-    this.disconnectThumbnailObserver();
+    this.thumbnailQueue.clear();
     this.releaseThumbnailResources();
     this.buildLayout();
     if (file && this.presentation) {
@@ -338,7 +357,7 @@ export class PptxView extends FileView {
       this.buildNavigationList();
       this.updateNotes();
       void this.renderCurrentSlide({ restoreScroll: true });
-      this.startThumbnailRendering(this.presentation);
+      this.refreshThumbnailQueue();
     }
   }
 
@@ -509,13 +528,13 @@ export class PptxView extends FileView {
     this.searchInputEl.value = this.searchQuery;
     this.searchInputEl.addEventListener("input", () => {
       this.searchQuery = this.searchInputEl?.value ?? "";
-      this.applyNavigationSearch();
+      this.scheduleNavigationSearch();
     });
     this.searchInputEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && this.searchQuery.trim()) {
-        const firstResult = searchPptxSlides(
-          this.slideMetadata,
+        const firstResult = this.searchIndex.search(
           this.searchQuery,
+          this.allSlideIndices,
         )[0];
         if (firstResult) {
           event.preventDefault();
@@ -528,6 +547,18 @@ export class PptxView extends FileView {
     });
     this.slideListEl = this.navigationEl.createDiv({
       cls: "pptx-reader-slide-list",
+    });
+    this.slideListEl.addEventListener("scroll", () => {
+      this.scheduleNavigationWindowRender();
+    });
+    this.navigationTopSpacerEl = this.slideListEl.createDiv({
+      cls: "pptx-reader-navigation-spacer",
+    });
+    this.navigationRowsEl = this.slideListEl.createDiv({
+      cls: "pptx-reader-navigation-rows",
+    });
+    this.navigationBottomSpacerEl = this.slideListEl.createDiv({
+      cls: "pptx-reader-navigation-spacer",
     });
     this.navigationEmptyEl = this.navigationEl.createDiv({
       cls: "pptx-reader-navigation-empty",
@@ -628,26 +659,47 @@ export class PptxView extends FileView {
         return;
       }
       this.presentation = presentation;
-      this.setStatus(this.text.status.indexing(file.name), false, true);
-      const metadata = await presentation.getAllSlideMetadata();
-      if (
-        !this.loadLifecycle.isCurrent(token) ||
-        this.presentation !== presentation
-      ) {
-        return;
-      }
-      this.slideMetadata = metadata;
       this.currentSlideIndex = clamp(
         this.currentSlideIndex,
         0,
         presentation.slideCount - 1,
       );
+      this.slideMetadata = this.allSlideIndices.map((index) =>
+        createEmptySlideMetadata(index),
+      );
+      this.loadedMetadataIndices.clear();
+      this.searchIndex.clear();
       this.thumbnailLifecycle.begin();
       this.buildNavigationList();
       this.updateNotes();
       this.updateNavigationControls();
+      this.metadataPromise = presentation.indexSlideMetadata({
+        concurrency: 4,
+        priorityIndex: this.currentSlideIndex,
+        isCancelled: () =>
+          !this.loadLifecycle.isCurrent(token) ||
+          this.presentation !== presentation,
+        onMetadata: (metadata) => {
+          this.slideMetadata[metadata.index] = metadata;
+          this.loadedMetadataIndices.add(metadata.index);
+          this.searchIndex.set(metadata);
+          this.scheduleMetadataUiRefresh();
+        },
+      });
+      void this.metadataPromise.catch((error: unknown) => {
+        if (
+          this.loadLifecycle.isCurrent(token) &&
+          this.presentation === presentation &&
+          error instanceof Error &&
+          error.name !== "PptxMetadataCancelledError" &&
+          typeof __DEV__ !== "undefined" &&
+          __DEV__
+        ) {
+          console.debug("[Office Reader] PPTX metadata indexing stopped", error);
+        }
+      });
       await this.renderCurrentSlide({ restoreScroll: true });
-      this.startThumbnailRendering(presentation);
+      this.refreshThumbnailQueue();
     } catch (error) {
       if (!this.loadLifecycle.isCurrent(token)) {
         return;
@@ -672,10 +724,8 @@ export class PptxView extends FileView {
     this.currentSlideIndex = nextIndex;
     this.pendingScrollPosition = { left: 0, top: 0 };
     this.updateNavigationControls();
-    this.updateActiveNavigationEntry();
-    this.updateNotes();
-    this.refreshThumbnailWindow();
     this.saveReadingState();
+    void this.loadMetadataForSlide(nextIndex);
     await this.renderCurrentSlide({ restoreScroll: true });
   }
 
@@ -690,6 +740,7 @@ export class PptxView extends FileView {
 
     const token = this.slideLifecycle.begin();
     const index = this.currentSlideIndex;
+    this.thumbnailQueue.setPaused(true, true);
     this.clearCanvas();
     this.setStatus(
       this.text.status.rendering(index + 1, presentation.slideCount),
@@ -765,108 +816,51 @@ export class PptxView extends FileView {
           URL.revokeObjectURL(resource);
         });
       }
+      if (
+        this.slideLifecycle.isCurrent(token) &&
+        this.presentation === presentation
+      ) {
+        this.thumbnailQueue.setPaused(false);
+        this.refreshThumbnailQueue();
+      }
     }
   }
 
   private buildNavigationList(): void {
-    this.disconnectThumbnailObserver();
     this.releaseThumbnailResources();
-    this.slideListEl?.empty();
     this.navigationEntries.clear();
-    this.thumbnailWindow.reset();
-    this.thumbnailWindow.setSlideCount(this.slideMetadata.length);
-    if (!this.slideListEl) {
+    this.navigationRowsEl?.empty();
+    this.filteredSlideIndices = this.allSlideIndices;
+    if (!this.navigationRowsEl) {
       return;
     }
-
-    for (const metadata of this.slideMetadata) {
-      const title =
-        metadata.title ||
-        this.text.navigation.slideLabel(metadata.index + 1);
-      const entryEl = this.slideListEl.createEl("button", {
-        cls: "pptx-reader-slide-entry",
-        attr: {
-          type: "button",
-          "aria-label": `${this.text.navigation.slideLabel(
-            metadata.index + 1,
-          )}: ${title}`,
-        },
-      });
-      entryEl.addEventListener("click", () => {
-        void this.goToSlide(metadata.index);
-      });
-      const thumbnailEl = entryEl.createDiv({
-        cls: "pptx-reader-thumbnail",
-      });
-      thumbnailEl.createDiv({
-        cls: "pptx-reader-thumbnail-placeholder",
-        text: String(metadata.index + 1),
-      });
-      const detailsEl = entryEl.createDiv({
-        cls: "pptx-reader-slide-details",
-      });
-      detailsEl.createDiv({
-        cls: "pptx-reader-slide-page",
-        text: this.text.navigation.slideLabel(metadata.index + 1),
-      });
-      detailsEl.createDiv({
-        cls: "pptx-reader-slide-title",
-        text: title,
-      });
-      const snippetEl = detailsEl.createDiv({
-        cls: "pptx-reader-slide-snippet",
-      });
-      const matchEl = detailsEl.createDiv({
-        cls: "pptx-reader-slide-match",
-      });
-      this.navigationEntries.set(metadata.index, {
-        element: entryEl,
-        snippetEl,
-        matchEl,
-        thumbnailEl,
-        resources: new Set<string>(),
-        renderVersion: 0,
-        rendering: false,
-        rendered: false,
-        mounted: false,
-      });
-    }
     this.applyNavigationSearch();
-    this.updateActiveNavigationEntry();
-    this.setupThumbnailObserver();
   }
 
-  private applyNavigationSearch(): void {
-    const results = searchPptxSlides(this.slideMetadata, this.searchQuery);
-    const resultBySlide = new Map(
+  private scheduleNavigationSearch(): void {
+    if (this.searchTimer !== null) {
+      window.clearTimeout(this.searchTimer);
+    }
+    this.searchTimer = window.setTimeout(() => {
+      this.searchTimer = null;
+      this.applyNavigationSearch();
+    }, PPTX_SEARCH_DEBOUNCE_MS);
+  }
+
+  private applyNavigationSearch(resetScroll = true): void {
+    const results = this.searchIndex.search(
+      this.searchQuery,
+      this.allSlideIndices,
+    );
+    this.navigationResults = new Map(
       results.map((result) => [result.slideIndex, result]),
     );
     const searching = this.searchQuery.trim().length > 0;
-    let totalMatches = 0;
-
-    for (const metadata of this.slideMetadata) {
-      const entry = this.navigationEntries.get(metadata.index);
-      if (!entry) {
-        continue;
-      }
-      const result = resultBySlide.get(metadata.index);
-      entry.element.toggleClass("is-hidden", !result);
-      if (!result) {
-        this.thumbnailWindow.setVisible(metadata.index, false);
-      }
-      entry.snippetEl.setText(result?.snippet ?? "");
-      totalMatches += result?.matchCount ?? 0;
-      entry.matchEl.setText(
-        searching && result
-          ? [
-              `${result.matchCount}`,
-              result.matchedNotes ? this.text.navigation.notesMatch : "",
-            ]
-              .filter(Boolean)
-              .join(" - ")
-          : "",
-      );
-    }
+    const totalMatches = results.reduce(
+      (total, result) => total + result.matchCount,
+      0,
+    );
+    this.filteredSlideIndices = results.map((result) => result.slideIndex);
 
     this.navigationEmptyEl?.toggleClass("is-visible", results.length === 0);
     this.searchCountEl?.setText(
@@ -874,95 +868,186 @@ export class PptxView extends FileView {
         ? this.text.navigation.searchCount(totalMatches, results.length)
         : this.text.navigation.slideCount(this.slideMetadata.length),
     );
-    this.refreshThumbnailWindow();
-  }
-
-  private updateActiveNavigationEntry(): void {
-    for (const [index, entry] of this.navigationEntries) {
-      entry.element.toggleClass("is-active", index === this.currentSlideIndex);
-      entry.element.setAttribute(
-        "aria-current",
-        index === this.currentSlideIndex ? "true" : "false",
-      );
+    if (resetScroll && this.slideListEl) {
+      this.slideListEl.scrollTop = 0;
     }
-    if (this.navigationVisible) {
-      this.navigationEntries
-        .get(this.currentSlideIndex)
-        ?.element.scrollIntoView({ block: "nearest" });
-    }
+    this.renderNavigationWindow();
   }
 
-  private startThumbnailRendering(presentation: PptxPackage): void {
-    this.thumbnailWindow.setSlideCount(presentation.slideCount);
-    this.refreshThumbnailWindow();
-  }
-
-  private setupThumbnailObserver(): void {
-    const Observer =
-      this.slideListEl?.ownerDocument.defaultView?.IntersectionObserver;
-    if (!Observer || !this.slideListEl) {
+  private scheduleNavigationWindowRender(): void {
+    if (this.navigationRenderFrameId !== null || !this.slideListEl) {
       return;
     }
-    this.thumbnailObserver = new Observer(
-      (observations) => {
-        for (const observation of observations) {
-          const index = Number(
-            observation.target.getAttribute("data-slide-index"),
-          );
-          this.thumbnailWindow.setVisible(
-            index,
-            observation.isIntersecting,
-          );
-        }
-        this.refreshThumbnailWindow();
-      },
-      {
-        root: this.slideListEl,
-        rootMargin: "240px 0px",
-      },
+    const renderWindow = this.slideListEl.win;
+    this.navigationRenderFrameId = renderWindow.requestAnimationFrame(() => {
+      this.navigationRenderFrameId = null;
+      this.renderNavigationWindow();
+    });
+  }
+
+  private renderNavigationWindow(): void {
+    const slideListEl = this.slideListEl;
+    const rowsEl = this.navigationRowsEl;
+    if (!slideListEl || !rowsEl) {
+      return;
+    }
+    const navigationWindow = this.navigationWindow.calculate(
+      this.filteredSlideIndices,
+      slideListEl.scrollTop,
+      slideListEl.clientHeight,
     );
+    const desired = new Set(navigationWindow.indices);
+
+    for (const [index, entry] of [...this.navigationEntries]) {
+      if (!desired.has(index)) {
+        this.unmountThumbnail(index);
+        entry.element.remove();
+        this.navigationEntries.delete(index);
+      }
+    }
+
+    const fragment = rowsEl.ownerDocument.createDocumentFragment();
+    for (const index of navigationWindow.indices) {
+      const entry =
+        this.navigationEntries.get(index) ??
+        this.createNavigationEntry(index);
+      this.updateNavigationEntry(entry, index);
+      entry.mounted = true;
+      fragment.appendChild(entry.element);
+    }
+    rowsEl.appendChild(fragment);
+    if (this.navigationTopSpacerEl) {
+      this.navigationTopSpacerEl.style.height =
+        `${navigationWindow.topSpacer}px`;
+    }
+    if (this.navigationBottomSpacerEl) {
+      this.navigationBottomSpacerEl.style.height =
+        `${navigationWindow.bottomSpacer}px`;
+    }
+    this.updateActiveNavigationEntry(false);
+    this.refreshThumbnailQueue();
+  }
+
+  private createNavigationEntry(index: number): PptxNavigationEntry {
+    if (!this.navigationRowsEl) {
+      throw new Error("The PPTX navigation list is not available.");
+    }
+    const entryEl = this.navigationRowsEl.ownerDocument.createElement("button");
+    entryEl.className = "pptx-reader-slide-entry";
+    entryEl.type = "button";
+    entryEl.addEventListener("click", () => {
+      void this.goToSlide(index);
+    });
+    const thumbnailEl = entryEl.createDiv({
+      cls: "pptx-reader-thumbnail",
+    });
+    thumbnailEl.createDiv({
+      cls: "pptx-reader-thumbnail-placeholder",
+      text: String(index + 1),
+    });
+    const detailsEl = entryEl.createDiv({
+      cls: "pptx-reader-slide-details",
+    });
+    detailsEl.createDiv({
+      cls: "pptx-reader-slide-page",
+      text: this.text.navigation.slideLabel(index + 1),
+    });
+    const titleEl = detailsEl.createDiv({
+      cls: "pptx-reader-slide-title",
+    });
+    const snippetEl = detailsEl.createDiv({
+      cls: "pptx-reader-slide-snippet",
+    });
+    const matchEl = detailsEl.createDiv({
+      cls: "pptx-reader-slide-match",
+    });
+    const entry: PptxNavigationEntry = {
+      element: entryEl,
+      titleEl,
+      snippetEl,
+      matchEl,
+      thumbnailEl,
+      resources: new Set<string>(),
+      renderVersion: 0,
+      rendering: false,
+      rendered: false,
+      mounted: true,
+    };
+    this.navigationEntries.set(index, entry);
+    return entry;
+  }
+
+  private updateNavigationEntry(
+    entry: PptxNavigationEntry,
+    index: number,
+  ): void {
+    const metadata = this.slideMetadata[index] ?? createEmptySlideMetadata(index);
+    const title =
+      metadata.title || this.text.navigation.slideLabel(index + 1);
+    const result = this.navigationResults.get(index);
+    entry.element.setAttribute(
+      "aria-label",
+      `${this.text.navigation.slideLabel(index + 1)}: ${title}`,
+    );
+    entry.titleEl.setText(title);
+    entry.snippetEl.setText(result?.snippet ?? "");
+    entry.matchEl.setText(
+      this.searchQuery.trim() && result
+        ? [
+            `${result.matchCount}`,
+            result.matchedNotes ? this.text.navigation.notesMatch : "",
+          ]
+            .filter(Boolean)
+            .join(" - ")
+        : "",
+    );
+  }
+
+  private updateActiveNavigationEntry(ensureVisible = true): void {
     for (const [index, entry] of this.navigationEntries) {
-      entry.element.setAttribute("data-slide-index", String(index));
-      this.thumbnailObserver.observe(entry.element);
+      const active = index === this.currentSlideIndex;
+      entry.element.toggleClass("is-active", active);
+      entry.element.setAttribute("aria-current", active ? "true" : "false");
+    }
+    if (!ensureVisible || !this.navigationVisible || !this.slideListEl) {
+      return;
+    }
+    const position = this.filteredSlideIndices.indexOf(this.currentSlideIndex);
+    if (position < 0) {
+      return;
+    }
+    const top = position * this.navigationWindow.rowHeight;
+    const bottom = top + this.navigationWindow.rowHeight;
+    const visibleTop = this.slideListEl.scrollTop;
+    const visibleBottom = visibleTop + this.slideListEl.clientHeight;
+    if (top < visibleTop || bottom > visibleBottom) {
+      this.slideListEl.scrollTop = top;
+      this.renderNavigationWindow();
     }
   }
 
-  private disconnectThumbnailObserver(): void {
-    this.thumbnailObserver?.disconnect();
-    this.thumbnailObserver = null;
-  }
-
-  private refreshThumbnailWindow(): void {
+  private refreshThumbnailQueue(): void {
     const presentation = this.presentation;
     if (!presentation) {
       return;
     }
-    this.applyThumbnailWindowChange(
-      this.thumbnailWindow.update(this.currentSlideIndex),
-      presentation,
-      this.thumbnailLifecycle.currentToken,
-    );
-  }
-
-  private applyThumbnailWindowChange(
-    change: PptxThumbnailWindowChange,
-    presentation: PptxPackage,
-    lifecycleToken: number,
-  ): void {
-    for (const index of change.unmount) {
-      this.unmountThumbnail(index);
-    }
-    for (const index of change.mount) {
-      const entry = this.navigationEntries.get(index);
-      if (!entry) {
+    const lifecycleToken = this.thumbnailLifecycle.currentToken;
+    for (const [index, entry] of this.navigationEntries) {
+      if (!entry.mounted || entry.rendered || entry.rendering) {
         continue;
       }
-      entry.mounted = true;
-      void this.renderThumbnail(
+      this.thumbnailQueue.schedule(
         index,
-        entry,
-        presentation,
-        lifecycleToken,
+        Math.abs(index - this.currentSlideIndex),
+        async (isQueueCancelled) => {
+          await this.renderThumbnail(
+            index,
+            entry,
+            presentation,
+            lifecycleToken,
+            isQueueCancelled,
+          );
+        },
       );
     }
   }
@@ -972,6 +1057,7 @@ export class PptxView extends FileView {
     entry: PptxNavigationEntry,
     presentation: PptxPackage,
     lifecycleToken: number,
+    isQueueCancelled: () => boolean,
   ): Promise<void> {
     if (entry.rendered || entry.rendering || !entry.mounted) {
       return;
@@ -983,6 +1069,7 @@ export class PptxView extends FileView {
     let adopted = false;
     const isCancelled = (): boolean =>
       !this.thumbnailLifecycle.isCurrent(lifecycleToken) ||
+      isQueueCancelled() ||
       this.presentation !== presentation ||
       !entry.mounted ||
       entry.renderVersion !== renderVersion ||
@@ -1026,6 +1113,16 @@ export class PptxView extends FileView {
           URL.revokeObjectURL(resource);
         });
       }
+      if (
+        entry.mounted &&
+        !entry.rendered &&
+        this.thumbnailLifecycle.isCurrent(lifecycleToken) &&
+        this.presentation === presentation
+      ) {
+        entry.thumbnailEl.win.setTimeout(() => {
+          this.refreshThumbnailQueue();
+        }, 0);
+      }
     }
   }
 
@@ -1034,6 +1131,7 @@ export class PptxView extends FileView {
     if (!entry) {
       return;
     }
+    this.thumbnailQueue.cancel(index);
     entry.mounted = false;
     entry.renderVersion += 1;
     entry.rendering = false;
@@ -1064,6 +1162,82 @@ export class PptxView extends FileView {
     const notes = this.slideMetadata[this.currentSlideIndex]?.notes.trim();
     this.notesContentEl.setText(notes || this.text.notes.empty);
     this.notesContentEl.toggleClass("is-empty", !notes);
+  }
+
+  private get allSlideIndices(): number[] {
+    const count = this.presentation?.slideCount ?? this.slideMetadata.length;
+    return Array.from({ length: count }, (_, index) => index);
+  }
+
+  private scheduleMetadataUiRefresh(): void {
+    if (this.metadataUiFrameId !== null) {
+      return;
+    }
+    const renderWindow = this.contentEl.win;
+    this.metadataUiFrameId = renderWindow.requestAnimationFrame(() => {
+      this.metadataUiFrameId = null;
+      this.applyNavigationSearch(false);
+      this.updateNotes();
+    });
+  }
+
+  private async loadMetadataForSlide(index: number): Promise<void> {
+    const presentation = this.presentation;
+    if (!presentation || this.loadedMetadataIndices.has(index)) {
+      return;
+    }
+    try {
+      const metadata = await presentation.getSlideMetadata(index);
+      if (this.presentation !== presentation) {
+        return;
+      }
+      this.slideMetadata[index] = metadata;
+      this.loadedMetadataIndices.add(index);
+      this.searchIndex.set(metadata);
+      this.scheduleMetadataUiRefresh();
+    } catch {
+      // Background indexing reports package failures without blocking rendering.
+    }
+  }
+
+  private async getCurrentSlideMetadata(): Promise<PptxSlideMetadata | null> {
+    const presentation = this.presentation;
+    if (!presentation) {
+      return null;
+    }
+    const metadata = await presentation.getSlideMetadata(
+      this.currentSlideIndex,
+    );
+    if (this.presentation !== presentation) {
+      return null;
+    }
+    this.slideMetadata[metadata.index] = metadata;
+    this.loadedMetadataIndices.add(metadata.index);
+    this.searchIndex.set(metadata);
+    return metadata;
+  }
+
+  private async getCompleteMetadata(
+    presentation: PptxPackage,
+  ): Promise<PptxSlideMetadata[]> {
+    const pending =
+      this.metadataPromise ??
+      presentation.indexSlideMetadata({
+        concurrency: 4,
+        priorityIndex: this.currentSlideIndex,
+        isCancelled: () => this.presentation !== presentation,
+      });
+    const metadata = await pending;
+    if (this.presentation !== presentation) {
+      return [];
+    }
+    this.slideMetadata = metadata;
+    this.loadedMetadataIndices.clear();
+    for (const slide of metadata) {
+      this.loadedMetadataIndices.add(slide.index);
+      this.searchIndex.set(slide);
+    }
+    return metadata;
   }
 
   private applyNavigationVisibility(): void {
@@ -1396,14 +1570,21 @@ export class PptxView extends FileView {
   }
 
   private releasePresentation(): void {
-    this.disconnectThumbnailObserver();
     this.thumbnailLifecycle.cancel();
+    this.thumbnailQueue.clear();
+    this.cancelNavigationWork();
     this.releaseThumbnailResources();
     this.presentation = null;
+    this.metadataPromise = null;
     this.slideMetadata = [];
+    this.loadedMetadataIndices.clear();
+    this.searchIndex.clear();
+    this.filteredSlideIndices = [];
+    this.navigationResults.clear();
     this.navigationEntries.clear();
-    this.slideListEl?.empty();
-    this.thumbnailWindow.reset();
+    this.navigationRowsEl?.empty();
+    this.navigationTopSpacerEl?.style.removeProperty("height");
+    this.navigationBottomSpacerEl?.style.removeProperty("height");
     this.slideResources.releaseActive();
     this.applyNavigationSearch();
     this.updateNotes();
@@ -1415,10 +1596,34 @@ export class PptxView extends FileView {
       this.unmountThumbnail(index);
     }
   }
+
+  private cancelNavigationWork(): void {
+    if (this.searchTimer !== null) {
+      window.clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
+    if (this.navigationRenderFrameId !== null) {
+      this.contentEl.win.cancelAnimationFrame(this.navigationRenderFrameId);
+      this.navigationRenderFrameId = null;
+    }
+    if (this.metadataUiFrameId !== null) {
+      this.contentEl.win.cancelAnimationFrame(this.metadataUiFrameId);
+      this.metadataUiFrameId = null;
+    }
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function createEmptySlideMetadata(index: number): PptxSlideMetadata {
+  return {
+    index,
+    title: "",
+    text: "",
+    notes: "",
+  };
 }
 
 function getErrorMessage(error: unknown): string {

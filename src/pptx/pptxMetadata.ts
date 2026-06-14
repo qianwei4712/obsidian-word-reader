@@ -20,6 +20,13 @@ export interface PptxSearchResult {
   matchedNotes: boolean;
 }
 
+interface IndexedSlideMetadata {
+  metadata: PptxSlideMetadata;
+  visibleText: string;
+  normalizedVisibleText: string;
+  normalizedNotes: string;
+}
+
 const EXCLUDED_NOTES_PLACEHOLDERS = new Set([
   "dt",
   "ftr",
@@ -67,37 +74,82 @@ export function searchPptxSlides(
   slides: readonly PptxSlideMetadata[],
   query: string,
 ): PptxSearchResult[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  if (!normalizedQuery) {
-    return slides.map((slide) => ({
-      slideIndex: slide.index,
-      title: slide.title,
-      snippet: firstUsefulLine(slide.text, slide.title),
-      matchCount: 0,
-      matchedNotes: false,
-    }));
+  return new PptxSearchIndex(slides).search(query);
+}
+
+export class PptxSearchIndex {
+  private readonly slides = new Map<number, IndexedSlideMetadata>();
+
+  constructor(slides: readonly PptxSlideMetadata[] = []) {
+    for (const slide of slides) {
+      this.set(slide);
+    }
   }
 
-  return slides.flatMap((slide) => {
-    const titleAndText = combineTitleAndText(slide);
-    const visibleMatches = countMatches(titleAndText, normalizedQuery);
-    const noteMatches = countMatches(slide.notes, normalizedQuery);
-    const matchCount = visibleMatches + noteMatches;
-    if (matchCount === 0) {
-      return [];
+  set(slide: PptxSlideMetadata): void {
+    const visibleText = combineTitleAndText(slide);
+    this.slides.set(slide.index, {
+      metadata: slide,
+      visibleText,
+      normalizedVisibleText: visibleText.toLocaleLowerCase(),
+      normalizedNotes: slide.notes.toLocaleLowerCase(),
+    });
+  }
+
+  clear(): void {
+    this.slides.clear();
+  }
+
+  search(
+    query: string,
+    slideIndices: readonly number[] = [...this.slides.keys()].sort(
+      (left, right) => left - right,
+    ),
+  ): PptxSearchResult[] {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) {
+      return slideIndices.map((index) => {
+        const slide = this.slides.get(index)?.metadata ?? emptyMetadata(index);
+        return {
+          slideIndex: slide.index,
+          title: slide.title,
+          snippet: firstUsefulLine(slide.text, slide.title),
+          matchCount: 0,
+          matchedNotes: false,
+        };
+      });
     }
-    const source =
-      visibleMatches > 0
-        ? titleAndText
-        : slide.notes;
-    return [{
-      slideIndex: slide.index,
-      title: slide.title,
-      snippet: createSnippet(source, normalizedQuery),
-      matchCount,
-      matchedNotes: visibleMatches === 0 && noteMatches > 0,
-    }];
-  });
+
+    return slideIndices.flatMap((index) => {
+      const indexed = this.slides.get(index);
+      if (!indexed) {
+        return [];
+      }
+      const visibleMatches = countNormalizedMatches(
+        indexed.normalizedVisibleText,
+        normalizedQuery,
+      );
+      const noteMatches = countNormalizedMatches(
+        indexed.normalizedNotes,
+        normalizedQuery,
+      );
+      const matchCount = visibleMatches + noteMatches;
+      if (matchCount === 0) {
+        return [];
+      }
+      const source =
+        visibleMatches > 0
+          ? indexed.visibleText
+          : indexed.metadata.notes;
+      return [{
+        slideIndex: indexed.metadata.index,
+        title: indexed.metadata.title,
+        snippet: createSnippet(source, normalizedQuery),
+        matchCount,
+        matchedNotes: visibleMatches === 0 && noteMatches > 0,
+      }];
+    });
+  }
 }
 
 export function formatSlideText(metadata: PptxSlideMetadata): string {
@@ -155,8 +207,10 @@ function normalizeText(values: readonly string[]): string[] {
     .filter(Boolean);
 }
 
-function countMatches(value: string, normalizedQuery: string): number {
-  const normalizedValue = value.toLocaleLowerCase();
+function countNormalizedMatches(
+  normalizedValue: string,
+  normalizedQuery: string,
+): number {
   let count = 0;
   let offset = 0;
   while (offset < normalizedValue.length) {
@@ -168,6 +222,15 @@ function countMatches(value: string, normalizedQuery: string): number {
     offset = index + normalizedQuery.length;
   }
   return count;
+}
+
+function emptyMetadata(index: number): PptxSlideMetadata {
+  return {
+    index,
+    title: "",
+    text: "",
+    notes: "",
+  };
 }
 
 function createSnippet(value: string, normalizedQuery: string): string {

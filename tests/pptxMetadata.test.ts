@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   formatSlideText,
+  PptxSearchIndex,
   searchPptxSlides,
   type PptxSlideMetadata,
 } from "../src/pptx/pptxMetadata";
@@ -37,6 +38,24 @@ void test("searchPptxSlides searches visible text and speaker notes", () => {
   assert.equal(searchPptxSlides(slides, "quarterly")[0]?.matchCount, 1);
   assert.equal(searchPptxSlides(slides, "missing").length, 0);
   assert.equal(searchPptxSlides(slides, "").length, 2);
+});
+
+void test("PptxSearchIndex reuses normalized slide content", () => {
+  const index = new PptxSearchIndex(slides);
+  assert.deepEqual(
+    index.search("REVENUE").map((result) => result.slideIndex),
+    [0, 1],
+  );
+  index.set({
+    index: 1,
+    title: "Updated",
+    text: "No matching content.",
+    notes: "",
+  });
+  assert.deepEqual(
+    index.search("revenue").map((result) => result.slideIndex),
+    [0],
+  );
 });
 
 void test("formatSlideText includes title and body without speaker notes", () => {

@@ -71,6 +71,8 @@ void test("common PPTX layouts match the structural visual baseline", async () =
 
   assert.deepEqual(rendered.diagnostics, {
     durationMs: 0,
+    yieldCount: 0,
+    maxWorkSliceMs: 0,
     layerCount: 3,
     shapeCount: 9,
     textShapeCount: 2,

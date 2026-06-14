@@ -19,6 +19,8 @@ void test("PPTX diagnostics contain local metrics without vault paths", async ()
     0,
     {
       durationMs: 12,
+      yieldCount: 2,
+      maxWorkSliceMs: 8,
       layerCount: 3,
       shapeCount: 4,
       textShapeCount: 1,
@@ -40,6 +42,10 @@ void test("PPTX diagnostics contain local metrics without vault paths", async ()
   const formatted = formatPptxDiagnosticReport(report);
 
   assert.equal(report.presentation.slideCount, 1);
+  assert.ok(
+    report.presentation.cache.xmlEntries <=
+      report.presentation.cache.limits.xmlEntries,
+  );
   assert.equal(report.file.name, "Quarterly review.pptx");
   assert.equal(formatted.includes("vault"), false);
   assert.equal(formatted.includes("\\\\"), false);

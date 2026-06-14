@@ -1,5 +1,54 @@
 # Changelog
 
+## 2.3.0 - 2026-06-14
+
+### English
+
+#### Added
+
+- Added priority-aware PPTX metadata and thumbnail queues, a virtualized slide
+  navigation window, time-sliced rendering, and bounded XML, context, binary,
+  and media caches.
+- Added generated performance regression fixtures for 200- and 1,000-slide
+  presentations and a 100-page Word document.
+- Added a production bundle budget that fails builds above 500 KiB.
+- Restored compatibility with the current Obsidian Desktop stable line by
+  setting the minimum app version to 1.12.7 and keeping a classic settings tab
+  fallback.
+
+#### Changed
+
+- PPTX now renders the current slide before full-presentation metadata
+  indexing finishes, while background metadata parsing is cancellable and
+  limited to four workers.
+- DOCX search now builds one reusable text index and uses CSS highlights
+  without rewriting the rendered document DOM.
+- DOCX reading-state writes are coalesced and unchanged states are skipped;
+  fit-width changes now use CSS without rerendering the document.
+- Removed Mammoth from the runtime and dependency tree. Whole-document text
+  and Markdown copy reuse the already rendered document.
+
+### 中文
+
+#### 新增
+
+- 新增带优先级的 PPTX 元数据与缩略图任务队列、虚拟化幻灯片导航窗口、分时
+  渲染，以及容量有界的 XML、上下文、二进制和媒体缓存。
+- 新增 200/1,000 页 PPTX 与 100 页 DOCX 的运行时生成性能回归样本。
+- 新增生产 bundle 体积预算，超过 500 KiB 时构建失败。
+
+#### 变更
+
+- PPTX 会在全量元数据索引完成前优先渲染当前幻灯片；后台元数据解析可取消，
+  且最多使用四个并发 worker。
+- DOCX 搜索改为每次渲染只建立一次可复用文本索引，并使用 CSS Highlight，
+  不再重写已渲染文档 DOM。
+- DOCX 阅读状态写入按动画帧合并且跳过未变化状态；适配宽度改为 CSS 切换，
+  不再重新渲染文档。
+- 从运行时和依赖树中移除 Mammoth，整篇纯文本和 Markdown 复制复用已渲染文档。
+- 将最低 Obsidian 版本调整为 1.12.7，并保留经典设置页回退，以兼容当前
+  Obsidian Desktop 稳定版。
+
 ## 2.2.0 - 2026-06-14
 
 ### English

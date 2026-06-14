@@ -1,6 +1,7 @@
 import {
   App,
   PluginSettingTab,
+  Setting,
   type SettingDefinitionItem,
 } from "obsidian";
 
@@ -112,6 +113,96 @@ export class WordReaderSettingTab extends PluginSettingTab {
     ];
   }
 
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    const text = getWordReaderText(this.plugin.settings.language).settings;
+
+    new Setting(containerEl)
+      .setName(text.languageName)
+      .setDesc(text.languageDesc)
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("zh-CN", text.languageZh)
+          .addOption("en", text.languageEn)
+          .setValue(this.plugin.settings.language)
+          .onChange(async (value) => {
+            await this.setControlValue("language", value);
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(text.defaultZoomName)
+      .setDesc(text.defaultZoomDesc)
+      .addText((input) => {
+        input
+          .setPlaceholder("100")
+          .setValue(String(this.plugin.settings.defaultZoomPercent))
+          .onChange(async (value) => {
+            await this.setControlValue("defaultZoomPercent", Number(value));
+          });
+
+        input.inputEl.type = "number";
+        input.inputEl.min = String(MIN_ZOOM_PERCENT);
+        input.inputEl.max = String(MAX_ZOOM_PERCENT);
+        input.inputEl.step = "5";
+      });
+
+    new Setting(containerEl)
+      .setName(text.defaultFitWidthName)
+      .setDesc(text.defaultFitWidthDesc)
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.defaultFitWidth)
+          .onChange(async (value) => {
+            await this.setControlValue("defaultFitWidth", value);
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(text.showOutlineName)
+      .setDesc(text.showOutlineDesc)
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.showOutlineByDefault)
+          .onChange(async (value) => {
+            await this.setControlValue("showOutlineByDefault", value);
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(text.imagePreviewName)
+      .setDesc(text.imagePreviewDesc)
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.enableImagePreview)
+          .onChange(async (value) => {
+            await this.setControlValue("enableImagePreview", value);
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(text.largeFileWarningName)
+      .setDesc(text.largeFileWarningDesc)
+      .addText((input) => {
+        input
+          .setPlaceholder("25")
+          .setValue(String(this.plugin.settings.largeFileWarningMb))
+          .onChange(async (value) => {
+            await this.setControlValue("largeFileWarningMb", Number(value));
+          });
+
+        input.inputEl.type = "number";
+        input.inputEl.min = String(MIN_LARGE_FILE_WARNING_MB);
+        input.inputEl.max = String(MAX_LARGE_FILE_WARNING_MB);
+        input.inputEl.step = "1";
+      });
+
+    new Setting(containerEl)
+      .setName(text.externalOpeningName)
+      .setDesc(text.externalOpeningDesc);
+  }
+
   getControlValue(key: string): unknown {
     return getSettingValue(this.plugin.settings, key);
   }
@@ -126,7 +217,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
 
     if (this.plugin.settings.language !== previousLanguage) {
       this.plugin.refreshWordReaderViews();
-      this.update();
+      (this as { update?: () => void }).update?.();
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- Obsidian 1.12.7 still uses display() for setting tabs.
+      this.display();
     }
   }
 }

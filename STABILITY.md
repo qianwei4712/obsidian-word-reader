@@ -58,6 +58,26 @@ diagnostics:
 - Keep charts and SmartArt outside native-fidelity support while identifying
   them with explicit placeholders and separate diagnostics.
 
+## 2.3.0 Global Performance Scope
+
+The 2.3.0 line governs startup responsiveness, interaction latency, memory,
+and bundle size across DOCX and PPTX:
+
+- Render the current PPTX slide before full metadata indexing completes.
+- Limit metadata parsing to four workers and thumbnail rendering to two
+  lower-priority workers; cancel stale work during navigation and scrolling.
+- Virtualize presentation navigation to at most 60 mounted rows for a
+  1,000-slide deck.
+- Yield during PPTX shape, text, and table rendering, targeting work slices of
+  approximately 8 ms.
+- Bound XML, relationship, slide-context, and binary caches.
+- Build one DOCX text-search index per render, update the current result in
+  constant time, and avoid rewriting rendered DOM for highlights.
+- Coalesce DOCX reading-state writes, skip unchanged states, merge render
+  post-processing scans, and switch fit-width through CSS.
+- Keep `dist/main.js` at or below 500 KiB and maintain generated 200/1,000
+  slide PPTX plus 100-page DOCX regression fixtures.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -66,6 +86,7 @@ Run this checklist before publishing a stable release:
   - `npm run typecheck`
   - `npm test`
   - `npm run build`
+  - `npm run performance:check`
   - `npm run security:scan`
   - `npm run release`
   - Confirm the release zip contains only `main.js`, `manifest.json`, and `styles.css`.
@@ -90,6 +111,9 @@ Run this checklist before publishing a stable release:
     active slide, and that clicking an entry navigates to the correct slide.
   - Scroll a presentation with at least 50 slides and confirm only visible and
     nearby thumbnails are mounted; off-screen thumbnails return to placeholders.
+  - Open a 1,000-slide generated fixture and confirm no more than 60
+    navigation rows are mounted and the current slide renders before all
+    titles finish indexing.
   - Rapidly scroll, search, and navigate while thumbnails are rendering and
     confirm stale previews do not replace current entries.
   - Confirm off-screen thumbnail images release their Blob URLs and render
@@ -137,6 +161,8 @@ Run this checklist before publishing a stable release:
   - Reopen a document and confirm zoom, fit width, outline visibility, collapsed sections, and scroll position are restored.
   - Open more than 50 distinct documents and confirm persisted reading state remains capped at 50 entries.
   - Test search, previous/next navigation, and current result highlighting.
+  - Search repeatedly in a 100-page document and confirm navigation does not
+    rewrite or disturb the rendered content.
   - Test large document loading status with a file above the configured warning size.
   - Confirm a long document shows reading, rendering, preview preparation, and navigation-building status updates before the final preview state.
   - Confirm a document with at least 12 rendered pages remains responsive while pages are committed and while searching for a frequent term.
@@ -176,7 +202,7 @@ Run this checklist before publishing a stable release:
 
 Supported:
 
-- Obsidian Desktop.
+- Obsidian Desktop 1.12.7 or newer.
 - Local desktop vaults.
 - `.docx` read-only preview through `docx-preview`.
 - `.pptx` local, read-only preview for text, embedded images, common shapes,
@@ -185,7 +211,7 @@ Supported:
   slide text copy, speaker-note viewing, and numbered presentation summary notes.
 - `.pptx` on-demand thumbnail mounting, cooperative render cancellation,
   generated-resource cleanup, and privacy-safe render diagnostics.
-- Plain text and Markdown extraction through `mammoth`.
+- Plain text and Markdown copy from the already rendered DOCX content.
 - `.doc` detection with external-open and conversion guidance.
 
 Not supported:
@@ -261,17 +287,32 @@ Not supported:
   主题、版式和母版。
 - 图表和 SmartArt 仍不承诺原生外观还原，但会显示明确占位并在诊断中单独统计。
 
+### 2.3.0 全局性能治理范围
+
+2.3.0 稳定线统一治理 DOCX/PPTX 的首屏响应、交互延迟、内存和包体积：
+
+- PPTX 当前页在全量元数据索引完成前开始渲染。
+- 元数据解析最多四个 worker，缩略图渲染最多两个低优先级 worker，并可在
+  切页或滚动时取消过期任务。
+- 1,000 页演示文稿最多同时挂载 60 个导航行。
+- PPTX 形状、文本和表格渲染按约 8 ms 的目标时间片主动让出主线程。
+- XML、关系、幻灯片上下文和二进制缓存均有容量上限。
+- DOCX 每次渲染只建立一次搜索索引，当前结果切换为常量时间，且不改写文档 DOM。
+- DOCX 阅读状态按帧合并并跳过未变化值，渲染后扫描合并，适配宽度使用 CSS。
+- `dist/main.js` 不超过 500 KiB，并维护 200/1,000 页 PPTX 与 100 页 DOCX
+  的生成式回归样本。
+
 ### 支持边界
 
 支持：
 
-- Obsidian 桌面端。
+- Obsidian 桌面端 1.12.7 或更新版本。
 - 本地桌面 vault。
 - 基于 `docx-preview` 的 `.docx` 只读预览。
 - `.pptx` 文本、内嵌图片、常见形状、表格、主题、版式和母版的本地只读预览。
 - `.pptx` 缩略图/标题导航、本地全文搜索、当前页文本复制、演讲者备注查看和带页码摘要笔记。
 - `.pptx` 按需缩略图挂载、协作取消渲染、生成资源清理和隐私安全渲染诊断。
-- 基于 `mammoth` 的纯文本和 Markdown 提取。
+- 从已渲染 DOCX 内容复制纯文本和 Markdown。
 - `.doc` 检测、外部打开和转换说明。
 
 不支持：

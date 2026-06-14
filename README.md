@@ -8,6 +8,8 @@ and `.pptx` files directly inside Obsidian as safe, read-only documents.
 The plugin is not an Office editor. It provides local reading workflows while
 keeping the original files unchanged.
 
+Requires Obsidian Desktop 1.12.7 or newer.
+
 ## Features
 
 - Open `.docx` files in an Obsidian tab.
@@ -163,12 +165,15 @@ Available settings:
 - Rendering work is guarded by a cancellation token so stale results are discarded.
 - PPTX file and slide rendering use separate cancellation generations so rapid
   file switching and page navigation cannot commit stale slides.
-- Presentation metadata and speaker notes are indexed locally for navigation,
-  search, text copy, and summary-note creation.
-- Presentation thumbnails are mounted only for visible and nearby navigation
-  entries, with a fixed upper bound on concurrently mounted previews.
+- The current PPTX slide renders before full metadata indexing finishes.
+  Background metadata parsing is cancellable and limited to four workers.
+- Presentation search reuses a normalized metadata index. The navigation list
+  is virtualized to at most 60 mounted rows, and thumbnail rendering is limited
+  to two lower-priority workers.
 - Off-screen thumbnails are unmounted and their generated image resources are
   released; stale slide and thumbnail renders are cancelled cooperatively.
+- PPTX shape, text, and table rendering yields between bounded work slices,
+  while XML, relationship, slide-context, and binary caches have fixed limits.
 - Generated presentation resources are also released when a presentation is
   reloaded, switched, or closed.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
@@ -176,7 +181,13 @@ Available settings:
 - Long previews defer off-screen page painting until pages approach the viewport.
 - Embedded images use lazy loading, asynchronous decoding, and recyclable Blob URLs instead of persistent base64 data URLs.
 - The current rendered file state is tracked to avoid unnecessary repeated renders.
-- Search highlighting is debounced and processed in cancellable chunks to reduce work on large documents.
+- DOCX render post-processing collects images, pages, headings, Blob URLs, and
+  searchable text in one pass.
+- DOCX search builds one reusable text index per render and uses CSS highlights
+  without rewriting the document DOM. Reading-state writes are coalesced and
+  unchanged states are skipped.
+- Fit-width mode is a CSS state change and does not rerender the document.
+- Production builds enforce a compressed `dist/main.js` budget of 500 KiB.
 - Reading state uses a bounded 50-file LRU store so persisted plugin data does
   not grow without limit.
 - Development builds log Word file reading, rendering, DOM commit, outline,
@@ -304,11 +315,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag 2.2.0
-git push origin 2.2.0
+git tag 2.3.0
+git push origin 2.3.0
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, then builds the plugin, creates `release/obsidian-word-reader-2.2.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.3.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 

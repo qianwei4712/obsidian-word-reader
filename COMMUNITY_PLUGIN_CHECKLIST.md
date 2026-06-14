@@ -8,6 +8,8 @@ Community directory and before publishing later releases.
 - [ ] Run `npm ci` from a clean checkout.
 - [ ] Run `npm run check`.
 - [ ] Run `npm run release`.
+- [ ] Confirm `npm run performance:check` reports `dist/main.js` at or below
+  500 KiB.
 - [ ] Run `node scripts/release-check.mjs --tag X.Y.Z`.
 - [ ] Confirm all commands finish without warnings or errors.
 - [ ] Confirm `release/obsidian-word-reader-X.Y.Z.zip` contains only
@@ -46,6 +48,10 @@ Community directory and before publishing later releases.
   operate only on locally parsed presentation content.
 - [ ] Confirm presentation thumbnails mount only for visible and nearby
   entries, with a fixed upper bound on concurrent previews.
+- [ ] Confirm 1,000-slide navigation mounts at most 60 rows, metadata parsing
+  uses at most four workers, and thumbnail rendering uses at most two workers.
+- [ ] Confirm DOCX search reuses its render-time index without inserting
+  highlight elements into document content.
 - [ ] Confirm presentation Blob URLs are released after thumbnail unmount,
   cancelled rendering, reload, file switch, and view close.
 - [ ] Confirm copied PPTX render diagnostics exclude document text, speaker
@@ -57,7 +63,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `2.2.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `2.3.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

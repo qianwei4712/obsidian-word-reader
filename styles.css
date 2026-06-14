@@ -255,7 +255,8 @@
   user-select: none;
 }
 
-.word-reader-document.is-fit-width .docx {
+.word-reader-document.is-fit-width .docx-wrapper > section.docx {
+  width: 100% !important;
   max-width: 100%;
 }
 
@@ -334,16 +335,14 @@
   will-change: transform;
 }
 
-.word-reader-highlight {
-  background: #fff176;
-  color: #111;
-  border-radius: 2px;
+::highlight(word-reader-search) {
+  background-color: var(--text-highlight-bg);
+  color: inherit;
 }
 
-.word-reader-highlight.is-current {
-  background: #ff9800;
-  color: #111;
-  outline: 2px solid rgb(0 0 0 / 35%);
+::highlight(word-reader-search-current) {
+  background-color: var(--color-orange);
+  color: var(--text-on-accent);
 }
 
 .word-reader-empty {
@@ -507,9 +506,21 @@
   padding: 8px;
 }
 
+.pptx-reader-navigation-spacer {
+  width: 1px;
+  pointer-events: none;
+}
+
+.pptx-reader-navigation-rows {
+  display: flex;
+  flex-direction: column;
+}
+
 .pptx-reader-slide-entry {
   display: flex;
   width: 100%;
+  height: 188px;
+  box-sizing: border-box;
   flex-direction: column;
   gap: 6px;
   align-items: stretch;
