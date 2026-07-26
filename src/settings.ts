@@ -218,8 +218,7 @@ export class WordReaderSettingTab extends PluginSettingTab {
     if (this.plugin.settings.language !== previousLanguage) {
       this.plugin.refreshWordReaderViews();
       (this as { update?: () => void }).update?.();
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- Obsidian 1.12.7 still uses display() for setting tabs.
-      this.display();
+      (this as { display: () => void }).display();
     }
   }
 }

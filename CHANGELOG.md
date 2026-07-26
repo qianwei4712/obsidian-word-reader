@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.3.1 - 2026-07-26
+
+### English
+
+#### Fixed
+
+- Removed the local lint-disable comment from the Obsidian 1.12.7 settings
+  compatibility refresh path so official plugin checks can pass.
+
+### 中文
+
+#### 修复
+
+- 移除 Obsidian 1.12.7 设置页兼容刷新路径中的本地 lint 禁用注释，确保官方插件
+  检查可以通过。
+
 ## 2.3.0 - 2026-06-14
 
 ### English

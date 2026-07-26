@@ -294,11 +294,11 @@ styles.css
 推送不带 `v` 前缀的版本 tag 后，GitHub Actions 会自动创建 release：
 
 ```bash
-git tag 2.3.0
-git push origin 2.3.0
+git tag 2.3.1
+git push origin 2.3.1
 ```
 
-workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.3.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.3.1.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
 
 ## 开发
 

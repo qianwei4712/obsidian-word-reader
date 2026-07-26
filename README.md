@@ -315,11 +315,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag 2.3.0
-git push origin 2.3.0
+git tag 2.3.1
+git push origin 2.3.1
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.3.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.3.1.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 
