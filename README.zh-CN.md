@@ -1,6 +1,6 @@
 # Office Reader
 
-[English README](README.md)
+[English README](README.md) | [迭代路线](ROADMAP.md)
 
 Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接打开
 `.docx` 和 `.pptx` 文件，并以只读方式阅读 Office 文档。
@@ -28,7 +28,8 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
 - 支持点击渲染内容中的图片，在弹窗中放大预览。
 - 支持在当前渲染内容中搜索，并在搜索结果间前后跳转。
 - 支持复制选中文本、整篇纯文本、选中内容 Markdown 或整篇 Markdown。
-- 支持通过可折叠大纲在渲染标题之间跳转，并在阅读时高亮当前章节。
+- 支持通过可折叠大纲在 Word 的 1 至 9 级标题之间跳转，可识别继承标题大纲
+  级别的本地化和自定义样式，并在阅读时高亮当前章节。
 - 为最近使用的 50 个 Word 文档恢复缩放、适配宽度、大纲显示、折叠章节和滚动位置。
 - 支持插件界面在中文和英文之间切换。
 - 支持用系统默认程序打开原始 Word 文件。
@@ -294,11 +295,11 @@ styles.css
 推送不带 `v` 前缀的版本 tag 后，GitHub Actions 会自动创建 release：
 
 ```bash
-git tag 2.3.1
-git push origin 2.3.1
+git tag 2.3.2
+git push origin 2.3.2
 ```
 
-workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.3.1.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.3.2.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
 
 ## 开发
 

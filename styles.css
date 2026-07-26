@@ -122,7 +122,10 @@
 
 .word-reader-outline-row.level-4,
 .word-reader-outline-row.level-5,
-.word-reader-outline-row.level-6 {
+.word-reader-outline-row.level-6,
+.word-reader-outline-row.level-7,
+.word-reader-outline-row.level-8,
+.word-reader-outline-row.level-9 {
   padding-left: 44px;
 }
 

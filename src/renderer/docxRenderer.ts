@@ -1,6 +1,26 @@
 // SECURITY: This module uses docx-preview for safe local document rendering.
 // No external scripts are loaded. All content comes from trusted local .docx files.
-import { renderAsync } from "docx-preview";
+import {
+  parseAsync,
+  renderDocument,
+  type Options,
+} from "docx-preview";
+
+import { annotateDocxHeadingLevels } from "./docxOutline";
+
+const DOCX_RENDER_OPTIONS: Partial<Options> = {
+  className: "docx",
+  inWrapper: true,
+  ignoreWidth: false,
+  ignoreHeight: false,
+  ignoreFonts: false,
+  breakPages: true,
+  // Blob URLs avoid duplicating large embedded images as base64 strings.
+  // WordView tracks and revokes every generated URL when the preview changes.
+  useBase64URL: false,
+  experimental: true,
+  trimXmlDeclaration: true,
+};
 
 /**
  * Renders a .docx file buffer into the target DOM element.
@@ -11,17 +31,12 @@ export async function renderDocx(
   buffer: ArrayBuffer,
   targetEl: HTMLElement,
 ): Promise<void> {
-  await renderAsync(buffer, targetEl, undefined, {
-    className: "docx",
-    inWrapper: true,
-    ignoreWidth: false,
-    ignoreHeight: false,
-    ignoreFonts: false,
-    breakPages: true,
-    // Blob URLs avoid duplicating large embedded images as base64 strings.
-    // WordView tracks and revokes every generated URL when the preview changes.
-    useBase64URL: false,
-    experimental: true,
-    trimXmlDeclaration: true,
-  });
+  const document: unknown = await parseAsync(buffer, DOCX_RENDER_OPTIONS);
+  annotateDocxHeadingLevels(document);
+  await renderDocument(
+    document,
+    targetEl,
+    undefined,
+    DOCX_RENDER_OPTIONS,
+  );
 }

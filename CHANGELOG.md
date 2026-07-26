@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.2 - 2026-07-26
+
+### English
+
+#### Fixed
+
+- DOCX outlines now use Word paragraph outline levels and inherited paragraph
+  styles, including localized or custom heading styles and heading levels 1
+  through 9, instead of relying only on rendered HTML class names.
+
+### 中文
+
+#### 修复
+
+- DOCX 大纲改为识别 Word 段落大纲级别和段落样式继承，支持本地化或自定义
+  标题样式以及 1 至 9 级标题，不再只依赖渲染后的 HTML 类名。
+
 ## 2.3.1 - 2026-07-26
 
 ### English

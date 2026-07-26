@@ -21,6 +21,7 @@ import {
 import { createNoteFromDocx } from "./commands/createNoteFromDocx";
 import { openExternalDocx } from "./commands/openExternal";
 import { renderDocx } from "./renderer/docxRenderer";
+import { DOCX_HEADING_LEVEL_ATTRIBUTE } from "./renderer/docxOutline";
 import type { WordReaderText } from "./i18n";
 import {
   classifyWordError,
@@ -1561,7 +1562,7 @@ function analyzeRenderedDocument(
     }
     if (
       element.matches(
-        "h1, h2, h3, h4, h5, h6, [class*='Heading'], [class*='heading']",
+        `h1, h2, h3, h4, h5, h6, [${DOCX_HEADING_LEVEL_ATTRIBUTE}], [class*='Heading'], [class*='heading']`,
       )
     ) {
       const text = normalizeWhitespace(element.textContent ?? "");
@@ -1635,13 +1636,24 @@ interface OutlineHeading {
 }
 
 function getHeadingLevel(element: HTMLElement): number {
+  const annotatedLevel = Number(
+    element.getAttribute(DOCX_HEADING_LEVEL_ATTRIBUTE),
+  );
+  if (
+    Number.isInteger(annotatedLevel) &&
+    annotatedLevel >= 1 &&
+    annotatedLevel <= 9
+  ) {
+    return annotatedLevel;
+  }
+
   const tagMatch = /^H([1-6])$/.exec(element.tagName);
   if (tagMatch) {
     return Number(tagMatch[1]);
   }
 
   const classText = Array.from(element.classList).join(" ");
-  const classMatch = /heading[-_ ]?([1-6])/i.exec(classText);
+  const classMatch = /heading[-_ ]?([1-9])(?!\d)/i.exec(classText);
   return classMatch ? Number(classMatch[1]) : 2;
 }
 

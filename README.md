@@ -1,6 +1,6 @@
 # Office Reader
 
-[中文文档](README.zh-CN.md)
+[中文文档](README.zh-CN.md) | [Roadmap](ROADMAP.md)
 
 Office Reader is a desktop-only Obsidian plugin for opening `.docx`
 and `.pptx` files directly inside Obsidian as safe, read-only documents.
@@ -30,8 +30,9 @@ Requires Obsidian Desktop 1.12.7 or newer.
 - Click rendered images to preview them in a larger modal.
 - Search rendered text in the current document with previous/next navigation.
 - Copy selected rendered text, whole-document plain text, selected Markdown, or whole-document Markdown.
-- Use the collapsible outline panel to jump between rendered headings and see
-  the current section highlighted while reading.
+- Use the collapsible outline panel to jump between Word heading levels 1-9,
+  including localized and custom styles that inherit a heading outline level,
+  and see the current section highlighted while reading.
 - Restore zoom, fit-width mode, outline state, collapsed sections, and scroll
   position for the 50 most recently used Word documents.
 - Switch the plugin interface between Chinese and English.
@@ -315,11 +316,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag 2.3.1
-git push origin 2.3.1
+git tag 2.3.2
+git push origin 2.3.2
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.3.1.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.3.2.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 
