@@ -78,6 +78,24 @@ and bundle size across DOCX and PPTX:
 - Keep `dist/main.js` at or below 500 KiB and maintain generated 200/1,000
   slide PPTX plus 100-page DOCX regression fixtures.
 
+## 2.4.0 Shared Reader Architecture Scope
+
+The 2.4.0 line closes the reader architecture before XLSX work begins:
+
+- Keep the existing `word-reader-view` and `pptx-reader-view` identifiers while
+  routing format behavior through `OfficeReaderAdapter`, `ReaderSession`, and
+  `ReaderCapabilities`.
+- Build DOCX and PPTX views on the same `OfficeReaderShell` toolbar, status,
+  error, and diagnostic conventions while preserving legacy CSS classes.
+- Persist settings with an explicit schema version and separate `common`,
+  `docx`, `pptx`, and reserved `xlsx` sections; migrate pre-2.4 data on load.
+- Keep at most 100 reading states containing only file identity, modification
+  time, format, position, zoom, and navigation state.
+- Invalidate stale position/navigation data when file modification time
+  changes while retaining the user's zoom and fit preference.
+- Use one privacy-safe diagnostic envelope and one summary-note frontmatter
+  convention across formats.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -159,7 +177,7 @@ Run this checklist before publishing a stable release:
   - Confirm scrolling updates the highlighted current outline section.
   - Collapse parent outline headings and confirm their descendants hide and restore correctly.
   - Reopen a document and confirm zoom, fit width, outline visibility, collapsed sections, and scroll position are restored.
-  - Open more than 50 distinct documents and confirm persisted reading state remains capped at 50 entries.
+  - Open more than 100 distinct documents and confirm persisted reading state remains capped at 100 entries.
   - Test search, previous/next navigation, and current result highlighting.
   - Search repeatedly in a 100-page document and confirm navigation does not
     rewrite or disturb the rendered content.
@@ -301,6 +319,20 @@ Not supported:
 - DOCX 阅读状态按帧合并并跳过未变化值，渲染后扫描合并，适配宽度使用 CSS。
 - `dist/main.js` 不超过 500 KiB，并维护 200/1,000 页 PPTX 与 100 页 DOCX
   的生成式回归样本。
+
+### 2.4.0 共享阅读器架构范围
+
+2.4.0 在开始 XLSX 工作前完成阅读器架构收口：
+
+- 保留 `word-reader-view` 和 `pptx-reader-view` 标识，通过
+  `OfficeReaderAdapter`、`ReaderSession` 和 `ReaderCapabilities` 分派格式行为。
+- DOCX/PPTX 使用相同的 `OfficeReaderShell` 工具栏、状态、错误和诊断约定，
+  同时保留旧 CSS 类。
+- 设置带显式 schema 版本，按 `common`、`docx`、`pptx` 和预留的 `xlsx`
+  分区；加载时迁移 2.4 之前的数据。
+- 最多保存 100 条阅读状态，只包含文件标识、修改时间、格式、位置、缩放和导航。
+- 文件修改时间变化时清除过期位置与导航，同时保留缩放和适配偏好。
+- 各格式共用隐私安全诊断信封和摘要笔记 frontmatter 约定。
 
 ### 支持边界
 

@@ -1,10 +1,11 @@
 import type { PptxSlideMetadata } from "./pptxMetadata";
 import type { PptxReaderText } from "./pptxI18n";
+import {
+  buildReaderSummaryFrontmatter,
+  type ReaderSummarySource,
+} from "../reader/summaryNote";
 
-export interface PresentationSummarySource {
-  basename: string;
-  path: string;
-}
+export type PresentationSummarySource = ReaderSummarySource;
 
 export function buildPresentationSummaryNote(
   source: PresentationSummarySource,
@@ -22,12 +23,14 @@ export function buildPresentationSummaryNote(
     : text.summaryNote.slideReference(currentSlideIndex + 1, "");
 
   return [
-    "---",
-    `source: "${escapeYamlString(source.path)}"`,
-    "type: presentation-note",
-    `created: ${formatLocalDate(createdAt)}`,
-    `current_slide: ${currentSlideIndex + 1}`,
-    "---",
+    ...buildReaderSummaryFrontmatter(source, {
+      format: "pptx",
+      legacyType: "presentation-note",
+      createdAt,
+      fields: {
+        current_slide: currentSlideIndex + 1,
+      },
+    }),
     "",
     `# ${source.basename}`,
     "",
@@ -48,15 +51,4 @@ export function buildPresentationSummaryNote(
       `- ${text.summaryNote.slideReference(slide.index + 1, slide.title)}`),
     "",
   ].join("\n");
-}
-
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function escapeYamlString(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }

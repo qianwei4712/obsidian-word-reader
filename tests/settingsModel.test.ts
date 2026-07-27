@@ -2,13 +2,46 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_OFFICE_READER_SETTINGS,
   DEFAULT_SETTINGS,
+  SETTINGS_SCHEMA_VERSION,
+  migrateSettings,
+  normalizeOfficeReaderSettings,
   normalizeSettings,
 } from "../src/settingsModel";
 
 void test("normalizeSettings returns defaults for missing or invalid input", () => {
   assert.deepEqual(normalizeSettings(null), DEFAULT_SETTINGS);
   assert.deepEqual(normalizeSettings("invalid"), DEFAULT_SETTINGS);
+});
+
+void test("migrateSettings converts flat data to the versioned format schema", () => {
+  const migrated = migrateSettings({
+    language: "en",
+    defaultZoomPercent: 135,
+    defaultFitWidth: true,
+    showOutlineByDefault: false,
+    enableImagePreview: false,
+    largeFileWarningMb: 64,
+    readingStates: [{ path: "ignored-by-settings.docx" }],
+  });
+
+  assert.deepEqual(migrated, {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    common: {
+      language: "en",
+      defaultZoomPercent: 135,
+      largeFileWarningMb: 64,
+    },
+    docx: {
+      defaultFitWidth: true,
+      showOutlineByDefault: false,
+      enableImagePreview: false,
+    },
+    pptx: DEFAULT_OFFICE_READER_SETTINGS.pptx,
+    xlsx: DEFAULT_OFFICE_READER_SETTINGS.xlsx,
+  });
+  assert.deepEqual(normalizeOfficeReaderSettings(migrated), migrated);
 });
 
 void test("normalizeSettings preserves supported values", () => {

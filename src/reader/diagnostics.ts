@@ -1,7 +1,23 @@
+import type { ReaderFormat } from "./readingState";
+
 export interface ReaderDiagnosticFile {
   name: string;
   size: number;
   mtime: number;
+}
+
+export interface ReaderDiagnosticReport<Details = Record<string, unknown>> {
+  product: "Office Reader";
+  schemaVersion: 1;
+  format: ReaderFormat;
+  kind: "error" | "render";
+  file: {
+    name: string;
+    sizeBytes: number;
+    modifiedAt: string;
+  };
+  summary: string;
+  details: Details;
 }
 
 export interface ReaderDiagnostics<Category extends string = string> {
@@ -26,22 +42,32 @@ export function createReaderDiagnostics<Category extends string>(
   };
 }
 
-export function formatReaderDiagnostics(
-  product: string,
-  diagnostics: ReaderDiagnostics,
-): string {
-  return JSON.stringify(
-    {
-      product,
-      category: diagnostics.category,
-      fileName: diagnostics.fileName,
-      fileSizeBytes: diagnostics.fileSizeBytes,
-      modifiedAt: diagnostics.modifiedAt,
-      errorSummary: diagnostics.errorSummary,
+export function createReaderDiagnosticReport<Details>(
+  format: ReaderFormat,
+  kind: "error" | "render",
+  file: ReaderDiagnosticFile,
+  summary: string,
+  details: Details,
+): ReaderDiagnosticReport<Details> {
+  return {
+    product: "Office Reader",
+    schemaVersion: 1,
+    format,
+    kind,
+    file: {
+      name: file.name,
+      sizeBytes: file.size,
+      modifiedAt: new Date(file.mtime).toISOString(),
     },
-    null,
-    2,
-  );
+    summary,
+    details,
+  };
+}
+
+export function formatReaderDiagnosticReport(
+  report: ReaderDiagnosticReport<unknown>,
+): string {
+  return JSON.stringify(report, null, 2);
 }
 
 export function fingerprintMessage(message: string): string {

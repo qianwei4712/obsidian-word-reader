@@ -70,10 +70,17 @@ void test("diagnostics expose stable, privacy-safe metadata", () => {
   assert.equal(formatted.includes(message), false);
   assert.deepEqual(parsed, {
     product: "Office Reader",
-    category: "unknown",
-    fileName: "Report.docx",
-    fileSizeBytes: 1234,
-    modifiedAt: "2026-06-07T01:02:03.000Z",
-    errorSummary: diagnostics.errorSummary,
+    schemaVersion: 1,
+    format: "docx",
+    kind: "error",
+    file: {
+      name: "Report.docx",
+      sizeBytes: 1234,
+      modifiedAt: "2026-06-07T01:02:03.000Z",
+    },
+    summary: diagnostics.errorSummary,
+    details: {
+      category: "unknown",
+    },
   });
 });

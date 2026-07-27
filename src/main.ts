@@ -1,29 +1,41 @@
-import { Plugin } from "obsidian";
+import { Plugin, TFile } from "obsidian";
 
-import { openExternalDocx } from "./commands/openExternal";
-import { createNoteFromDocx } from "./commands/createNoteFromDocx";
 import {
   PptxView,
   VIEW_TYPE_PPTX_READER,
 } from "./PptxView";
-import { getPptxReaderText } from "./pptx/pptxI18n";
-import { WordView, VIEW_TYPE_WORD_READER } from "./WordView";
 import {
-  DEFAULT_SETTINGS,
-  WordReaderSettingTab,
-  type WordReaderSettings,
-  normalizeSettings,
-} from "./settings";
+  WordView,
+  VIEW_TYPE_WORD_READER,
+} from "./WordView";
+import { DOCX_ADAPTER } from "./docx/DocxAdapter";
 import { getWordReaderText, type WordReaderText } from "./i18n";
+import { PPTX_ADAPTER } from "./pptx/PptxAdapter";
+import { getPptxReaderText } from "./pptx/pptxI18n";
 import {
   ReadingStateStore,
+  type ReaderFileIdentity,
+  type ReaderFormat,
   type ReaderViewState,
 } from "./reader/readingState";
+import {
+  isReaderSession,
+  type ReaderSession,
+} from "./reader/session";
+import {
+  DEFAULT_OFFICE_READER_SETTINGS,
+  WordReaderSettingTab,
+  type OfficeReaderSettings,
+  migrateSettings,
+  normalizeOfficeReaderSettings,
+} from "./settings";
 
 const DATA_SAVE_DEBOUNCE_MS = 500;
 
 export default class WordReaderPlugin extends Plugin {
-  settings: WordReaderSettings = DEFAULT_SETTINGS;
+  settings: OfficeReaderSettings = normalizeOfficeReaderSettings(
+    DEFAULT_OFFICE_READER_SETTINGS,
+  );
   private readingStates = new ReadingStateStore();
   private dataSaveTimer: number | null = null;
   private dataSavePromise: Promise<void> = Promise.resolve();
@@ -32,6 +44,7 @@ export default class WordReaderPlugin extends Plugin {
     await this.loadSettings();
     this.addSettingTab(new WordReaderSettingTab(this.app, this));
     const text = this.text;
+    const pptxText = getPptxReaderText(this.settings.common.language);
 
     this.registerView(
       VIEW_TYPE_WORD_READER,
@@ -41,212 +54,112 @@ export default class WordReaderPlugin extends Plugin {
       VIEW_TYPE_PPTX_READER,
       (leaf) => new PptxView(leaf, this),
     );
+    this.registerExtensions(
+      [...DOCX_ADAPTER.extensions],
+      DOCX_ADAPTER.viewType,
+    );
+    this.registerExtensions(
+      [...PPTX_ADAPTER.extensions],
+      PPTX_ADAPTER.viewType,
+    );
 
-    this.registerExtensions(["docx", "doc"], VIEW_TYPE_WORD_READER);
-    this.registerExtensions(["pptx"], VIEW_TYPE_PPTX_READER);
+    this.registerReaderCommand(
+      "reload",
+      text.commands.reload,
+      (session) => session.capabilities.reload,
+      (session) => session.reload(),
+    );
+    this.registerReaderCommand(
+      "copy-text",
+      text.commands.copyText,
+      (session) => session.capabilities.copyText && Boolean(session.copyText),
+      (session) => session.copyText?.(),
+    );
+    this.registerReaderCommand(
+      "copy-markdown",
+      text.commands.copyMarkdown,
+      (session) =>
+        session.capabilities.copyMarkdown && Boolean(session.copyMarkdown),
+      (session) => session.copyMarkdown?.(),
+    );
+    this.registerReaderCommand(
+      "create-note",
+      text.commands.createNote,
+      (session) =>
+        session.capabilities.summaryNote &&
+        Boolean(session.createSummaryNote),
+      (session) => session.createSummaryNote?.(),
+    );
+    this.registerReaderCommand(
+      "open-external",
+      text.commands.openExternal,
+      (session) =>
+        session.capabilities.openExternal && Boolean(session.openExternal),
+      (session) => session.openExternal?.(),
+    );
 
-    this.addCommand({
-      id: "reload",
-      name: text.commands.reload,
-      checkCallback: (checking) => {
-        const view = this.getActiveReaderView();
-        if (!view?.file) {
-          return false;
-        }
-
-        if (!checking) {
-          void view.reload();
-        }
-
-        return true;
-      },
-    });
-
-    this.addCommand({
-      id: "copy-text",
-      name: text.commands.copyText,
-      checkCallback: (checking) => {
-        const view = this.getActiveWordView();
-        if (!view?.file) {
-          return false;
-        }
-
-        if (!checking) {
-          void view.copyText();
-        }
-
-        return true;
-      },
-    });
-
-    this.addCommand({
-      id: "copy-markdown",
-      name: text.commands.copyMarkdown,
-      checkCallback: (checking) => {
-        const view = this.getActiveWordView();
-        if (!view?.file) {
-          return false;
-        }
-
-        if (!checking) {
-          void view.copyMarkdown();
-        }
-
-        return true;
-      },
-    });
-
-    this.addCommand({
-      id: "create-note",
-      name: text.commands.createNote,
-      checkCallback: (checking) => {
-        const view = this.getActiveWordView();
-        if (!view?.file) {
-          return false;
-        }
-
-        if (!checking) {
-          void createNoteFromDocx(this.app, view.file, this.text);
-        }
-
-        return true;
-      },
-    });
-
-    this.addCommand({
-      id: "open-external",
-      name: text.commands.openExternal,
-      checkCallback: (checking) => {
-        const view = this.getActiveReaderView();
-        if (!view?.file) {
-          return false;
-        }
-
-        if (!checking) {
-          if (view instanceof PptxView) {
-            void view.openExternal();
-          } else {
-            void openExternalDocx(this.app, view.file, this.text);
-          }
-        }
-
-        return true;
-      },
-    });
-
-    const pptxText = getPptxReaderText(this.settings.language);
-    this.addCommand({
-      id: "previous-slide",
-      name: pptxText.commands.previousSlide,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          void view.previousSlide();
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: "next-slide",
-      name: pptxText.commands.nextSlide,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          void view.nextSlide();
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: "toggle-presentation-fullscreen",
-      name: pptxText.commands.toggleFullscreen,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          void view.toggleFullscreen();
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: "copy-presentation-text",
-      name: pptxText.commands.copySlideText,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          void view.copyText();
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: "copy-presentation-render-diagnostics",
-      name: pptxText.commands.copyRenderDiagnostics,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          void view.copyRenderDiagnostics();
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: "create-presentation-note",
-      name: pptxText.commands.createSummaryNote,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          void view.createSummaryNote();
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: "toggle-presentation-notes",
-      name: pptxText.commands.toggleNotes,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          view.toggleNotes();
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: "search-presentation",
-      name: pptxText.commands.focusSearch,
-      checkCallback: (checking) => {
-        const view = this.getActivePptxView();
-        if (!view?.file) {
-          return false;
-        }
-        if (!checking) {
-          view.focusSearch();
-        }
-        return true;
-      },
-    });
+    this.registerReaderCommand(
+      "previous-slide",
+      pptxText.commands.previousSlide,
+      (session) =>
+        session.capabilities.paged && Boolean(session.previousPage),
+      (session) => session.previousPage?.(),
+    );
+    this.registerReaderCommand(
+      "next-slide",
+      pptxText.commands.nextSlide,
+      (session) =>
+        session.capabilities.paged && Boolean(session.nextPage),
+      (session) => session.nextPage?.(),
+    );
+    this.registerReaderCommand(
+      "toggle-presentation-fullscreen",
+      pptxText.commands.toggleFullscreen,
+      (session) =>
+        session.capabilities.fullscreen && Boolean(session.toggleFullscreen),
+      (session) => session.toggleFullscreen?.(),
+    );
+    this.registerReaderCommand(
+      "copy-presentation-text",
+      pptxText.commands.copySlideText,
+      (session) =>
+        session.capabilities.paged &&
+        session.capabilities.copyText &&
+        Boolean(session.copyText),
+      (session) => session.copyText?.(),
+    );
+    this.registerReaderCommand(
+      "copy-presentation-render-diagnostics",
+      pptxText.commands.copyRenderDiagnostics,
+      (session) =>
+        session.capabilities.diagnostics && Boolean(session.copyDiagnostics),
+      (session) => session.copyDiagnostics?.(),
+    );
+    this.registerReaderCommand(
+      "create-presentation-note",
+      pptxText.commands.createSummaryNote,
+      (session) =>
+        session.capabilities.paged &&
+        session.capabilities.summaryNote &&
+        Boolean(session.createSummaryNote),
+      (session) => session.createSummaryNote?.(),
+    );
+    this.registerReaderCommand(
+      "toggle-presentation-notes",
+      pptxText.commands.toggleNotes,
+      (session) =>
+        session.capabilities.notes && Boolean(session.toggleNotes),
+      (session) => session.toggleNotes?.(),
+    );
+    this.registerReaderCommand(
+      "search-presentation",
+      pptxText.commands.focusSearch,
+      (session) =>
+        session.capabilities.paged &&
+        session.capabilities.search &&
+        Boolean(session.focusSearch),
+      (session) => session.focusSearch?.(),
+    );
   }
 
   onunload(): void {
@@ -259,55 +172,57 @@ export default class WordReaderPlugin extends Plugin {
     }
   }
 
-  private getActiveWordView(): WordView | null {
-    return this.app.workspace.getActiveViewOfType(WordView);
-  }
-
-  private getActivePptxView(): PptxView | null {
-    return this.app.workspace.getActiveViewOfType(PptxView);
-  }
-
-  private getActiveReaderView(): WordView | PptxView | null {
-    return this.getActiveWordView() ?? this.getActivePptxView();
-  }
-
   get text(): WordReaderText {
-    return getWordReaderText(this.settings.language);
+    return getWordReaderText(this.settings.common.language);
   }
 
   refreshWordReaderViews(): void {
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_WORD_READER)) {
-      if (leaf.view instanceof WordView) {
-        leaf.view.refreshInterfaceLanguage();
-      }
-    }
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_PPTX_READER)) {
-      if (leaf.view instanceof PptxView) {
-        leaf.view.refreshInterfaceLanguage();
+    for (const viewType of [
+      VIEW_TYPE_WORD_READER,
+      VIEW_TYPE_PPTX_READER,
+    ]) {
+      for (const leaf of this.app.workspace.getLeavesOfType(viewType)) {
+        if (isReaderSession(leaf.view)) {
+          leaf.view.refreshInterfaceLanguage();
+        }
       }
     }
   }
 
   async loadSettings(): Promise<void> {
     const loadedData: unknown = await this.loadData();
-    this.settings = normalizeSettings(loadedData);
+    this.settings = migrateSettings(loadedData);
     this.readingStates = new ReadingStateStore(
       undefined,
       getReadingStateData(loadedData),
     );
+    if (!hasCurrentSettingsSchema(loadedData)) {
+      await this.persistData();
+    }
   }
 
   async saveSettings(): Promise<void> {
-    this.settings = normalizeSettings(this.settings);
+    this.settings = normalizeOfficeReaderSettings(this.settings);
     await this.flushData();
   }
 
-  getReadingState(path: string): ReaderViewState | undefined {
-    return this.readingStates.get(path);
+  getReadingState(
+    file: TFile | ReaderFileIdentity | string,
+  ): ReaderViewState | undefined {
+    return typeof file === "string"
+      ? this.readingStates.get(file)
+      : this.readingStates.get(toReaderIdentity(file));
   }
 
-  updateReadingState(path: string, state: ReaderViewState): void {
-    this.readingStates.set(path, state);
+  updateReadingState(
+    file: TFile | ReaderFileIdentity | string,
+    state: ReaderViewState,
+  ): void {
+    if (typeof file === "string") {
+      this.readingStates.set(file, state);
+    } else {
+      this.readingStates.set(toReaderIdentity(file), state);
+    }
     this.scheduleDataSave();
   }
 
@@ -317,6 +232,33 @@ export default class WordReaderPlugin extends Plugin {
       this.dataSaveTimer = null;
     }
     await this.persistData();
+  }
+
+  private registerReaderCommand(
+    id: string,
+    name: string,
+    isAvailable: (session: ReaderSession) => boolean,
+    run: (session: ReaderSession) => void | Promise<void>,
+  ): void {
+    this.addCommand({
+      id,
+      name,
+      checkCallback: (checking) => {
+        const session = this.getActiveReaderSession();
+        if (!session?.file || !isAvailable(session)) {
+          return false;
+        }
+        if (!checking) {
+          void run(session);
+        }
+        return true;
+      },
+    });
+  }
+
+  private getActiveReaderSession(): ReaderSession | null {
+    const view = this.app.workspace.getMostRecentLeaf()?.view;
+    return isReaderSession(view) ? view : null;
   }
 
   private scheduleDataSave(): void {
@@ -350,4 +292,74 @@ function getReadingStateData(data: unknown): unknown {
     return undefined;
   }
   return (data as Record<string, unknown>).readingStates;
+}
+
+function hasCurrentSettingsSchema(data: unknown): boolean {
+  if (typeof data !== "object" || data === null) {
+    return false;
+  }
+  const source = data as Record<string, unknown>;
+  const settingsAreCurrent =
+    source.schemaVersion === DEFAULT_OFFICE_READER_SETTINGS.schemaVersion &&
+    typeof source.common === "object" &&
+    source.common !== null &&
+    typeof source.docx === "object" &&
+    source.docx !== null &&
+    typeof source.pptx === "object" &&
+    source.pptx !== null &&
+    typeof source.xlsx === "object" &&
+    source.xlsx !== null;
+  if (!settingsAreCurrent) {
+    return false;
+  }
+  const readingStates = source.readingStates;
+  return (
+    readingStates === undefined ||
+    (
+      Array.isArray(readingStates) &&
+      readingStates.every(isCurrentReadingStateEntry)
+    )
+  );
+}
+
+function isCurrentReadingStateEntry(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.path === "string" &&
+    typeof entry.mtime === "number" &&
+    typeof entry.format === "string" &&
+    typeof entry.position === "object" &&
+    entry.position !== null &&
+    typeof entry.zoom === "object" &&
+    entry.zoom !== null &&
+    typeof entry.navigation === "object" &&
+    entry.navigation !== null
+  );
+}
+
+function toReaderIdentity(
+  file: TFile | ReaderFileIdentity,
+): ReaderFileIdentity {
+  if ("format" in file) {
+    return file;
+  }
+  return {
+    path: file.path,
+    mtime: file.stat.mtime,
+    format: getReaderFormat(file.extension),
+  };
+}
+
+function getReaderFormat(extension: string): ReaderFormat {
+  switch (extension.toLowerCase()) {
+    case "pptx":
+      return "pptx";
+    case "xlsx":
+      return "xlsx";
+    default:
+      return "docx";
+  }
 }

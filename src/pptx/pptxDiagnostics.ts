@@ -1,5 +1,12 @@
 import type { TFile } from "obsidian";
 
+import {
+  createReaderDiagnosticReport,
+  fingerprintMessage,
+  formatReaderDiagnosticReport,
+  type ReaderDiagnosticReport,
+} from "../reader/diagnostics";
+import type { PptxErrorKind } from "./pptxErrors";
 import type { PptxPackage } from "./pptxPackage";
 import type { PptxRenderDiagnostics } from "./pptxRenderer";
 
@@ -10,14 +17,7 @@ export interface PptxThumbnailDiagnostics {
   resourceCount: number;
 }
 
-export interface PptxDiagnosticReport {
-  product: "Office Reader";
-  version: 1;
-  file: {
-    name: string;
-    sizeBytes: number;
-    modifiedTime: number;
-  };
+export interface PptxDiagnosticDetails {
   presentation: {
     slide: number;
     slideCount: number;
@@ -32,6 +32,16 @@ export interface PptxDiagnosticReport {
   thumbnails: PptxThumbnailDiagnostics;
 }
 
+export interface PptxErrorDiagnosticDetails {
+  category: PptxErrorKind;
+  fingerprint: string;
+}
+
+export type PptxDiagnosticReport =
+  ReaderDiagnosticReport<PptxDiagnosticDetails>;
+export type PptxErrorDiagnosticReport =
+  ReaderDiagnosticReport<PptxErrorDiagnosticDetails>;
+
 export function createPptxDiagnosticReport(
   file: Pick<TFile, "name" | "stat">,
   presentation: PptxPackage,
@@ -39,31 +49,57 @@ export function createPptxDiagnosticReport(
   render: PptxRenderDiagnostics,
   thumbnails: PptxThumbnailDiagnostics,
 ): PptxDiagnosticReport {
-  return {
-    product: "Office Reader",
-    version: 1,
-    file: {
+  const slide = slideIndex + 1;
+  return createReaderDiagnosticReport(
+    "pptx",
+    "render",
+    {
       name: file.name,
-      sizeBytes: file.stat.size,
-      modifiedTime: file.stat.mtime,
+      size: file.stat.size,
+      mtime: file.stat.mtime,
     },
-    presentation: {
-      slide: slideIndex + 1,
-      slideCount: presentation.slideCount,
-      slideWidthEmu: presentation.slideWidth,
-      slideHeightEmu: presentation.slideHeight,
-      zipFileCount: presentation.zipSummary.fileCount,
-      zipCompressedBytes: presentation.zipSummary.totalCompressedBytes,
-      zipExpandedBytes: presentation.zipSummary.totalUncompressedBytes,
-      cache: presentation.getCacheDiagnostics(),
+    `Presentation render metrics for slide ${slide} of ${presentation.slideCount}`,
+    {
+      presentation: {
+        slide,
+        slideCount: presentation.slideCount,
+        slideWidthEmu: presentation.slideWidth,
+        slideHeightEmu: presentation.slideHeight,
+        zipFileCount: presentation.zipSummary.fileCount,
+        zipCompressedBytes: presentation.zipSummary.totalCompressedBytes,
+        zipExpandedBytes: presentation.zipSummary.totalUncompressedBytes,
+        cache: presentation.getCacheDiagnostics(),
+      },
+      render,
+      thumbnails,
     },
-    render,
-    thumbnails,
-  };
+  );
+}
+
+export function createPptxErrorDiagnosticReport(
+  file: Pick<TFile, "name" | "stat">,
+  category: PptxErrorKind,
+  rawMessage: string,
+): PptxErrorDiagnosticReport {
+  const fingerprint = fingerprintMessage(rawMessage);
+  return createReaderDiagnosticReport(
+    "pptx",
+    "error",
+    {
+      name: file.name,
+      size: file.stat.size,
+      mtime: file.stat.mtime,
+    },
+    `Presentation could not be opened (fingerprint: ${fingerprint})`,
+    {
+      category,
+      fingerprint,
+    },
+  );
 }
 
 export function formatPptxDiagnosticReport(
-  report: PptxDiagnosticReport,
+  report: PptxDiagnosticReport | PptxErrorDiagnosticReport,
 ): string {
-  return JSON.stringify(report, null, 2);
+  return formatReaderDiagnosticReport(report);
 }

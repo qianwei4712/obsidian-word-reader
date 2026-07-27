@@ -30,7 +30,7 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
 - 支持复制选中文本、整篇纯文本、选中内容 Markdown 或整篇 Markdown。
 - 支持通过可折叠大纲在 Word 的 1 至 9 级标题之间跳转，可识别继承标题大纲
   级别的本地化和自定义样式，并在阅读时高亮当前章节。
-- 为最近使用的 50 个 Word 文档恢复缩放、适配宽度、大纲显示、折叠章节和滚动位置。
+- 为最近使用的 100 个 Office 文档恢复缩放、适配模式、导航状态和阅读位置。
 - 支持插件界面在中文和英文之间切换。
 - 支持用系统默认程序打开原始 Word 文件。
 - 旧版 `.doc` 文件会显示说明页面，提供外部打开和转换建议。
@@ -138,7 +138,9 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
 - PPTX 会在解压前检查文件数量、单条目解压大小、总解压大小、ZIP64、
   加密和异常压缩率。
 - 错误页面提供默认收起的诊断详情，并支持复制诊断信息用于提交问题。
-- 复制的诊断信息使用 JSON，只包含错误分类、文件名、大小、修改时间，以及带错误指纹的隐私安全摘要。原始渲染错误、文档正文、内部 XML 和 vault 绝对路径均不会被复制。
+- 复制的诊断信息使用统一、带版本号的 JSON 信封，只包含格式、诊断类型、
+  文件名、大小、修改时间、隐私安全摘要和有界的格式指标。原始渲染错误、
+  文档正文、内部 XML 和 vault 绝对路径均不会被复制。
 - 成功打开 PPTX 后也可以复制 JSON 渲染诊断，包含文档包大小、幻灯片尺寸、
   对象数量、生成资源数量、显式字体和渲染耗时；不会包含文档正文、演讲者备注、
   内部 XML 或 vault 绝对路径。
@@ -146,8 +148,11 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
 
 ## 性能与稳定性
 
-- 公共阅读生命周期、状态、诊断、缩放、外部打开和资源清理模块会保持文档行为一致，
-  并为后续本地 Office 格式提供基础。
+- 共享阅读壳层以及 `OfficeReaderAdapter`、`ReaderSession`、
+  `ReaderCapabilities` 契约统一工具栏、状态、错误、诊断与资源清理行为；
+  DOCX/PPTX 渲染逻辑分别位于格式专属适配器和会话。
+- 持久化设置带显式 schema 版本，并按 `common`、`docx`、`pptx` 和预留的
+  `xlsx` 分区；2.4 之前的扁平设置会自动迁移。
 - 渲染流程使用取消 token，过期渲染结果会被丢弃。
 - PPTX 文件读取和幻灯片渲染使用独立的取消代次，快速切换文件或页码时
   不会提交过期画面。
@@ -170,7 +175,9 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
   文档 DOM；阅读状态按动画帧合并，未变化状态不会重复写入。
 - 适配宽度只切换 CSS 状态，不会重新渲染文档。
 - 生产构建强制执行 `dist/main.js` 不超过 500 KiB 的体积预算。
-- 阅读状态使用最多保留 50 个文件的 LRU 存储，避免插件持久化数据无限增长。
+- 阅读状态使用最多保留 100 个文件的 LRU 存储；每条记录只包含路径、修改时间、
+  格式、位置、缩放和导航状态。源文件修改后会清除过期的位置与导航状态，同时
+  保留用户的缩放与适配偏好。
 - 开发构建会在开发者控制台记录 Word 文件读取、渲染、DOM 提交、大纲和预览
   总耗时，以及 PPTX 渲染耗时、对象数量、资源和字体指标。
 - 关闭或卸载文件时会释放文档缓冲、生成的 Blob URL、搜索定时器和搜索结果引用。
@@ -199,6 +206,8 @@ Office Reader 是一个 Obsidian 桌面端插件，用于在 Obsidian 内直接�
 ---
 source: "报告.docx"
 type: word-note
+reader: office-reader
+reader_format: docx
 created: 2026-05-28
 ---
 
@@ -215,9 +224,9 @@ created: 2026-05-28
 ## 引用摘录
 ```
 
-演示文稿笔记使用 `type: presentation-note`，记录当前幻灯片，并为全部幻灯片
-生成带页码的引用列表。如果同名 Markdown 已经存在，插件会直接打开已有笔记，
-不会覆盖内容。
+演示文稿笔记使用 `type: presentation-note` 和 `reader_format: pptx`，记录
+当前幻灯片，并为全部幻灯片生成带页码的引用列表。如果同名 Markdown 已经存在，
+插件会直接打开已有笔记，不会覆盖内容。
 
 ## 安装
 
@@ -295,11 +304,11 @@ styles.css
 推送不带 `v` 前缀的版本 tag 后，GitHub Actions 会自动创建 release：
 
 ```bash
-git tag 2.3.2
-git push origin 2.3.2
+git tag 2.4.0
+git push origin 2.4.0
 ```
 
-workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.3.2.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.4.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
 
 ## 开发
 

@@ -1,5 +1,58 @@
 # Changelog
 
+## 2.4.0 - 2026-07-27
+
+### English
+
+#### Added
+
+- Added the shared `OfficeReaderShell`, `OfficeReaderAdapter`,
+  `ReaderSession`, and `ReaderCapabilities` contracts. Toolbar commands and
+  controls now use declared format capabilities.
+- Added versioned settings with `common`, `docx`, `pptx`, and reserved `xlsx`
+  sections, plus automatic migration from the pre-2.4 flat data shape.
+- Added `office-reader-*` shared CSS classes while retaining the existing
+  `word-reader-*` and `pptx-reader-*` compatibility classes.
+
+#### Changed
+
+- Moved DOCX and PPTX rendering, navigation, search, copy, state, and cleanup
+  behavior into format-specific sessions and adapters. The legacy view modules
+  now remain as small Obsidian registration entry points.
+- Expanded the bounded reading-state LRU from 50 to 100 Office files. The new
+  persisted shape records only file identity, modification time, format,
+  position, zoom, and navigation state; legacy entries migrate without losing
+  their first restored position.
+- File modification now invalidates stale position and navigation state while
+  retaining the user's zoom and fit preference.
+- Unified DOCX and PPTX diagnostic JSON under a versioned, privacy-safe
+  envelope and removed raw PPTX error messages from the error details panel.
+- Unified DOCX and PPTX summary-note creation and frontmatter conventions with
+  `reader: office-reader` and `reader_format` metadata.
+
+### 中文
+
+#### 新增
+
+- 新增共享 `OfficeReaderShell`、`OfficeReaderAdapter`、`ReaderSession` 和
+  `ReaderCapabilities` 契约；工具栏命令和控件改为按格式声明的能力启用。
+- 新增带版本号的设置结构，按 `common`、`docx`、`pptx` 和预留的 `xlsx`
+  分区，并自动迁移 2.4 之前的扁平数据。
+- 新增 `office-reader-*` 通用 CSS 类，同时保留现有 `word-reader-*` 和
+  `pptx-reader-*` 兼容类。
+
+#### 变更
+
+- DOCX/PPTX 的渲染、导航、搜索、复制、状态和资源清理逻辑迁入各自的会话与
+  适配器；旧视图模块只保留精简的 Obsidian 注册入口。
+- 阅读状态 LRU 从 50 条扩展为 100 条 Office 文件记录。新结构只保存文件
+  标识、修改时间、格式、位置、缩放和导航状态；旧记录首次恢复时不会丢失位置。
+- 文件修改后会清除已失效的位置和导航状态，同时保留用户的缩放与适配偏好。
+- DOCX/PPTX 诊断统一为带版本号的隐私安全 JSON 信封，并从 PPTX 错误详情中
+  移除原始错误消息。
+- DOCX/PPTX 摘要笔记统一创建流程和 frontmatter 约定，新增
+  `reader: office-reader` 与 `reader_format` 元数据。
+
 ## 2.3.2 - 2026-07-26
 
 ### English

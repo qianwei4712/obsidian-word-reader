@@ -20,6 +20,8 @@ void test("presentation notes include current and complete slide references", ()
   );
 
   assert.match(note, /type: presentation-note/);
+  assert.match(note, /reader: office-reader/);
+  assert.match(note, /reader_format: pptx/);
   assert.match(note, /current_slide: 2/);
   assert.match(note, /Current slide: Slide 2 - Results/);
   assert.match(note, /- Slide 1 - Overview/);

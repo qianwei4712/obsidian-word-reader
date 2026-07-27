@@ -33,8 +33,8 @@ Requires Obsidian Desktop 1.12.7 or newer.
 - Use the collapsible outline panel to jump between Word heading levels 1-9,
   including localized and custom styles that inherit a heading outline level,
   and see the current section highlighted while reading.
-- Restore zoom, fit-width mode, outline state, collapsed sections, and scroll
-  position for the 50 most recently used Word documents.
+- Restore zoom, fit mode, navigation state, and reading position for the 100
+  most recently used Office documents.
 - Switch the plugin interface between Chinese and English.
 - Open the source file with the system default Word/WPS-compatible application.
 - Show a clear fallback page for legacy `.doc` files with external-open and conversion guidance.
@@ -151,7 +151,10 @@ Available settings:
   expanded size, total expanded size, ZIP64 usage, encryption, and abnormal
   compression ratios.
 - Error pages provide a collapsed diagnostic section and a copy action for issue reports.
-- Copied diagnostics use JSON and include only the error category, file name, size, modification time, and a privacy-safe summary with an error fingerprint. Raw renderer errors, document content, internal XML, and absolute vault paths are excluded.
+- Copied diagnostics use a shared, versioned JSON envelope and include only the
+  format, diagnostic kind, file name, size, modification time, a privacy-safe
+  summary, and bounded format metrics. Raw renderer errors, document content,
+  internal XML, and absolute vault paths are excluded.
 - Successful PPTX previews also expose copyable JSON render diagnostics with
   package sizes, slide dimensions, object counts, generated-resource counts,
   explicit font families, and render duration. Document text, speaker notes,
@@ -160,9 +163,13 @@ Available settings:
 
 ## Performance and Stability
 
-- Shared reader lifecycle, status, diagnostics, zoom, external-open, and
-  resource-cleanup primitives keep document behavior consistent and prepare
-  the plugin for later local Office formats.
+- A shared reader shell plus `OfficeReaderAdapter`, `ReaderSession`, and
+  `ReaderCapabilities` contracts keep toolbars, status, errors, diagnostics,
+  and cleanup behavior consistent. DOCX and PPTX rendering logic lives in
+  format-specific adapters and sessions.
+- Persisted settings use an explicit schema version with separate `common`,
+  `docx`, `pptx`, and reserved `xlsx` sections. Pre-2.4 flat settings migrate
+  automatically.
 - Rendering work is guarded by a cancellation token so stale results are discarded.
 - PPTX file and slide rendering use separate cancellation generations so rapid
   file switching and page navigation cannot commit stale slides.
@@ -189,8 +196,10 @@ Available settings:
   unchanged states are skipped.
 - Fit-width mode is a CSS state change and does not rerender the document.
 - Production builds enforce a compressed `dist/main.js` budget of 500 KiB.
-- Reading state uses a bounded 50-file LRU store so persisted plugin data does
-  not grow without limit.
+- Reading state uses a bounded 100-file LRU store. Persisted entries contain
+  only path, modification time, format, position, zoom, and navigation state.
+  When a source file changes, stale position/navigation data is cleared while
+  the user's zoom and fit preference is retained.
 - Development builds log Word file reading, rendering, DOM commit, outline,
   and total preview timings, plus PPTX render duration, object counts,
   resources, and fonts, to the developer console.
@@ -220,6 +229,8 @@ The generated note includes frontmatter and starter sections:
 ---
 source: "Report.docx"
 type: word-note
+reader: office-reader
+reader_format: docx
 created: 2026-05-28
 ---
 
@@ -236,9 +247,10 @@ Source: [[Report.docx]]
 ## Quoted excerpts
 ```
 
-Presentation notes use `type: presentation-note`, record the current slide,
-and include a numbered reference list for every slide. If the same-name
-Markdown file already exists, the plugin opens it without overwriting content.
+Presentation notes use `type: presentation-note` and
+`reader_format: pptx`, record the current slide, and include a numbered
+reference list for every slide. If the same-name Markdown file already exists,
+the plugin opens it without overwriting content.
 
 ## Installation
 
@@ -316,11 +328,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag 2.3.2
-git push origin 2.3.2
+git tag 2.4.0
+git push origin 2.4.0
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.3.2.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.4.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 

@@ -20,6 +20,8 @@ void test("buildSummaryNote creates a deterministic localized note", () => {
       "---",
       'source: "Reports/Quarterly report.docx"',
       "type: word-note",
+      "reader: office-reader",
+      "reader_format: docx",
       "created: 2026-06-07",
       "---",
       "",

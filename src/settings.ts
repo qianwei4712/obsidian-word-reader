@@ -10,15 +10,23 @@ import {
   getWordReaderText,
 } from "./i18n";
 import {
+  DEFAULT_OFFICE_READER_SETTINGS,
   DEFAULT_SETTINGS,
+  migrateSettings,
+  normalizeOfficeReaderSettings,
   normalizeSettings,
+  type OfficeReaderSettings,
   type WordReaderLanguage,
   type WordReaderSettings,
 } from "./settingsModel";
 
 export {
+  DEFAULT_OFFICE_READER_SETTINGS,
   DEFAULT_SETTINGS,
+  migrateSettings,
+  normalizeOfficeReaderSettings,
   normalizeSettings,
+  type OfficeReaderSettings,
   type WordReaderLanguage,
   type WordReaderSettings,
 };
@@ -37,7 +45,8 @@ export class WordReaderSettingTab extends PluginSettingTab {
   }
 
   getSettingDefinitions(): SettingDefinitionItem[] {
-    const text = getWordReaderText(this.plugin.settings.language).settings;
+    const text =
+      getWordReaderText(this.plugin.settings.common.language).settings;
 
     return [
       {
@@ -45,8 +54,8 @@ export class WordReaderSettingTab extends PluginSettingTab {
         desc: text.languageDesc,
         control: {
           type: "dropdown",
-          key: "language",
-          defaultValue: DEFAULT_SETTINGS.language,
+          key: "common.language",
+          defaultValue: DEFAULT_OFFICE_READER_SETTINGS.common.language,
           options: {
             "zh-CN": text.languageZh,
             en: text.languageEn,
@@ -58,8 +67,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
         desc: text.defaultZoomDesc,
         control: {
           type: "number",
-          key: "defaultZoomPercent",
-          defaultValue: DEFAULT_SETTINGS.defaultZoomPercent,
+          key: "common.defaultZoomPercent",
+          defaultValue:
+            DEFAULT_OFFICE_READER_SETTINGS.common.defaultZoomPercent,
           placeholder: "100",
           min: MIN_ZOOM_PERCENT,
           max: MAX_ZOOM_PERCENT,
@@ -71,8 +81,8 @@ export class WordReaderSettingTab extends PluginSettingTab {
         desc: text.defaultFitWidthDesc,
         control: {
           type: "toggle",
-          key: "defaultFitWidth",
-          defaultValue: DEFAULT_SETTINGS.defaultFitWidth,
+          key: "docx.defaultFitWidth",
+          defaultValue: DEFAULT_OFFICE_READER_SETTINGS.docx.defaultFitWidth,
         },
       },
       {
@@ -80,8 +90,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
         desc: text.showOutlineDesc,
         control: {
           type: "toggle",
-          key: "showOutlineByDefault",
-          defaultValue: DEFAULT_SETTINGS.showOutlineByDefault,
+          key: "docx.showOutlineByDefault",
+          defaultValue:
+            DEFAULT_OFFICE_READER_SETTINGS.docx.showOutlineByDefault,
         },
       },
       {
@@ -89,8 +100,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
         desc: text.imagePreviewDesc,
         control: {
           type: "toggle",
-          key: "enableImagePreview",
-          defaultValue: DEFAULT_SETTINGS.enableImagePreview,
+          key: "docx.enableImagePreview",
+          defaultValue:
+            DEFAULT_OFFICE_READER_SETTINGS.docx.enableImagePreview,
         },
       },
       {
@@ -98,8 +110,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
         desc: text.largeFileWarningDesc,
         control: {
           type: "number",
-          key: "largeFileWarningMb",
-          defaultValue: DEFAULT_SETTINGS.largeFileWarningMb,
+          key: "common.largeFileWarningMb",
+          defaultValue:
+            DEFAULT_OFFICE_READER_SETTINGS.common.largeFileWarningMb,
           placeholder: "25",
           min: MIN_LARGE_FILE_WARNING_MB,
           max: MAX_LARGE_FILE_WARNING_MB,
@@ -116,7 +129,8 @@ export class WordReaderSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    const text = getWordReaderText(this.plugin.settings.language).settings;
+    const text =
+      getWordReaderText(this.plugin.settings.common.language).settings;
 
     new Setting(containerEl)
       .setName(text.languageName)
@@ -125,9 +139,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
         dropdown
           .addOption("zh-CN", text.languageZh)
           .addOption("en", text.languageEn)
-          .setValue(this.plugin.settings.language)
+          .setValue(this.plugin.settings.common.language)
           .onChange(async (value) => {
-            await this.setControlValue("language", value);
+            await this.setControlValue("common.language", value);
           });
       });
 
@@ -137,9 +151,12 @@ export class WordReaderSettingTab extends PluginSettingTab {
       .addText((input) => {
         input
           .setPlaceholder("100")
-          .setValue(String(this.plugin.settings.defaultZoomPercent))
+          .setValue(String(this.plugin.settings.common.defaultZoomPercent))
           .onChange(async (value) => {
-            await this.setControlValue("defaultZoomPercent", Number(value));
+            await this.setControlValue(
+              "common.defaultZoomPercent",
+              Number(value),
+            );
           });
 
         input.inputEl.type = "number";
@@ -153,9 +170,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
       .setDesc(text.defaultFitWidthDesc)
       .addToggle((toggle) => {
         toggle
-          .setValue(this.plugin.settings.defaultFitWidth)
+          .setValue(this.plugin.settings.docx.defaultFitWidth)
           .onChange(async (value) => {
-            await this.setControlValue("defaultFitWidth", value);
+            await this.setControlValue("docx.defaultFitWidth", value);
           });
       });
 
@@ -164,9 +181,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
       .setDesc(text.showOutlineDesc)
       .addToggle((toggle) => {
         toggle
-          .setValue(this.plugin.settings.showOutlineByDefault)
+          .setValue(this.plugin.settings.docx.showOutlineByDefault)
           .onChange(async (value) => {
-            await this.setControlValue("showOutlineByDefault", value);
+            await this.setControlValue("docx.showOutlineByDefault", value);
           });
       });
 
@@ -175,9 +192,9 @@ export class WordReaderSettingTab extends PluginSettingTab {
       .setDesc(text.imagePreviewDesc)
       .addToggle((toggle) => {
         toggle
-          .setValue(this.plugin.settings.enableImagePreview)
+          .setValue(this.plugin.settings.docx.enableImagePreview)
           .onChange(async (value) => {
-            await this.setControlValue("enableImagePreview", value);
+            await this.setControlValue("docx.enableImagePreview", value);
           });
       });
 
@@ -187,9 +204,12 @@ export class WordReaderSettingTab extends PluginSettingTab {
       .addText((input) => {
         input
           .setPlaceholder("25")
-          .setValue(String(this.plugin.settings.largeFileWarningMb))
+          .setValue(String(this.plugin.settings.common.largeFileWarningMb))
           .onChange(async (value) => {
-            await this.setControlValue("largeFileWarningMb", Number(value));
+            await this.setControlValue(
+              "common.largeFileWarningMb",
+              Number(value),
+            );
           });
 
         input.inputEl.type = "number";
@@ -208,14 +228,11 @@ export class WordReaderSettingTab extends PluginSettingTab {
   }
 
   async setControlValue(key: string, value: unknown): Promise<void> {
-    const previousLanguage = this.plugin.settings.language;
-    this.plugin.settings = normalizeSettings({
-      ...this.plugin.settings,
-      [key]: value,
-    });
+    const previousLanguage = this.plugin.settings.common.language;
+    this.plugin.settings = updateSetting(this.plugin.settings, key, value);
     await this.plugin.saveSettings();
 
-    if (this.plugin.settings.language !== previousLanguage) {
+    if (this.plugin.settings.common.language !== previousLanguage) {
       this.plugin.refreshWordReaderViews();
       (this as { update?: () => void }).update?.();
       (this as { display: () => void }).display();
@@ -224,23 +241,59 @@ export class WordReaderSettingTab extends PluginSettingTab {
 }
 
 function getSettingValue(
-  settings: WordReaderSettings,
+  settings: OfficeReaderSettings,
   key: string,
 ): unknown {
   switch (key) {
-    case "language":
-      return settings.language;
-    case "defaultZoomPercent":
-      return settings.defaultZoomPercent;
-    case "defaultFitWidth":
-      return settings.defaultFitWidth;
-    case "showOutlineByDefault":
-      return settings.showOutlineByDefault;
-    case "enableImagePreview":
-      return settings.enableImagePreview;
-    case "largeFileWarningMb":
-      return settings.largeFileWarningMb;
+    case "common.language":
+      return settings.common.language;
+    case "common.defaultZoomPercent":
+      return settings.common.defaultZoomPercent;
+    case "docx.defaultFitWidth":
+      return settings.docx.defaultFitWidth;
+    case "docx.showOutlineByDefault":
+      return settings.docx.showOutlineByDefault;
+    case "docx.enableImagePreview":
+      return settings.docx.enableImagePreview;
+    case "common.largeFileWarningMb":
+      return settings.common.largeFileWarningMb;
     default:
       return undefined;
   }
+}
+
+function updateSetting(
+  settings: OfficeReaderSettings,
+  key: string,
+  value: unknown,
+): OfficeReaderSettings {
+  const next = {
+    ...settings,
+    common: { ...settings.common },
+    docx: { ...settings.docx },
+    pptx: { ...settings.pptx },
+    xlsx: { ...settings.xlsx },
+  };
+  switch (key) {
+    case "common.language":
+      next.common.language =
+        typeof value === "string" ? value as WordReaderLanguage : "zh-CN";
+      break;
+    case "common.defaultZoomPercent":
+      next.common.defaultZoomPercent = Number(value);
+      break;
+    case "docx.defaultFitWidth":
+      next.docx.defaultFitWidth = Boolean(value);
+      break;
+    case "docx.showOutlineByDefault":
+      next.docx.showOutlineByDefault = Boolean(value);
+      break;
+    case "docx.enableImagePreview":
+      next.docx.enableImagePreview = Boolean(value);
+      break;
+    case "common.largeFileWarningMb":
+      next.common.largeFileWarningMb = Number(value);
+      break;
+  }
+  return normalizeOfficeReaderSettings(next);
 }

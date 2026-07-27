@@ -3,11 +3,20 @@ import type { PptxReaderText } from "./pptxI18n";
 import { ZipSafetyError } from "./zipLimits";
 
 export interface PptxErrorInfo {
+  kind: PptxErrorKind;
   title: string;
   body: string;
   tips: string[];
   details: string;
 }
+
+export type PptxErrorKind =
+  | "format-mismatch"
+  | "encrypted"
+  | "limit-exceeded"
+  | "damaged"
+  | "unsupported"
+  | "unknown";
 
 export function classifyPptxError(
   error: unknown,
@@ -20,6 +29,7 @@ export function classifyPptxError(
     switch (error.kind) {
       case "format-mismatch":
         return {
+          kind: "format-mismatch",
           title: text.errors.formatMismatchTitle,
           body: text.errors.formatMismatchBody,
           tips,
@@ -27,6 +37,7 @@ export function classifyPptxError(
         };
       case "encrypted":
         return {
+          kind: "encrypted",
           title: text.errors.encryptedTitle,
           body: text.errors.encryptedBody,
           tips: [text.errors.openExternally],
@@ -34,6 +45,7 @@ export function classifyPptxError(
         };
       case "limit-exceeded":
         return {
+          kind: "limit-exceeded",
           title: text.errors.limitTitle,
           body: text.errors.limitBody,
           tips: [text.errors.openExternally],
@@ -42,6 +54,7 @@ export function classifyPptxError(
       case "damaged":
       default:
         return {
+          kind: "damaged",
           title: text.errors.damagedTitle,
           body: text.errors.damagedBody,
           tips,
@@ -52,6 +65,7 @@ export function classifyPptxError(
 
   if (error instanceof PptxPackageError) {
     return {
+      kind: error.kind === "unsupported" ? "unsupported" : "damaged",
       title:
         error.kind === "unsupported"
           ? text.errors.unsupportedTitle
@@ -66,6 +80,7 @@ export function classifyPptxError(
   }
 
   return {
+    kind: "unknown",
     title: text.errors.unknownTitle,
     body: text.errors.unknownBody,
     tips,

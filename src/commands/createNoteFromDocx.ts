@@ -1,25 +1,21 @@
-import { App, Notice, TFile, normalizePath } from "obsidian";
+import { App, TFile } from "obsidian";
 import { getWordReaderText, type WordReaderText } from "../i18n";
-import { buildSummaryNote } from "../summaryNote";
+import { createOrOpenReaderSummaryNote } from "../reader/summaryNoteFile";
+import { buildSummaryNote } from "../docx/docxSummaryNote";
 
 export async function createNoteFromDocx(
   app: App,
   file: TFile,
   text: WordReaderText = getWordReaderText("zh-CN"),
 ): Promise<void> {
-  const notePath = normalizePath(
-    file.path.replace(/\.docx$/i, ".md"),
+  await createOrOpenReaderSummaryNote(
+    app,
+    file,
+    ".docx",
+    buildSummaryNote(file, text),
+    {
+      openedExisting: text.notices.openedExistingSummaryNote,
+      created: text.notices.createdSummaryNote,
+    },
   );
-
-  const existing = app.vault.getAbstractFileByPath(notePath);
-  if (existing instanceof TFile) {
-    await app.workspace.getLeaf(true).openFile(existing);
-    new Notice(text.notices.openedExistingSummaryNote);
-    return;
-  }
-
-  const content = buildSummaryNote(file, text);
-  const created = await app.vault.create(notePath, content);
-  await app.workspace.getLeaf(true).openFile(created);
-  new Notice(text.notices.createdSummaryNote);
 }

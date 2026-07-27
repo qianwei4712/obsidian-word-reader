@@ -1,6 +1,18 @@
-export const DEFAULT_READING_STATE_CAPACITY = 50;
+export const DEFAULT_READING_STATE_CAPACITY = 100;
 const MAX_COLLAPSED_OUTLINE_IDS = 200;
 
+export type ReaderFormat = "docx" | "pptx" | "xlsx";
+
+export interface ReaderFileIdentity {
+  path: string;
+  mtime: number;
+  format: ReaderFormat;
+}
+
+/**
+ * Runtime state used by reader sessions. Persisted data is deliberately
+ * converted to the narrower position/zoom/navigation shape below.
+ */
 export interface ReaderViewState {
   zoom: number;
   fitWidth: boolean;
@@ -14,8 +26,23 @@ export interface ReaderViewState {
 
 export interface PersistedReaderViewState {
   path: string;
+  mtime: number;
+  format: ReaderFormat;
   lastAccessed: number;
-  state: ReaderViewState;
+  position: {
+    scrollLeft: number;
+    scrollTop: number;
+    page?: number;
+  };
+  zoom: {
+    scale: number;
+    fit: boolean;
+  };
+  navigation: {
+    panelVisible: boolean;
+    collapsedIds: string[];
+    notesVisible?: boolean;
+  };
 }
 
 export class ReadingStateStore {
@@ -33,37 +60,80 @@ export class ReadingStateStore {
     this.enforceCapacity();
   }
 
-  get(path: string): ReaderViewState | undefined {
+  get(identity: ReaderFileIdentity): ReaderViewState | undefined;
+  get(path: string): ReaderViewState | undefined;
+  get(identityOrPath: ReaderFileIdentity | string): ReaderViewState | undefined {
+    const identity =
+      typeof identityOrPath === "string"
+        ? null
+        : normalizeIdentity(identityOrPath);
+    const path =
+      typeof identityOrPath === "string"
+        ? identityOrPath
+        : identityOrPath.path;
     const entry = this.entries.get(path);
     if (!entry) {
       return undefined;
     }
 
     entry.lastAccessed = this.nextAccess();
-    return cloneState(entry.state);
+    if (identity && entry.mtime === 0 && entry.format === identity.format) {
+      entry.mtime = identity.mtime;
+      return stateFromEntry(entry);
+    }
+    if (
+      identity &&
+      (entry.mtime !== identity.mtime || entry.format !== identity.format)
+    ) {
+      const preservedPreference = stateFromEntry(entry);
+      entry.mtime = identity.mtime;
+      entry.format = identity.format;
+      entry.position = {
+        scrollLeft: 0,
+        scrollTop: 0,
+      };
+      entry.navigation = {
+        panelVisible: defaultPanelVisibility(identity.format),
+        collapsedIds: [],
+      };
+      return {
+        ...createDefaultState(identity.format),
+        zoom: preservedPreference.zoom,
+        fitWidth: preservedPreference.fitWidth,
+      };
+    }
+
+    return stateFromEntry(entry);
   }
 
-  set(path: string, state: ReaderViewState): void {
-    if (!path) {
+  set(
+    identity: ReaderFileIdentity,
+    state: ReaderViewState,
+  ): void;
+  set(path: string, state: ReaderViewState): void;
+  set(
+    identityOrPath: ReaderFileIdentity | string,
+    state: ReaderViewState,
+  ): void {
+    const identity =
+      typeof identityOrPath === "string"
+        ? inferIdentity(identityOrPath)
+        : normalizeIdentity(identityOrPath);
+    if (!identity.path) {
       return;
     }
 
-    this.entries.set(path, {
-      path,
-      lastAccessed: this.nextAccess(),
-      state: normalizeReaderViewState(state),
-    });
+    this.entries.set(
+      identity.path,
+      entryFromState(identity, state, this.nextAccess()),
+    );
     this.enforceCapacity();
   }
 
   serialize(): PersistedReaderViewState[] {
     return Array.from(this.entries.values())
       .sort((left, right) => left.lastAccessed - right.lastAccessed)
-      .map((entry) => ({
-        path: entry.path,
-        lastAccessed: entry.lastAccessed,
-        state: cloneState(entry.state),
-      }));
+      .map(cloneEntry);
   }
 
   get size(): number {
@@ -125,19 +195,174 @@ function normalizeStoredEntries(value: unknown): PersistedReaderViewState[] {
       continue;
     }
 
-    entries.push({
-      path: item.path,
-      lastAccessed: readFiniteNumber(item.lastAccessed, entries.length + 1),
-      state: normalizeReaderViewState(item.state),
-    });
+    const format = normalizeFormat(
+      item.format,
+      inferFormatFromPath(item.path),
+    );
+    const lastAccessed = readFiniteNumber(
+      item.lastAccessed,
+      entries.length + 1,
+    );
+    if (
+      isRecord(item.position) &&
+      isRecord(item.zoom) &&
+      isRecord(item.navigation)
+    ) {
+      const normalizedState = normalizeReaderViewState({
+        zoom: item.zoom.scale,
+        fitWidth: item.zoom.fit,
+        outlineVisible: item.navigation.panelVisible,
+        scrollLeft: item.position.scrollLeft,
+        scrollTop: item.position.scrollTop,
+        collapsedOutlineIds: item.navigation.collapsedIds,
+        page: item.position.page,
+        notesVisible: item.navigation.notesVisible,
+      });
+      entries.push(
+        entryFromState(
+          {
+            path: item.path,
+            mtime: Math.max(0, readFiniteNumber(item.mtime, 0)),
+            format,
+          },
+          normalizedState,
+          lastAccessed,
+        ),
+      );
+      continue;
+    }
+
+    // Pre-2.4 entries stored an unrestricted view state under `state`.
+    entries.push(
+      entryFromState(
+        {
+          path: item.path,
+          mtime: Math.max(0, readFiniteNumber(item.mtime, 0)),
+          format,
+        },
+        normalizeReaderViewState(item.state),
+        lastAccessed,
+      ),
+    );
   }
   return entries;
 }
 
-function cloneState(state: ReaderViewState): ReaderViewState {
+function entryFromState(
+  identity: ReaderFileIdentity,
+  state: ReaderViewState,
+  lastAccessed: number,
+): PersistedReaderViewState {
+  const normalized = normalizeReaderViewState(state);
+  const position: PersistedReaderViewState["position"] = {
+    scrollLeft: normalized.scrollLeft,
+    scrollTop: normalized.scrollTop,
+  };
+  if (normalized.page !== undefined) {
+    position.page = normalized.page;
+  }
+  const navigation: PersistedReaderViewState["navigation"] = {
+    panelVisible: normalized.outlineVisible,
+    collapsedIds: [...normalized.collapsedOutlineIds],
+  };
+  if (normalized.notesVisible !== undefined) {
+    navigation.notesVisible = normalized.notesVisible;
+  }
+
   return {
-    ...state,
-    collapsedOutlineIds: [...state.collapsedOutlineIds],
+    path: identity.path,
+    mtime: identity.mtime,
+    format: identity.format,
+    lastAccessed,
+    position,
+    zoom: {
+      scale: normalized.zoom,
+      fit: normalized.fitWidth,
+    },
+    navigation,
+  };
+}
+
+function stateFromEntry(entry: PersistedReaderViewState): ReaderViewState {
+  return normalizeReaderViewState({
+    zoom: entry.zoom.scale,
+    fitWidth: entry.zoom.fit,
+    outlineVisible: entry.navigation.panelVisible,
+    scrollLeft: entry.position.scrollLeft,
+    scrollTop: entry.position.scrollTop,
+    collapsedOutlineIds: entry.navigation.collapsedIds,
+    page: entry.position.page,
+    notesVisible: entry.navigation.notesVisible,
+  });
+}
+
+function cloneEntry(
+  entry: PersistedReaderViewState,
+): PersistedReaderViewState {
+  return {
+    ...entry,
+    position: { ...entry.position },
+    zoom: { ...entry.zoom },
+    navigation: {
+      ...entry.navigation,
+      collapsedIds: [...entry.navigation.collapsedIds],
+    },
+  };
+}
+
+function normalizeIdentity(
+  identity: ReaderFileIdentity,
+): ReaderFileIdentity {
+  return {
+    path: identity.path,
+    mtime: Math.max(0, readFiniteNumber(identity.mtime, 0)),
+    format: normalizeFormat(
+      identity.format,
+      inferFormatFromPath(identity.path),
+    ),
+  };
+}
+
+function inferIdentity(path: string): ReaderFileIdentity {
+  return {
+    path,
+    mtime: 0,
+    format: inferFormatFromPath(path),
+  };
+}
+
+function inferFormatFromPath(path: string): ReaderFormat {
+  const extension = path.split(".").pop()?.toLowerCase();
+  if (extension === "pptx") {
+    return "pptx";
+  }
+  if (extension === "xlsx") {
+    return "xlsx";
+  }
+  return "docx";
+}
+
+function normalizeFormat(
+  value: unknown,
+  fallback: ReaderFormat,
+): ReaderFormat {
+  return value === "docx" || value === "pptx" || value === "xlsx"
+    ? value
+    : fallback;
+}
+
+function defaultPanelVisibility(format: ReaderFormat): boolean {
+  return format !== "xlsx";
+}
+
+function createDefaultState(format: ReaderFormat): ReaderViewState {
+  return {
+    zoom: 1,
+    fitWidth: format !== "docx",
+    outlineVisible: defaultPanelVisibility(format),
+    scrollLeft: 0,
+    scrollTop: 0,
+    collapsedOutlineIds: [],
   };
 }
 
