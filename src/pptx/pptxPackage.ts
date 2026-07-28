@@ -14,6 +14,10 @@ import {
   type ZipSafetySummary,
 } from "./zipLimits";
 import {
+  enforceOoxmlPackagePolicy,
+  OoxmlPolicyError,
+} from "../ooxml/packagePolicy";
+import {
   extractSlideMetadata,
   type PptxSlideMetadata,
 } from "./pptxMetadata";
@@ -179,6 +183,14 @@ export class PptxPackage {
         "unsupported",
         "Macro-enabled PowerPoint packages are not supported.",
       );
+    }
+    try {
+      await enforceOoxmlPackagePolicy(zip, "pptx");
+    } catch (error) {
+      if (error instanceof OoxmlPolicyError) {
+        throw new PptxPackageError("unsupported", error.message);
+      }
+      throw error;
     }
     const presentationXml = await readZipText(zip, "ppt/presentation.xml");
     const presentation = parsePackageXml(

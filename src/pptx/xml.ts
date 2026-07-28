@@ -1,6 +1,9 @@
 import { DOMParser } from "@xmldom/xmldom";
 
 export function parseXml(xml: string, path: string): Document {
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) {
+    throw new Error(`Invalid XML in ${path}: document type declarations are not allowed`);
+  }
   const errors: string[] = [];
   const parser = new DOMParser({
     errorHandler: {

@@ -304,11 +304,11 @@ styles.css
 推送不带 `v` 前缀的版本 tag 后，GitHub Actions 会自动创建 release：
 
 ```bash
-git tag 2.4.0
-git push origin 2.4.0
+git tag 2.5.0
+git push origin 2.5.0
 ```
 
-workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.4.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
+workflow 会校验 tag 是否与 `package.json`、`manifest.json` 和 `package-lock.json` 一致，检查 500 KiB bundle 预算，然后构建插件、生成 `release/obsidian-word-reader-2.5.0.zip`、提取对应版本的 `CHANGELOG.md` 内容，并把 `main.js`、`manifest.json`、`styles.css` 和 zip 一起上传到 GitHub Release。
 
 ## 开发
 
@@ -364,6 +364,7 @@ CI 和发布工作流使用 Node.js 20.19.0。
 ## 已知限制
 
 - 这不是 Office 编辑器。
+- XLSX 验证代码不是公开预览；计划中的 3.0.0 阅读器发布前不会注册 `.xlsx`。
 - 插件不会把修改保存回 `.docx` 或 `.pptx`。
 - 旧版 `.doc` 文件不会直接内嵌渲染，但会显示外部打开和转换说明。
 - 复杂 Word 排版无法保证与 Microsoft Word 100% 一致。

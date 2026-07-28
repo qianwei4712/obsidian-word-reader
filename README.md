@@ -328,11 +328,11 @@ Release artifacts are ignored by Git and should not be committed.
 GitHub Actions creates a release automatically when a version tag without a `v` prefix is pushed:
 
 ```bash
-git tag 2.4.0
-git push origin 2.4.0
+git tag 2.5.0
+git push origin 2.5.0
 ```
 
-The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.4.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
+The workflow validates that the tag matches `package.json`, `manifest.json`, and `package-lock.json`, checks the 500 KiB bundle budget, builds the plugin, creates `release/obsidian-word-reader-2.5.0.zip`, extracts the matching `CHANGELOG.md` section, and uploads `main.js`, `manifest.json`, `styles.css`, and the zip to the GitHub Release.
 
 ## Development
 
@@ -388,6 +388,8 @@ CI and release workflows use Node.js 20.19.0.
 ## Known Limits
 
 - This is not an Office editor.
+- XLSX validation code is not a public preview; `.xlsx` files remain
+  unregistered until the planned 3.0.0 reader.
 - The plugin never saves changes back to `.docx` or `.pptx`.
 - Legacy `.doc` files are not rendered directly, but the plugin shows external-open and conversion guidance.
 - Complex Word layouts may not render exactly like Microsoft Word.

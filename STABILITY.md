@@ -96,6 +96,27 @@ The 2.4.0 line closes the reader architecture before XLSX work begins:
 - Use one privacy-safe diagnostic envelope and one summary-note frontmatter
   convention across formats.
 
+## 2.5.0 OOXML and XLSX Validation Scope
+
+The 2.5.0 line completes pre-release XLSX validation without exposing an XLSX
+view:
+
+- Apply shared ZIP entry, expansion, compression-ratio, encryption, ZIP64,
+  path, macro, ActiveX, OLE, and script-media checks to public DOCX/PPTX
+  loading and the unregistered XLSX research parser.
+- Parse workbook metadata and sparse worksheet cells, styles, cached formulas,
+  merges, frozen panes, hidden sheets, hyperlinks, and raster-image metadata
+  without recalculation or remote-resource access.
+- Keep only a visible grid window and finite overscan, with a 2,500-cell
+  default mount ceiling.
+- Maintain generated normal, damaged, encrypted, malicious, and extreme-scale
+  fixtures plus the 100,000-row benchmark budget.
+- Pin direct runtime dependencies, inventory compatible licenses, audit
+  production bundle inputs, and retain the 500 KiB `2.x` bundle ceiling and
+  8 MiB `3.0.0` release target.
+- Do not register `.xlsx`, an XLSX view, a public feature flag, or a technical
+  preview entry before `3.0.0`.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -105,6 +126,7 @@ Run this checklist before publishing a stable release:
   - `npm test`
   - `npm run build`
   - `npm run performance:check`
+  - `npm run dependencies:audit`
   - `npm run security:scan`
   - `npm run release`
   - Confirm the release zip contains only `main.js`, `manifest.json`, and `styles.css`.
@@ -334,6 +356,20 @@ Not supported:
 - 文件修改时间变化时清除过期位置与导航，同时保留缩放和适配偏好。
 - 各格式共用隐私安全诊断信封和摘要笔记 frontmatter 约定。
 
+### 2.5.0 OOXML 与 XLSX 验证范围
+
+2.5.0 完成 XLSX 发布前验证，但不开放 XLSX 视图：
+
+- DOCX/PPTX 公开加载路径和未注册 XLSX 研究解析器统一执行 ZIP 条目、解压量、
+  压缩比、加密、ZIP64、路径、宏、ActiveX、OLE 和脚本型媒体检查。
+- 本地解析工作簿元数据和稀疏工作表单元格、样式、公式缓存、合并、冻结、
+  隐藏表、超链接与光栅图片元数据，不重算公式，也不访问远程资源。
+- 虚拟网格只保留可视窗口和有限 overscan，默认最多挂载 2,500 个单元格。
+- 维护正常、损坏、加密、恶意和极端规模生成式样本，以及 100,000 行基准预算。
+- 顶层运行时依赖使用精确版本，生成兼容许可证清单并审计生产 bundle 输入；
+  继续保持 `2.x` 500 KiB bundle 上限和 `3.0.0` 8 MiB 发布目标。
+- `3.0.0` 前不注册 `.xlsx`、XLSX 视图、公开功能开关或技术预览入口。
+
 ### 支持边界
 
 支持：
@@ -354,6 +390,7 @@ Not supported:
 - 直接渲染旧版 `.doc` 二进制文件。
 - 密码保护或加密 Word 文档。
 - 密码保护或加密 PowerPoint 演示文稿。
+- `.xlsx` 公开视图或技术预览入口；2.5.0 仅包含未注册验证内核。
 - PPTX 动画、切换效果、音视频播放、宏、编辑、图表、SmartArt、
   SVG/GIF/WebP 媒体和 PowerPoint 像素级还原。
 - 复杂 Word 排版与 Microsoft Word 完全一致。

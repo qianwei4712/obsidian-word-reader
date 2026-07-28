@@ -1,0 +1,14 @@
+{
+  "fixture": "generated-rich-100000-row-sparse",
+  "description": "Pre-release XLSX parser and virtual-grid budget. The fixture declares 100,000 rows, stores eight populated cells, and includes styles, formulas, links and one image.",
+  "maximums": {
+    "firstPaintMs": 2000,
+    "scrollFrameP95Ms": 20,
+    "peakHeapMiB": 192,
+    "maximumDomNodes": 3000
+  },
+  "requirements": {
+    "cancellationPassed": true,
+    "rowCount": 100000
+  }
+}

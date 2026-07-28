@@ -102,6 +102,7 @@ expect(
 for (const file of [
   "README.md",
   "LICENSE",
+  "THIRD_PARTY_LICENSES.md",
   "manifest.json",
   "versions.json",
   "COMMUNITY_PLUGIN_CHECKLIST.md",

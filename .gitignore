@@ -4,6 +4,8 @@ main.js
 dist/
 release/
 .test-dist/
+.benchmark-dist/
+benchmark-results/
 *.map
 .DS_Store
 ITERATION_PLAN.local.md

@@ -181,7 +181,7 @@ void test("renderPptxSlide cancels cooperatively and releases created resources"
   }
 });
 
-void test("renderPptxSlide does not load embedded SVG resources", async () => {
+void test("PptxPackage rejects embedded SVG resources", async () => {
   const zip = await JSZip.loadAsync(await createMinimalPptx());
   const relationships = await zip
     .file("ppt/slides/_rels/slide1.xml.rels")
@@ -195,20 +195,12 @@ void test("renderPptxSlide does not load embedded SVG resources", async () => {
     "ppt/media/image1.svg",
     '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://example.com/remote.png"/></svg>',
   );
-  const pptx = await PptxPackage.load(
-    await zip.generateAsync({ type: "arraybuffer" }),
-  );
-  const context = await pptx.getSlideContext(0);
-  const rendered = await renderPptxSlide(
-    pptx,
-    context,
-    new MockDocument() as unknown as Document,
-  );
-  const all = flatten(rendered.element as unknown as MockElement);
-
-  assert.equal(rendered.resources.size, 0);
-  assert.ok(
-    all.some((element) => element.textContent === "Unsupported image"),
+  await assert.rejects(
+    async () =>
+      PptxPackage.load(
+        await zip.generateAsync({ type: "arraybuffer" }),
+      ),
+    /Script-capable media is not supported/,
   );
 });
 

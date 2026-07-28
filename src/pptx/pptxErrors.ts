@@ -51,6 +51,14 @@ export function classifyPptxError(
           tips: [text.errors.openExternally],
           details,
         };
+      case "unsupported":
+        return {
+          kind: "unsupported",
+          title: text.errors.unsupportedTitle,
+          body: text.errors.unsupportedBody,
+          tips,
+          details,
+        };
       case "damaged":
       default:
         return {

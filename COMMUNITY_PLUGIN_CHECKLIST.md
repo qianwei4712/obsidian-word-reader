@@ -20,6 +20,8 @@ Community directory and before publishing later releases.
 - [ ] `README.md` explains the plugin purpose, installation, usage, support
   boundaries, security behavior, and any external access.
 - [ ] `LICENSE` exists and dependency licenses are compatible.
+- [ ] `THIRD_PARTY_LICENSES.md` matches `npm run dependencies:audit`, and all
+  top-level runtime registry dependencies use exact versions.
 - [ ] `manifest.json` is committed on the default branch and contains the
   intended release version.
 - [ ] The manifest display name is `Office Reader`; the stable plugin ID
@@ -44,6 +46,9 @@ Community directory and before publishing later releases.
   `.pptx` files.
 - [ ] Confirm PPTX external relationships are ignored and the production
   bundle contains no network request code.
+- [ ] Confirm XLSX research modules are absent from the production bundle and
+  no `.xlsx` extension, public view, feature flag, or preview entry is
+  registered.
 - [ ] Confirm PPTX search, text copy, speaker notes, and summary-note creation
   operate only on locally parsed presentation content.
 - [ ] Confirm presentation thumbnails mount only for visible and nearby
@@ -63,7 +68,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `2.4.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `2.5.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

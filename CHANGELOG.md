@@ -1,5 +1,75 @@
 # Changelog
 
+## 2.5.0 - 2026-07-28
+
+### English
+
+#### Added
+
+- Added a shared OOXML ZIP safety layer with immutable global ceilings of
+  10,000 entries, 128 MiB per entry, 512 MiB total expansion, and a 200:1
+  compression ratio. PPTX retains its stricter 2,000-entry, 64 MiB per-entry,
+  and 256 MiB total defaults.
+- Added an unregistered XLSX validation core for workbook and sparse worksheet
+  parsing, shared/inline strings, merged cells, frozen panes, hidden sheets,
+  row and column sizes, basic cell styles, date and number formatting, cached
+  formulas, hyperlink metadata, and safe raster image parts.
+- Added a bounded virtual-grid model and a generated 100,000-row sparse
+  workbook benchmark that records first-window time, p95 scroll calculation,
+  sampled peak heap growth, estimated DOM nodes, and cancellation behavior.
+- Added a generated XLSX fixture catalog covering valid, damaged, encrypted,
+  malicious-compression, macro, OLE, script-media, external-relationship, data
+  connection, and extreme-scale cases.
+- Added a generated third-party runtime license inventory plus exact direct
+  runtime version, esbuild input, 500 KiB bundle, and 8 MiB release-target
+  audits.
+
+#### Security
+
+- OOXML packages now reject encrypted ZIP entries, unsafe paths, duplicate or
+  malformed directory entries, ZIP64 envelopes, macros, ActiveX, embedded OLE
+  objects, and script-capable media before content rendering.
+- XLSX formulas are never recalculated: research parsing exposes only formula
+  text and the cached value already stored in the workbook. External
+  relationships and data connections are recorded as ignored metadata and are
+  never dereferenced.
+
+#### Changed
+
+- Pinned all top-level runtime registry dependencies to exact versions.
+- Kept XLSX research modules out of the production bundle and did not register
+  an `.xlsx` extension, public view, feature flag, or technical-preview entry.
+
+### 中文
+
+#### 新增
+
+- 新增统一 OOXML ZIP 安全层，全局硬上限固定为 10,000 个条目、单项
+  128 MiB、总解压 512 MiB 和 200:1 压缩比；PPTX 继续使用更严格的
+  2,000 个条目、单项 64 MiB 和总计 256 MiB 默认值。
+- 新增未注册的 XLSX 验证内核，覆盖工作簿与稀疏工作表解析、共享/内联字符串、
+  合并单元格、冻结窗格、隐藏工作表、行列尺寸、基础单元格样式、日期与数字
+  格式、公式缓存、超链接元数据和安全光栅图片部件。
+- 新增有界虚拟网格模型和生成式 100,000 行稀疏工作簿基准，记录首屏耗时、
+  滚动计算 p95、采样峰值堆增量、估算 DOM 节点数和取消加载结果。
+- 新增生成式 XLSX 样本目录，覆盖正常、损坏、加密、恶意压缩、宏、OLE、
+  脚本型媒体、外部关系、数据连接和极端规模场景。
+- 新增第三方运行时许可证清单，以及顶层运行时精确版本、esbuild 输入、
+  500 KiB bundle 和 8 MiB 发布目标审计。
+
+#### 安全
+
+- OOXML 包在渲染前拒绝加密 ZIP 条目、不安全路径、重复或损坏的目录项、
+  ZIP64 包络、宏、ActiveX、嵌入式 OLE 对象和脚本型媒体。
+- XLSX 公式绝不重算；研究解析只暴露公式文本和工作簿已有缓存值。外部关系与
+  数据连接仅记录为忽略项，绝不自动访问。
+
+#### 变更
+
+- 所有顶层运行时 registry 依赖改为精确版本。
+- XLSX 研究模块不进入生产 bundle，且未注册 `.xlsx` 扩展名、公开视图、
+  功能开关或技术预览入口。
+
 ## 2.4.0 - 2026-07-27
 
 ### English

@@ -1,5 +1,11 @@
 import type { App, TFile } from "obsidian";
+import JSZip from "jszip";
 
+import { enforceOoxmlPackagePolicy } from "../ooxml/packagePolicy";
+import {
+  DEFAULT_DOCX_ZIP_LIMITS,
+  validateZipSafety,
+} from "../ooxml/packageSafety";
 import {
   supportsReaderFile,
   type OfficeReaderAdapter,
@@ -32,8 +38,10 @@ implements OfficeReaderAdapter<ArrayBuffer, HTMLElement> {
     return supportsReaderFile(this.extensions, file);
   }
 
-  open(app: App, file: TFile): Promise<ArrayBuffer> {
-    return app.vault.readBinary(file);
+  async open(app: App, file: TFile): Promise<ArrayBuffer> {
+    const buffer = await app.vault.readBinary(file);
+    await validateDocxPackage(buffer);
+    return buffer;
   }
 
   extractText(source: HTMLElement): ReaderTextExtraction {
@@ -42,3 +50,12 @@ implements OfficeReaderAdapter<ArrayBuffer, HTMLElement> {
 }
 
 export const DOCX_ADAPTER = new DocxAdapter();
+
+export async function validateDocxPackage(buffer: ArrayBuffer): Promise<void> {
+  validateZipSafety(buffer, DEFAULT_DOCX_ZIP_LIMITS);
+  const zip = await JSZip.loadAsync(buffer, {
+    createFolders: false,
+    checkCRC32: false,
+  });
+  await enforceOoxmlPackagePolicy(zip, "docx");
+}

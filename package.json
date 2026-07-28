@@ -1,6 +1,6 @@
 {
   "name": "obsidian-word-reader",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Read .docx and .pptx files inside Obsidian without modifying the originals.",
   "main": "main.js",
   "scripts": {
@@ -10,13 +10,15 @@
     "lint:fix": "eslint . --fix --max-warnings 0",
     "test": "node scripts/run-tests.mjs",
     "security:scan": "node scripts/security-scan.mjs",
-    "performance:check": "node scripts/check-performance-budget.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run performance:check && npm run security:scan",
+    "performance:check": "node scripts/check-performance-budget.mjs && node scripts/run-xlsx-benchmark.mjs",
+    "dependencies:audit": "node scripts/audit-dependencies.mjs",
+    "dependencies:licenses": "node scripts/audit-dependencies.mjs --write",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run performance:check && npm run dependencies:audit && npm run security:scan",
     "typecheck": "tsc --noEmit --skipLibCheck",
-    "release:check": "node scripts/release-check.mjs",
+    "release:check": "node scripts/audit-dependencies.mjs && node scripts/release-check.mjs",
     "release:notes": "node scripts/extract-changelog.mjs",
     "release:zip": "npm run build && node scripts/package-release.mjs",
-    "release": "npm run lint && npm run typecheck && npm test && npm run release:zip && npm run performance:check && npm run security:scan && npm run release:check && npm run release:notes"
+    "release": "npm run lint && npm run typecheck && npm test && npm run release:zip && npm run performance:check && npm run dependencies:audit && npm run security:scan && npm run release:check && npm run release:notes"
   },
   "keywords": [
     "obsidian",
@@ -29,10 +31,10 @@
   "author": "qianw",
   "license": "MIT",
   "dependencies": {
-    "@xmldom/xmldom": "^0.8.13",
-    "docx-preview": "^0.3.6",
+    "@xmldom/xmldom": "0.8.13",
+    "docx-preview": "0.3.7",
     "immediate": "file:vendor/immediate",
-    "jszip": "^3.10.1",
+    "jszip": "3.10.1",
     "setimmediate": "file:vendor/setimmediate"
   },
   "devDependencies": {
