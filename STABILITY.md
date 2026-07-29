@@ -117,6 +117,32 @@ view:
 - Do not register `.xlsx`, an XLSX view, a public feature flag, or a technical
   preview entry before `3.0.0`.
 
+## 3.0.0 XLSX Read-only MVP Scope
+
+The 3.0.0 line exposes the validated XLSX core through a public, local,
+read-only spreadsheet session:
+
+- Register `.xlsx` and legacy `.xls` with `xlsx-reader-view`; render `.xlsx`
+  locally and show external-open/conversion guidance for `.xls`. Keep `.xlsm`
+  unregistered.
+- Switch visible worksheets and render only the viewport, finite overscan, and
+  visible frozen rows/columns under the 2,500-cell mount ceiling.
+- Preserve merged cells, row/column sizing, basic font/fill/border/alignment
+  styles, number/date formats, formula text, and workbook-cached results.
+- Search the current worksheet with cancellable chunked work, navigate results,
+  zoom or fit width, and restore active sheet/scroll/zoom without persisting
+  cell content.
+- Select rectangular ranges and copy displayed values by default; expose
+  formula copy as a separate operation with a 250,000-cell materialization
+  ceiling.
+- Never recalculate formulas or dereference external workbook references,
+  connections, or remote resources. Open only safe-protocol hyperlinks after a
+  direct user action and confirmation.
+- Cancel stale workbook, worksheet, search, and scheduled grid work during
+  reload, sheet/file switching, and view close; clear bounded package caches.
+- Keep `dist/main.js` within 500 KiB and the three-file release archive below
+  the 8 MiB 3.0.0 target.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -184,6 +210,29 @@ Run this checklist before publishing a stable release:
     metrics but no slide text, speaker notes, XML, or absolute vault paths.
   - In a development build, confirm the console logs PPTX render duration,
     object counts, generated resources, and explicit font families.
+- `.xlsx` preview:
+  - Open a workbook with multiple visible sheets and switch rapidly between
+    tabs; confirm stale worksheet parses never replace the active sheet.
+  - Confirm frozen rows/columns remain visible while scrolling and merged
+    cells, custom row/column sizes, basic styles, numbers, dates, and cached
+    formula results render correctly.
+  - Open the generated 100,000-row sparse workbook, scroll to the tail, and
+    confirm no more than 2,500 cells are mounted.
+  - Search displayed values and formula text in the current worksheet; change
+    queries rapidly and confirm cancelled searches leave no stale highlights.
+  - Drag a rectangular selection and copy displayed values as TSV. Use the
+    separate formula-copy action and confirm formula cells begin with `=`.
+  - Confirm the formula bar shows stored formula text and cached values without
+    recalculating the workbook.
+  - Click an internal or safe external hyperlink, cancel the confirmation, and
+    confirm nothing opens. Confirm `javascript:`, `file:`, external-workbook,
+    and data-connection targets never load.
+  - Reopen the workbook and confirm active worksheet, scroll position, zoom,
+    and fit preference restore without saved cell values or formulas.
+  - Open damaged, encrypted, ZIP64, over-limit, macro, OLE, and script-media
+    fixtures and confirm they fail with understandable recovery guidance.
+  - Open a legacy `.xls` and confirm conversion guidance plus external open;
+    confirm `.xlsm` is not registered.
 - Error diagnostics:
   - Open encrypted, invalid, and damaged test documents where available.
   - Confirm error pages show an appropriate category and recovery guidance.
@@ -251,8 +300,12 @@ Supported:
   slide text copy, speaker-note viewing, and numbered presentation summary notes.
 - `.pptx` on-demand thumbnail mounting, cooperative render cancellation,
   generated-resource cleanup, and privacy-safe render diagnostics.
+- `.xlsx` local, read-only virtual grid for worksheet switching, frozen panes,
+  merged cells, row/column sizes, basic styles and formats, cached formulas,
+  current-sheet search, zoom, rectangular copy, and confirmed hyperlinks.
 - Plain text and Markdown copy from the already rendered DOCX content.
 - `.doc` detection with external-open and conversion guidance.
+- `.xls` detection with external-open and `.xlsx` conversion guidance.
 
 Not supported:
 
@@ -261,6 +314,10 @@ Not supported:
 - Direct rendering of legacy `.doc` binary files.
 - Password-protected or encrypted Word documents.
 - Password-protected or encrypted PowerPoint presentations.
+- Password-protected or encrypted Excel workbooks.
+- Direct rendering of legacy `.xls`, and registration of `.xlsm`.
+- XLSX pivot tables, slicers, full chart fidelity, comments, images, and
+  complex conditional formatting.
 - PPTX animation, transitions, audio/video playback, macros, editing, charts,
   SmartArt, SVG/GIF/WebP media, and pixel-perfect PowerPoint rendering.
 - Perfect Microsoft Word layout fidelity for complex documents.
@@ -370,6 +427,26 @@ Not supported:
   继续保持 `2.x` 500 KiB bundle 上限和 `3.0.0` 8 MiB 发布目标。
 - `3.0.0` 前不注册 `.xlsx`、XLSX 视图、公开功能开关或技术预览入口。
 
+### 3.0.0 XLSX 只读 MVP 范围
+
+3.0.0 将已验证的 XLSX 内核通过公开、本地、只读电子表格会话交付：
+
+- 使用 `xlsx-reader-view` 注册 `.xlsx` 和旧版 `.xls`；`.xlsx` 本地渲染，
+  `.xls` 显示外部打开和转换说明，`.xlsm` 保持不注册。
+- 支持切换可见工作表；在 2,500 单元格挂载上限内，只渲染可视区域、有限
+  overscan 和当前可见的冻结行列。
+- 保留合并单元格、行列尺寸、基础字体/填充/边框/对齐、数字/日期格式、公式
+  文本和工作簿已有缓存结果。
+- 以可取消分片搜索当前工作表，支持结果跳转、缩放/适配宽度，并恢复当前表、
+  滚动和缩放；不持久化单元格内容。
+- 支持矩形选区，默认复制显示值；复制公式为独立操作，单次最多物化
+  250,000 个单元格。
+- 绝不重算公式或解析外部工作簿引用、连接和远程资源；仅在用户直接操作并确认
+  后打开安全协议的超链接。
+- 重新加载、切表、切文件和关闭视图时取消过期工作簿、工作表、搜索和计划网格
+  任务，并清空有界包缓存。
+- `dist/main.js` 继续不超过 500 KiB，三文件发布包不超过 3.0.0 的 8 MiB 目标。
+
 ### 支持边界
 
 支持：
@@ -380,8 +457,11 @@ Not supported:
 - `.pptx` 文本、内嵌图片、常见形状、表格、主题、版式和母版的本地只读预览。
 - `.pptx` 缩略图/标题导航、本地全文搜索、当前页文本复制、演讲者备注查看和带页码摘要笔记。
 - `.pptx` 按需缩略图挂载、协作取消渲染、生成资源清理和隐私安全渲染诊断。
+- `.xlsx` 工作表切换、冻结窗格、合并单元格、行列尺寸、基础样式与格式、
+  公式缓存、当前表搜索、缩放、矩形复制和确认后超链接的本地只读虚拟网格。
 - 从已渲染 DOCX 内容复制纯文本和 Markdown。
 - `.doc` 检测、外部打开和转换说明。
+- `.xls` 检测、外部打开和 `.xlsx` 转换说明。
 
 不支持：
 
@@ -390,7 +470,9 @@ Not supported:
 - 直接渲染旧版 `.doc` 二进制文件。
 - 密码保护或加密 Word 文档。
 - 密码保护或加密 PowerPoint 演示文稿。
-- `.xlsx` 公开视图或技术预览入口；2.5.0 仅包含未注册验证内核。
+- 密码保护或加密 Excel 工作簿。
+- 直接渲染旧版 `.xls`，以及注册 `.xlsm`。
+- XLSX 数据透视表、切片器、完整图表还原、批注、图片和复杂条件格式。
 - PPTX 动画、切换效果、音视频播放、宏、编辑、图表、SmartArt、
   SVG/GIF/WebP 媒体和 PowerPoint 像素级还原。
 - 复杂 Word 排版与 Microsoft Word 完全一致。

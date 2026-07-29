@@ -42,13 +42,20 @@ Community directory and before publishing later releases.
 - [ ] Review the current submission requirements and plugin guidelines.
 - [ ] Confirm there is no telemetry, self-update mechanism, obfuscated code,
   dynamic script injection, or undisclosed network use.
-- [ ] Confirm the plugin does not modify or write back to source `.docx` or
-  `.pptx` files.
+- [ ] Confirm the plugin does not modify or write back to source `.docx`,
+  `.pptx`, or `.xlsx` files.
 - [ ] Confirm PPTX external relationships are ignored and the production
   bundle contains no network request code.
-- [ ] Confirm XLSX research modules are absent from the production bundle and
-  no `.xlsx` extension, public view, feature flag, or preview entry is
-  registered.
+- [ ] Confirm `.xlsx` and legacy `.xls` register only the public read-only
+  `xlsx-reader-view`; `.xlsm` remains unregistered.
+- [ ] Confirm XLSX formulas are cached-only, external workbook references and
+  data connections are never fetched, and hyperlinks require a user click and
+  confirmation.
+- [ ] Confirm the XLSX grid mounts no more than 2,500 cells plus bounded
+  headers, retains only visible/overscan/frozen ranges, and releases workbook
+  caches after reload, file switch, and view close.
+- [ ] Confirm displayed-value copy and formula copy are separate actions, and
+  persisted XLSX state excludes cell values and formulas.
 - [ ] Confirm PPTX search, text copy, speaker notes, and summary-note creation
   operate only on locally parsed presentation content.
 - [ ] Confirm presentation thumbnails mount only for visible and nearby
@@ -68,7 +75,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `2.5.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `3.0.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

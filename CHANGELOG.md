@@ -1,5 +1,81 @@
 # Changelog
 
+## 3.0.0 - 2026-07-29
+
+### English
+
+#### Added
+
+- Added the public, local-only `xlsx-reader-view` for `.xlsx` files, with a
+  conversion guidance page and external-open action for legacy `.xls` files.
+  Macro-enabled `.xlsm` remains unregistered.
+- Added visible worksheet switching and a read-only virtual grid that mounts
+  only the viewport, finite overscan, and visible frozen rows/columns under a
+  2,500-cell ceiling.
+- Added rendering for merged cells, custom row/column dimensions, basic font,
+  fill, border and alignment styles, number/date formats, stored formula text,
+  and workbook-cached formula results.
+- Added cancellable current-worksheet search, result navigation, continuous
+  zoom, fit width, rectangular mouse/keyboard selection, displayed-value TSV
+  copy, and a separate formula-copy action.
+- Added a selected-cell details bar and confirmed workbook hyperlinks.
+  Internal cell locations can navigate within the workbook; only `http`,
+  `https`, and `mailto` external targets are permitted after confirmation.
+- Added per-file restoration of the active worksheet, scroll position, zoom,
+  and fit preference without persisting cell values or formulas.
+- Added localized XLSX status, error, legacy-format, copy, search, and safety
+  messages plus an XLSX default-fit-width setting.
+
+#### Security
+
+- XLSX formulas remain cached-only and are never recalculated. External
+  workbook references, data connections, remote resources, macros, ActiveX,
+  OLE objects, and script-capable media are never executed or fetched.
+- Workbook, worksheet, search, animation-frame, and state-write work is
+  cancelled during reload, sheet/file switching, and view close. Bounded
+  package caches are cleared when the workbook is released.
+- Clipboard materialization is capped at 250,000 selected cells, while the
+  sparse 100,000-row benchmark continues to enforce bounded DOM and memory.
+
+#### Changed
+
+- Updated the supported product boundary, manifest description, release
+  metadata, documentation, manual checklist, and production-bundle audit for
+  `.xlsx`.
+
+### 中文
+
+#### 新增
+
+- 新增公开且完全本地的 `.xlsx` 只读视图 `xlsx-reader-view`；旧版 `.xls`
+  显示转换说明和外部打开操作，含宏 `.xlsm` 仍不注册。
+- 新增可见工作表切换和只读虚拟网格；在 2,500 单元格上限内只挂载可视区域、
+  有限 overscan 和当前可见的冻结行列。
+- 新增合并单元格、自定义行列尺寸、基础字体/填充/边框/对齐、数字/日期格式、
+  已保存公式文本和工作簿已有公式缓存结果的显示。
+- 新增可取消的当前工作表搜索、结果跳转、连续缩放、适配宽度、鼠标/键盘矩形
+  选区、显示值 TSV 复制和独立的公式复制操作。
+- 新增当前单元格详情栏和需确认的工作簿超链接；内部位置可以在工作簿中跳转，
+  外部目标仅允许用户确认后的 `http`、`https` 和 `mailto`。
+- 新增按文件恢复当前工作表、滚动位置、缩放和适配偏好；不会持久化单元格值或
+  公式。
+- 新增本地化 XLSX 状态、错误、旧格式、复制、搜索和安全提示，以及电子表格
+  默认适配宽度设置。
+
+#### 安全
+
+- XLSX 公式继续只使用缓存，绝不重新计算；外部工作簿引用、数据连接、远程
+  资源、宏、ActiveX、OLE 对象和脚本型媒体绝不执行或自动抓取。
+- 重新加载、切表、切文件和关闭视图时取消工作簿、工作表、搜索、动画帧和状态
+  写入任务；释放工作簿时清空有界包缓存。
+- 剪贴板单次最多物化 250,000 个选中单元格，100,000 行稀疏表基准继续约束
+  DOM 和内存。
+
+#### 变更
+
+- 更新产品支持边界、manifest 描述、发布元数据、文档、手动清单和生产 bundle
+  审计以正式包含 `.xlsx`。
+
 ## 2.5.0 - 2026-07-28
 
 ### English

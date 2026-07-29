@@ -64,3 +64,16 @@ void test("XLSX virtual grid enforces finite overscan and mount budgets", async 
   });
   assert.ok(window.mountedCellCount <= 100);
 });
+
+void test("XLSX virtual grid exposes sparse axis geometry for DOM mounting", async () => {
+  const workbook = await XlsxPackage.load(await createRichXlsx());
+  const sheet = await workbook.getWorksheet(0);
+  const grid = new XlsxVirtualGrid(sheet);
+
+  assert.equal(grid.rowOffset(0), 0);
+  assert.equal(grid.rowSize(0), 40);
+  assert.equal(grid.columnSize(0), 131);
+  assert.equal(grid.rowIndexAtOffset(41), 1);
+  assert.equal(grid.columnIndexAtOffset(132), 1);
+  assert.equal(grid.mountBudget, 2_500);
+});

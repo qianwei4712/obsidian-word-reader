@@ -10,6 +10,8 @@ export interface WordReaderText {
     defaultZoomDesc: string;
     defaultFitWidthName: string;
     defaultFitWidthDesc: string;
+    xlsxFitWidthName: string;
+    xlsxFitWidthDesc: string;
     showOutlineName: string;
     showOutlineDesc: string;
     imagePreviewName: string;
@@ -159,6 +161,9 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
       defaultFitWidthName: "Fit width by default",
       defaultFitWidthDesc:
         "Open newly rendered Word previews fitted to the pane width.",
+      xlsxFitWidthName: "Fit spreadsheet width by default",
+      xlsxFitWidthDesc:
+        "Open newly loaded worksheets fitted to the available grid width.",
       showOutlineName: "Show outline by default",
       showOutlineDesc:
         "Open Word previews with the clickable heading outline visible.",
@@ -341,6 +346,8 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
       defaultZoomDesc: "新打开 Word 预览时使用的初始缩放百分比。",
       defaultFitWidthName: "默认适配宽度",
       defaultFitWidthDesc: "新渲染的 Word 预览默认适配当前窗格宽度。",
+      xlsxFitWidthName: "电子表格默认适配宽度",
+      xlsxFitWidthDesc: "打开新工作表时自动适配可用网格宽度。",
       showOutlineName: "默认显示大纲",
       showOutlineDesc: "打开 Word 预览时默认显示可点击的标题大纲。",
       imagePreviewName: "图片预览",

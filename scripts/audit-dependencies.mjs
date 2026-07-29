@@ -11,6 +11,7 @@ const manifest = readJson("manifest.json");
 const licenseInventoryPath = path.join(rootDir, "THIRD_PARTY_LICENSES.md");
 const maximumBundleBytes = 500 * 1024;
 const maximumReleaseBytes = 8 * 1024 * 1024;
+const releaseMajor = Number.parseInt(pkg.version.split(".")[0] ?? "", 10);
 const allowedLicenses = new Set([
   "Apache-2.0",
   "ISC",
@@ -140,12 +141,20 @@ async function getBundledPackageNames() {
       names.add(vendorMatch[1]);
     }
   }
-  expect(
-    !inputs.some((input) =>
-      /(?:^|\/)src\/xlsx\//.test(input.replaceAll("\\", "/")),
-    ),
-    "Unreleased XLSX research modules must not be bundled into the public plugin.",
+  const bundlesXlsx = inputs.some((input) =>
+    /(?:^|\/)src\/xlsx\//.test(input.replaceAll("\\", "/")),
   );
+  if (releaseMajor < 3) {
+    expect(
+      !bundlesXlsx,
+      "Unreleased XLSX research modules must not be bundled before 3.0.0.",
+    );
+  } else {
+    expect(
+      bundlesXlsx,
+      "The 3.x public plugin must bundle the reviewed XLSX reader.",
+    );
+  }
   return names;
 }
 
@@ -173,7 +182,7 @@ function auditArtifactSizes() {
   if (fs.existsSync(bundlePath)) {
     expect(
       fs.statSync(bundlePath).size <= maximumBundleBytes,
-      `dist/main.js exceeds the ${maximumBundleBytes} byte 2.x budget.`,
+      `dist/main.js exceeds the ${maximumBundleBytes} byte budget.`,
     );
   }
   const distPaths = ["main.js", "manifest.json", "styles.css"]
@@ -232,26 +241,43 @@ auditExactDirectVersions(runtimePackages);
 const bundledNames = await getBundledPackageNames();
 auditLicenses(runtimePackages, bundledNames);
 auditArtifactSizes();
-expect(
-  manifest.description.toLowerCase().includes("xlsx") === false,
-  "The public manifest must not advertise XLSX before 3.0.0.",
-);
-expect(
-  !fs.existsSync(path.join(rootDir, "src", "XlsxView.ts")),
-  "The 2.5.x research line must not provide a public XlsxView.",
-);
 const mainSource = fs.readFileSync(path.join(rootDir, "src", "main.ts"), "utf8");
 const settingsSource = fs.readFileSync(
   path.join(rootDir, "src", "settings.ts"),
   "utf8",
 );
-expect(
-  !/registerExtensions\s*\(\s*\[[^\]]*["']xlsx["']/s.test(mainSource),
-  "The 2.5.x research line must not register the .xlsx extension.",
-);
+const hasXlsxView = fs.existsSync(path.join(rootDir, "src", "XlsxView.ts"));
+const registersXlsx =
+  /registerExtensions\s*\(\s*\[\.\.\.XLSX_ADAPTER\.extensions\]/s.test(
+    mainSource,
+  );
+if (releaseMajor < 3) {
+  expect(
+    !manifest.description.toLowerCase().includes("xlsx"),
+    "The public manifest must not advertise XLSX before 3.0.0.",
+  );
+  expect(
+    !hasXlsxView,
+    "The pre-3.0 research line must not provide a public XlsxView.",
+  );
+  expect(
+    !registersXlsx,
+    "The pre-3.0 research line must not register the .xlsx extension.",
+  );
+} else {
+  expect(
+    manifest.description.toLowerCase().includes("xlsx"),
+    "The 3.x public manifest must advertise XLSX support.",
+  );
+  expect(hasXlsxView, "The 3.x public plugin must provide XlsxView.");
+  expect(
+    registersXlsx,
+    "The 3.x public plugin must register the .xlsx extension.",
+  );
+}
 expect(
   !/\b(?:enable\w*xlsx|xlsx\w*enabled)\b/i.test(settingsSource),
-  "The 2.5.x research line must not expose an XLSX feature flag.",
+  "XLSX availability must not be controlled by an undocumented feature flag.",
 );
 
 const inventory = generateLicenseInventory(runtimePackages, bundledNames);

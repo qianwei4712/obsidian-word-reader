@@ -81,6 +81,17 @@ export class XlsxWorksheet {
     return this.cellsByRow.get(row)?.get(column);
   }
 
+  getPopulatedCells(): XlsxCell[] {
+    const cells: XlsxCell[] = [];
+    for (const row of this.cellsByRow.values()) {
+      cells.push(...row.values());
+    }
+    return cells.sort(
+      (left, right) =>
+        left.row - right.row || left.column - right.column,
+    );
+  }
+
   getCellsInWindow(
     startRow: number,
     endRow: number,

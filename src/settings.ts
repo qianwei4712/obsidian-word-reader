@@ -96,6 +96,15 @@ export class WordReaderSettingTab extends PluginSettingTab {
         },
       },
       {
+        name: text.xlsxFitWidthName,
+        desc: text.xlsxFitWidthDesc,
+        control: {
+          type: "toggle",
+          key: "xlsx.defaultFitWidth",
+          defaultValue: DEFAULT_OFFICE_READER_SETTINGS.xlsx.defaultFitWidth,
+        },
+      },
+      {
         name: text.imagePreviewName,
         desc: text.imagePreviewDesc,
         control: {
@@ -188,6 +197,17 @@ export class WordReaderSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName(text.xlsxFitWidthName)
+      .setDesc(text.xlsxFitWidthDesc)
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.xlsx.defaultFitWidth)
+          .onChange(async (value) => {
+            await this.setControlValue("xlsx.defaultFitWidth", value);
+          });
+      });
+
+    new Setting(containerEl)
       .setName(text.imagePreviewName)
       .setDesc(text.imagePreviewDesc)
       .addToggle((toggle) => {
@@ -253,6 +273,8 @@ function getSettingValue(
       return settings.docx.defaultFitWidth;
     case "docx.showOutlineByDefault":
       return settings.docx.showOutlineByDefault;
+    case "xlsx.defaultFitWidth":
+      return settings.xlsx.defaultFitWidth;
     case "docx.enableImagePreview":
       return settings.docx.enableImagePreview;
     case "common.largeFileWarningMb":
@@ -287,6 +309,9 @@ function updateSetting(
       break;
     case "docx.showOutlineByDefault":
       next.docx.showOutlineByDefault = Boolean(value);
+      break;
+    case "xlsx.defaultFitWidth":
+      next.xlsx.defaultFitWidth = Boolean(value);
       break;
     case "docx.enableImagePreview":
       next.docx.enableImagePreview = Boolean(value);

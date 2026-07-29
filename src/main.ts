@@ -8,10 +8,18 @@ import {
   WordView,
   VIEW_TYPE_WORD_READER,
 } from "./WordView";
+import {
+  XlsxView,
+  VIEW_TYPE_XLSX_READER,
+} from "./XlsxView";
 import { DOCX_ADAPTER } from "./docx/DocxAdapter";
 import { getWordReaderText, type WordReaderText } from "./i18n";
 import { PPTX_ADAPTER } from "./pptx/PptxAdapter";
 import { getPptxReaderText } from "./pptx/pptxI18n";
+import {
+  XLSX_ADAPTER,
+} from "./xlsx/XlsxAdapter";
+import { getXlsxReaderText } from "./xlsx/xlsxI18n";
 import {
   ReadingStateStore,
   type ReaderFileIdentity,
@@ -45,6 +53,7 @@ export default class WordReaderPlugin extends Plugin {
     this.addSettingTab(new WordReaderSettingTab(this.app, this));
     const text = this.text;
     const pptxText = getPptxReaderText(this.settings.common.language);
+    const xlsxText = getXlsxReaderText(this.settings.common.language);
 
     this.registerView(
       VIEW_TYPE_WORD_READER,
@@ -54,6 +63,10 @@ export default class WordReaderPlugin extends Plugin {
       VIEW_TYPE_PPTX_READER,
       (leaf) => new PptxView(leaf, this),
     );
+    this.registerView(
+      VIEW_TYPE_XLSX_READER,
+      (leaf) => new XlsxView(leaf, this),
+    );
     this.registerExtensions(
       [...DOCX_ADAPTER.extensions],
       DOCX_ADAPTER.viewType,
@@ -61,6 +74,10 @@ export default class WordReaderPlugin extends Plugin {
     this.registerExtensions(
       [...PPTX_ADAPTER.extensions],
       PPTX_ADAPTER.viewType,
+    );
+    this.registerExtensions(
+      [...XLSX_ADAPTER.extensions],
+      XLSX_ADAPTER.viewType,
     );
 
     this.registerReaderCommand(
@@ -160,6 +177,33 @@ export default class WordReaderPlugin extends Plugin {
         Boolean(session.focusSearch),
       (session) => session.focusSearch?.(),
     );
+    this.registerReaderCommand(
+      "search-spreadsheet",
+      xlsxText.commands.focusSearch,
+      (session) =>
+        session.adapter.format === "xlsx" &&
+        session.capabilities.search &&
+        Boolean(session.focusSearch),
+      (session) => session.focusSearch?.(),
+    );
+    this.registerReaderCommand(
+      "copy-spreadsheet-values",
+      xlsxText.commands.copyValues,
+      (session) =>
+        session.adapter.format === "xlsx" &&
+        session.capabilities.copyText &&
+        Boolean(session.copyText),
+      (session) => session.copyText?.(),
+    );
+    this.registerReaderCommand(
+      "copy-spreadsheet-formulas",
+      xlsxText.commands.copyFormulas,
+      (session) =>
+        session.adapter.format === "xlsx" &&
+        session.capabilities.copyText &&
+        Boolean(session.copyFormulas),
+      (session) => session.copyFormulas?.(),
+    );
   }
 
   onunload(): void {
@@ -180,6 +224,7 @@ export default class WordReaderPlugin extends Plugin {
     for (const viewType of [
       VIEW_TYPE_WORD_READER,
       VIEW_TYPE_PPTX_READER,
+      VIEW_TYPE_XLSX_READER,
     ]) {
       for (const leaf of this.app.workspace.getLeavesOfType(viewType)) {
         if (isReaderSession(leaf.view)) {

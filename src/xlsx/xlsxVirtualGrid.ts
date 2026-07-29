@@ -82,6 +82,34 @@ export class XlsxVirtualGrid {
     return this.columns.totalSize;
   }
 
+  get mountBudget(): number {
+    return this.maxMountedCells;
+  }
+
+  rowOffset(index: number): number {
+    return this.rows.offsetAt(index);
+  }
+
+  columnOffset(index: number): number {
+    return this.columns.offsetAt(index);
+  }
+
+  rowSize(index: number): number {
+    return this.rows.sizeAt(index);
+  }
+
+  columnSize(index: number): number {
+    return this.columns.sizeAt(index);
+  }
+
+  rowIndexAtOffset(offset: number): number {
+    return this.rows.indexAtOffset(offset);
+  }
+
+  columnIndexAtOffset(offset: number): number {
+    return this.columns.indexAtOffset(offset);
+  }
+
   calculate(viewport: XlsxGridViewport): XlsxVirtualWindow {
     const scrollTop = clamp(viewport.scrollTop, 0, this.totalHeight);
     const scrollLeft = clamp(viewport.scrollLeft, 0, this.totalWidth);
@@ -210,6 +238,11 @@ class SparseAxis {
         ? 0
         : this.overrides[overrideIndex].cumulativeDelta;
     return boundedIndex * this.defaultSize + delta;
+  }
+
+  sizeAt(index: number): number {
+    const boundedIndex = clamp(Math.floor(index), 0, this.count - 1);
+    return this.offsetAt(boundedIndex + 1) - this.offsetAt(boundedIndex);
   }
 
   indexAtOffset(offset: number): number {

@@ -2,8 +2,8 @@
 
 [中文文档](README.zh-CN.md) | [Roadmap](ROADMAP.md)
 
-Office Reader is a desktop-only Obsidian plugin for opening `.docx`
-and `.pptx` files directly inside Obsidian as safe, read-only documents.
+Office Reader is a desktop-only Obsidian plugin for opening `.docx`, `.pptx`,
+and `.xlsx` files directly inside Obsidian as safe, read-only documents.
 
 The plugin is not an Office editor. It provides local reading workflows while
 keeping the original files unchanged.
@@ -15,6 +15,11 @@ Requires Obsidian Desktop 1.12.7 or newer.
 - Open `.docx` files in an Obsidian tab.
 - Open `.pptx` files in an Obsidian tab with local rendering for text, images,
   common shapes, tables, themes, layouts, and masters.
+- Open `.xlsx` files in a bounded virtual grid with worksheet tabs, frozen
+  panes, merged cells, row/column sizing, basic styles, number/date formats,
+  and cached formula results.
+- Search the current worksheet, zoom or fit its width, select a rectangular
+  range, and copy displayed values or formulas as separate actions.
 - Navigate presentations with rendered slide thumbnails, extracted titles,
   previous/next controls, page-number jump, keyboard shortcuts, continuous
   zoom, fit to window, fullscreen reading, and external open.
@@ -50,11 +55,14 @@ Requires Obsidian Desktop 1.12.7 or newer.
 | --- | --- | --- |
 | `.docx` | Supported | Rendered inside Obsidian through `docx-preview`. |
 | `.pptx` | Supported | Rendered locally as a read-only presentation. |
+| `.xlsx` | Supported | Rendered locally as a read-only virtualized spreadsheet. |
 | `.doc` | Guidance page | Shown inside Obsidian with external-open and `.docx` conversion guidance. |
+| `.xls` | Guidance page | Shown inside Obsidian with external-open and `.xlsx` conversion guidance. |
+| `.xlsm` | Not registered | Macro-enabled workbooks are outside the supported scope. |
 
 ## Usage
 
-1. Put a `.docx` or `.pptx` file into your Obsidian vault.
+1. Put a `.docx`, `.pptx`, or `.xlsx` file into your Obsidian vault.
 2. Click the file in the file explorer.
 3. Read the document in the Obsidian tab opened by the plugin.
 4. Use the toolbar and navigation panels to reload, navigate, zoom, search,
@@ -88,6 +96,26 @@ Requires Obsidian Desktop 1.12.7 or newer.
   presentation compatibility or performance issue.
 - The current slide, zoom, fit mode, scroll position, navigation visibility,
   and speaker-note visibility are restored per file.
+
+### Spreadsheet Reading
+
+- Switch among visible worksheets with the tabs below the grid.
+- Scroll large sparse worksheets without mounting their complete row and
+  column range. The grid keeps only the viewport, finite overscan, and visible
+  frozen rows/columns mounted.
+- Use the mouse to drag a rectangular selection, `Shift` + click to extend it,
+  or the arrow, page, `Home`, and `End` keys to move the active cell.
+- Search values and formula text in the current worksheet. Press
+  `Ctrl`/`Cmd` + `F` to focus search and use `Enter`/`Shift` + `Enter` to move
+  between results.
+- Copy displayed values by default. Use the separate formula-copy action when
+  formulas are required; formulas are never recalculated.
+- Inspect the selected cell's formula text and workbook-cached result in the
+  formula bar.
+- Workbook hyperlinks open only after an explicit click and confirmation.
+  External workbook references and data connections are never fetched.
+- The active worksheet, zoom/fit preference, and scroll position are restored
+  per file without persisting cell values or formulas.
 
 ### Image Preview
 
@@ -134,6 +162,7 @@ Available settings:
 - Plugin interface language.
 - Default zoom percentage for newly opened Word previews.
 - Whether newly opened Word previews should fit the pane width by default.
+- Whether newly opened worksheets should fit the grid width by default.
 - Whether the outline is visible by default.
 - Whether rendered images can be clicked for larger preview.
 - Large file warning threshold in MB.
@@ -147,6 +176,9 @@ Available settings:
 - Failed `.docx` previews are classified as encrypted, format mismatched, damaged ZIP packages, invalid XML structures, unsupported document structures, or unknown failures where possible.
 - Failed `.pptx` previews distinguish format mismatch, encryption, damaged XML
   or ZIP data, unsupported structures, and safe-preview limit violations.
+- Failed `.xlsx` previews distinguish format mismatch, encryption, damaged
+  workbook XML/ZIP data, unsupported active content, and safe-preview limits.
+- Legacy `.xls` files show conversion guidance and an external-open action.
 - PPTX archives are checked before decompression for file count, per-entry
   expanded size, total expanded size, ZIP64 usage, encryption, and abnormal
   compression ratios.
@@ -165,10 +197,10 @@ Available settings:
 
 - A shared reader shell plus `OfficeReaderAdapter`, `ReaderSession`, and
   `ReaderCapabilities` contracts keep toolbars, status, errors, diagnostics,
-  and cleanup behavior consistent. DOCX and PPTX rendering logic lives in
+  and cleanup behavior consistent. DOCX, PPTX, and XLSX rendering logic lives in
   format-specific adapters and sessions.
 - Persisted settings use an explicit schema version with separate `common`,
-  `docx`, `pptx`, and reserved `xlsx` sections. Pre-2.4 flat settings migrate
+  `docx`, `pptx`, and `xlsx` sections. Pre-2.4 flat settings migrate
   automatically.
 - Rendering work is guarded by a cancellation token so stale results are discarded.
 - PPTX file and slide rendering use separate cancellation generations so rapid
@@ -184,6 +216,11 @@ Available settings:
   while XML, relationship, slide-context, and binary caches have fixed limits.
 - Generated presentation resources are also released when a presentation is
   reloaded, switched, or closed.
+- XLSX worksheets use a 2,500-cell mount ceiling with finite row/column
+  overscan. Frozen panes remain visible without materializing the full sheet.
+- Worksheet parsing, switching, search, and scheduled grid rendering are
+  cancellable; package caches are bounded and released on reload, file switch,
+  and view close.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
 - Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
 - Long previews defer off-screen page painting until pages approach the viewport.
@@ -388,9 +425,10 @@ CI and release workflows use Node.js 20.19.0.
 ## Known Limits
 
 - This is not an Office editor.
-- XLSX validation code is not a public preview; `.xlsx` files remain
-  unregistered until the planned 3.0.0 reader.
-- The plugin never saves changes back to `.docx` or `.pptx`.
+- The plugin never saves changes back to `.docx`, `.pptx`, or `.xlsx`.
+- Legacy `.xls` files are not rendered directly, and `.xlsm` is not
+  registered. Pivot tables, slicers, full chart fidelity, comments, images,
+  and complex conditional formatting are outside the 3.0.0 XLSX scope.
 - Legacy `.doc` files are not rendered directly, but the plugin shows external-open and conversion guidance.
 - Complex Word layouts may not render exactly like Microsoft Word.
 - PPTX animation, transitions, audio/video playback, macros, editing, charts,
@@ -408,8 +446,10 @@ CI and release workflows use Node.js 20.19.0.
 
 This plugin is designed with security as a top priority:
 
-- **Local-only operations**: The plugin only reads `.docx` and `.pptx` files
-  from your local Obsidian vault. No network requests are made.
+- **Local-only operations**: The plugin reads `.docx`, `.pptx`, and `.xlsx`
+  from your local Obsidian vault. It never automatically fetches workbook
+  links, external references, data connections, or remote resources. A safe
+  hyperlink may open only after the user clicks and confirms it.
 - **No external resources**: The plugin never loads scripts, styles, or assets from the internet. All rendering logic runs locally.
 - **Read-only access**: The plugin never modifies, overwrites, or writes back
   to the original Office file. It uses Obsidian's binary vault API for
@@ -417,6 +457,8 @@ This plugin is designed with security as a top priority:
 - **No dynamic script injection**: The plugin creates only structural DOM elements (`div`, `span`, `button`, `input`) for document rendering. No `<script>` elements are created or injected at any point.
 - **Safe PPTX archives**: ZIP metadata is validated before decompression, and
   external package relationships are ignored instead of being loaded.
+- **Safe XLSX formulas**: Formula text and cached results are displayed without
+  running macros, external formula code, or recalculation.
 - **Sandboxed rendering**: Office content is rendered into structural DOM
   containers with no script execution context.
 - **Desktop-only**: The plugin requires desktop Obsidian because it uses Electron APIs for image clipboard operations and file dialogs. This is declared in `manifest.json` as `isDesktopOnly: true`.

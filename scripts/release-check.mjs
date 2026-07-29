@@ -141,6 +141,18 @@ if (hasFile("dist/manifest.json")) {
   );
 }
 
+if (Number(pkg.version.split(".")[0]) >= 3 && hasFile("dist/main.js")) {
+  const bundle = fs.readFileSync(path.join(rootDir, "dist/main.js"), "utf8");
+  expect(
+    bundle.includes("xlsx-reader-view"),
+    "3.x production bundles must include the public XLSX reader view",
+  );
+  expect(
+    bundle.includes("XLSX worksheet parsing was cancelled"),
+    "3.x production bundles must include cancellable XLSX worksheet loading",
+  );
+}
+
 if (failures.length > 0) {
   console.error("Release check failed:");
   for (const failure of failures) {

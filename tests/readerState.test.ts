@@ -140,3 +140,28 @@ void test("ReadingStateStore preserves presentation panel visibility", () => {
   });
   assert.equal(normalized.notesVisible, true);
 });
+
+void test("ReadingStateStore preserves the active XLSX sheet without cell data", () => {
+  const store = new ReadingStateStore();
+  store.set(
+    {
+      path: "budget.xlsx",
+      mtime: 800,
+      format: "xlsx",
+    },
+    {
+      ...state,
+      outlineVisible: false,
+      page: 3,
+      scrollLeft: 640,
+      scrollTop: 2_400,
+    },
+  );
+  const serialized = store.serialize()[0];
+  assert.equal(serialized.format, "xlsx");
+  assert.equal(serialized.position.page, 3);
+  assert.equal(serialized.position.scrollLeft, 640);
+  assert.equal(serialized.position.scrollTop, 2_400);
+  assert.equal(JSON.stringify(serialized).includes("cell"), false);
+  assert.equal(JSON.stringify(serialized).includes("formula"), false);
+});

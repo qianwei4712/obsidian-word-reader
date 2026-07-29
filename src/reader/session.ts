@@ -15,6 +15,7 @@ export interface ReaderSession {
   reload: () => Promise<void>;
   refreshInterfaceLanguage: () => void;
   copyText?: () => Promise<void>;
+  copyFormulas?: () => Promise<void>;
   copyMarkdown?: () => Promise<void>;
   createSummaryNote?: () => Promise<void>;
   copyDiagnostics?: () => Promise<void>;
@@ -29,6 +30,7 @@ export interface ReaderSession {
 export type ReaderCommand =
   | "reload"
   | "copyText"
+  | "copyFormulas"
   | "copyMarkdown"
   | "createSummaryNote"
   | "copyDiagnostics"
