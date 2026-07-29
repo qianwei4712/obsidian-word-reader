@@ -143,6 +143,31 @@ read-only spreadsheet session:
 - Keep `dist/main.js` within 500 KiB and the three-file release archive below
   the 8 MiB 3.0.0 target.
 
+## 3.1.0 Workbook Navigation and Knowledge Extraction Scope
+
+The 3.1.0 line extends the local read-only XLSX session without broadening its
+network or execution boundary:
+
+- Use the formula-bar name box to navigate static A1 cells/ranges,
+  worksheet-qualified references, and supported workbook- or sheet-scoped
+  named ranges. Ignore dynamic names, unions, formulas, and external workbook
+  targets.
+- Search displayed values and stored formula text across visible, hidden, and
+  very-hidden worksheets with cancellable sequential parsing and cross-sheet
+  result navigation.
+- Show an explicit hidden-sheet count and user-initiated navigation menu
+  without modifying workbook visibility.
+- Present complete stored formula text, displayed or cached results, and the
+  cached-only safety notice in a read-only formula bar.
+- Copy displayed values as TSV, export the complete selected rectangle as a
+  Markdown table, and keep formula copy separate. All clipboard paths retain
+  the 250,000-cell materialization ceiling.
+- Create or open a same-name XLSX summary note containing worksheet dimensions
+  and visibility, named ranges, the current selection, and no more than 200
+  displayed-value preview cells collected across the workbook.
+- Cancel workbook search and summary collection during reload, worksheet/file
+  switching, and view close; continue clearing bounded package caches.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -218,12 +243,22 @@ Run this checklist before publishing a stable release:
     formula results render correctly.
   - Open the generated 100,000-row sparse workbook, scroll to the tail, and
     confirm no more than 2,500 cells are mounted.
-  - Search displayed values and formula text in the current worksheet; change
-    queries rapidly and confirm cancelled searches leave no stale highlights.
-  - Drag a rectangular selection and copy displayed values as TSV. Use the
-    separate formula-copy action and confirm formula cells begin with `=`.
-  - Confirm the formula bar shows stored formula text and cached values without
-    recalculating the workbook.
+  - Search displayed values and formula text across visible and hidden
+    worksheets; navigate between cross-sheet results, change queries rapidly,
+    and confirm cancelled searches leave no stale highlights.
+  - Enter direct cells, rectangular ranges, qualified worksheet references,
+    workbook names, and sheet-local names in the name box. Confirm invalid,
+    dynamic, and external names are rejected.
+  - Confirm the hidden-sheet indicator lists hidden and very-hidden sheets and
+    opens them only after direct user selection.
+  - Drag a rectangular selection and copy displayed values as TSV. Export the
+    same selection as Markdown and confirm all data rows remain present. Use
+    the separate formula-copy action and confirm formula cells begin with `=`.
+  - Confirm the formula bar shows complete stored formula text and cached
+    values without recalculating the workbook.
+  - Create an XLSX summary note and confirm it contains worksheet dimensions,
+    visibility, named ranges, the current selection, and bounded workbook
+    previews. Confirm an existing same-name note opens without being replaced.
   - Click an internal or safe external hyperlink, cancel the confirmation, and
     confirm nothing opens. Confirm `javascript:`, `file:`, external-workbook,
     and data-connection targets never load.
@@ -302,7 +337,9 @@ Supported:
   generated-resource cleanup, and privacy-safe render diagnostics.
 - `.xlsx` local, read-only virtual grid for worksheet switching, frozen panes,
   merged cells, row/column sizes, basic styles and formats, cached formulas,
-  current-sheet search, zoom, rectangular copy, and confirmed hyperlinks.
+  name-box/named-range navigation, workbook-wide search, hidden-sheet
+  indicators, zoom, TSV/Markdown range copy, summary notes, and confirmed
+  hyperlinks.
 - Plain text and Markdown copy from the already rendered DOCX content.
 - `.doc` detection with external-open and conversion guidance.
 - `.xls` detection with external-open and `.xlsx` conversion guidance.
@@ -447,6 +484,25 @@ Not supported:
   任务，并清空有界包缓存。
 - `dist/main.js` 继续不超过 500 KiB，三文件发布包不超过 3.0.0 的 8 MiB 目标。
 
+### 3.1.0 工作簿导航与知识提取范围
+
+3.1.0 在不扩大网络和代码执行边界的前提下完善本地 XLSX 只读会话：
+
+- 通过公式栏名称框跳转静态 A1 单元格/矩形区域、带工作表限定的引用，以及受
+  支持的工作簿级或工作表级命名区域；忽略动态名称、多区域并集、公式和外部
+  工作簿目标。
+- 以可取消的顺序解析在可见、隐藏和深度隐藏工作表中搜索显示值与已保存公式
+  文本，并支持跨表结果跳转。
+- 明确显示隐藏工作表数量和用户主动导航菜单，不修改工作簿可见性。
+- 在只读公式栏显示完整的已保存公式文本、显示值或缓存结果，以及只使用缓存的
+  安全提示。
+- 将显示值复制为 TSV、把完整矩形选区导出为 Markdown 表格，并保持公式复制
+  独立；全部剪贴板路径继续遵守 250,000 单元格物化上限。
+- 创建或打开同名 XLSX 摘要笔记，包含工作表尺寸/可见性、命名区域、当前
+  选区，以及整个工作簿最多 200 个显示值预览。
+- 重新加载、切表、切文件和关闭视图时取消工作簿搜索与摘要收集，并继续清空
+  有界包缓存。
+
 ### 支持边界
 
 支持：
@@ -458,7 +514,8 @@ Not supported:
 - `.pptx` 缩略图/标题导航、本地全文搜索、当前页文本复制、演讲者备注查看和带页码摘要笔记。
 - `.pptx` 按需缩略图挂载、协作取消渲染、生成资源清理和隐私安全渲染诊断。
 - `.xlsx` 工作表切换、冻结窗格、合并单元格、行列尺寸、基础样式与格式、
-  公式缓存、当前表搜索、缩放、矩形复制和确认后超链接的本地只读虚拟网格。
+  公式缓存、名称框/命名区域、工作簿级搜索、隐藏表提示、缩放、TSV/Markdown
+  选区复制、摘要笔记和确认后超链接的本地只读虚拟网格。
 - 从已渲染 DOCX 内容复制纯文本和 Markdown。
 - `.doc` 检测、外部打开和转换说明。
 - `.xls` 检测、外部打开和 `.xlsx` 转换说明。

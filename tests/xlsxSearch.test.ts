@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   searchXlsxCells,
+  searchXlsxWorkbook,
   XlsxSearchCancelledError,
 } from "../src/xlsx/xlsxSearch";
 import type {
@@ -68,6 +69,61 @@ void test("XLSX search yields between chunks and cancels promptly", async () => 
     XlsxSearchCancelledError,
   );
   assert.equal(yieldCount, 1);
+});
+
+void test("XLSX workbook search returns visible and hidden sheet coordinates", async () => {
+  const progress: string[] = [];
+  const workbook = {
+    sheets: [{ name: "Summary" }, { name: "Hidden data" }],
+    getWorksheet: async (index: number) => ({
+      getPopulatedCells: () =>
+        index === 0
+          ? [makeCell("A1", 0, 0, "Quarterly result")]
+          : [makeCell("C4", 3, 2, "Quarterly archive")],
+    }),
+  };
+  assert.deepEqual(
+    await searchXlsxWorkbook(workbook, "quarterly", {
+      onSheet: (name) => progress.push(name),
+    }),
+    [
+      {
+        sheetIndex: 0,
+        sheetName: "Summary",
+        row: 0,
+        column: 0,
+      },
+      {
+        sheetIndex: 1,
+        sheetName: "Hidden data",
+        row: 3,
+        column: 2,
+      },
+    ],
+  );
+  assert.deepEqual(progress, ["Summary", "Hidden data"]);
+});
+
+void test("XLSX workbook search cancels between worksheets", async () => {
+  let cancelled = false;
+  await assert.rejects(
+    searchXlsxWorkbook(
+      {
+        sheets: [{ name: "One" }, { name: "Two" }],
+        getWorksheet: async () => ({
+          getPopulatedCells: () => cells,
+        }),
+      },
+      "missing",
+      {
+        isCancelled: () => cancelled,
+        yieldControl: async () => {
+          cancelled = true;
+        },
+      },
+    ),
+    XlsxSearchCancelledError,
+  );
 });
 
 function makeCell(

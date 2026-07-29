@@ -6,6 +6,7 @@ import {
   getXlsxSelectionCellCount,
   normalizeXlsxSelection,
   xlsxSelectionContains,
+  xlsxSelectionToMarkdown,
   xlsxSelectionToTsv,
   XlsxSelectionTooLargeError,
 } from "../src/xlsx/xlsxSelection";
@@ -47,6 +48,27 @@ void test("XLSX selection copies displayed values by default and formulas separa
   );
 });
 
+void test("XLSX selection exports all displayed rows as a Markdown table", async () => {
+  const workbook = await XlsxPackage.load(await createRichXlsx());
+  const sheet = await workbook.getWorksheet(0);
+  assert.equal(
+    xlsxSelectionToMarkdown(
+      sheet,
+      {
+        startRow: 1,
+        endRow: 1,
+        startColumn: 1,
+        endColumn: 3,
+      },
+    ),
+    [
+      "| B | C | D |",
+      "| --- | --- | --- |",
+      "| 12,345.68 | 12.50% | 42 |",
+    ].join("\n"),
+  );
+});
+
 void test("XLSX selection bounds clipboard materialization", () => {
   const oversized = {
     startRow: 0,
@@ -60,6 +82,14 @@ void test("XLSX selection bounds clipboard materialization", () => {
         { getCell: () => undefined },
         oversized,
         "display",
+      ),
+    XlsxSelectionTooLargeError,
+  );
+  assert.throws(
+    () =>
+      xlsxSelectionToMarkdown(
+        { getCell: () => undefined },
+        oversized,
       ),
     XlsxSelectionTooLargeError,
   );

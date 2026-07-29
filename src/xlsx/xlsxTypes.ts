@@ -117,6 +117,14 @@ export interface XlsxSheetDescriptor {
   relationshipId: string;
 }
 
+export interface XlsxDefinedName {
+  name: string;
+  target: string;
+  sheetIndex: number;
+  scopeSheetIndex?: number;
+  range: XlsxMergeRange;
+}
+
 export interface XlsxPackageDiagnostics {
   ignoredExternalRelationships: number;
   ignoredDataConnections: number;

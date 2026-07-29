@@ -4,8 +4,11 @@ export interface XlsxReaderText {
   displayName: string;
   commands: {
     focusSearch: string;
+    goToCell: string;
     copyValues: string;
     copyFormulas: string;
+    copyMarkdown: string;
+    createSummaryNote: string;
   };
   toolbar: {
     reload: string;
@@ -17,6 +20,8 @@ export interface XlsxReaderText {
     fitWidth: string;
     copyValues: string;
     copyFormulas: string;
+    copyMarkdown: string;
+    createSummaryNote: string;
     openExternally: string;
   };
   labels: {
@@ -28,6 +33,10 @@ export interface XlsxReaderText {
     column: (column: string) => string;
     selectedRange: (range: string) => string;
     formulaSafety: string;
+    nameBox: string;
+    hiddenSheets: (count: number) => string;
+    hiddenSheet: string;
+    veryHiddenSheet: string;
   };
   status: {
     reading: (fileName: string) => string;
@@ -38,20 +47,61 @@ export interface XlsxReaderText {
       rows: number,
       columns: number,
     ) => string;
-    searching: (sheetName: string) => string;
+    searching: (
+      sheetName: string,
+      current: number,
+      total: number,
+    ) => string;
     searchResults: (count: number) => string;
+    creatingSummary: (
+      sheetName: string,
+      current: number,
+      total: number,
+    ) => string;
     legacy: (fileName: string) => string;
   };
   notices: {
     copiedValues: string;
     copiedFormulas: string;
+    copiedMarkdown: string;
     copyFailed: (message: string) => string;
     selectionTooLarge: (count: number, limit: number) => string;
+    invalidReference: (value: string) => string;
+    openedExistingSummaryNote: string;
+    createdSummaryNote: string;
+    summaryFailed: (message: string) => string;
     externalDesktopOnly: string;
     externalLocalVaultOnly: string;
     externalFailed: (message: string) => string;
     linkConfirmation: (target: string) => string;
     blockedLink: string;
+  };
+  summaryNote: {
+    sourceLabel: string;
+    currentSheetLabel: string;
+    selectedRangeLabel: string;
+    workbookOverviewHeading: string;
+    namedRangesHeading: string;
+    selectedRangeHeading: string;
+    worksheetPreviewsHeading: string;
+    keyFindingsHeading: string;
+    followUpsHeading: string;
+    cellHeader: string;
+    displayedValueHeader: string;
+    noNamedRanges: string;
+    noPreview: string;
+    visibility: {
+      visible: string;
+      hidden: string;
+      veryHidden: string;
+    };
+    sheetSummary: (
+      name: string,
+      visibility: string,
+      rows: number,
+      columns: number,
+      populatedCells: number,
+    ) => string;
   };
   legacy: {
     title: string;
@@ -87,20 +137,25 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
   en: {
     displayName: "Spreadsheet reader",
     commands: {
-      focusSearch: "Search current spreadsheet",
-      copyValues: "Copy selected spreadsheet values",
+      focusSearch: "Search current workbook",
+      goToCell: "Go to spreadsheet cell or named range",
+      copyValues: "Copy selected spreadsheet values as TSV",
       copyFormulas: "Copy selected spreadsheet formulas",
+      copyMarkdown: "Copy selected spreadsheet range as Markdown",
+      createSummaryNote: "Create spreadsheet summary note",
     },
     toolbar: {
       reload: "Reload",
-      searchPlaceholder: "Search current sheet",
-      searchWorkbook: "Search current worksheet",
+      searchPlaceholder: "Search workbook",
+      searchWorkbook: "Search all worksheets",
       previousResult: "Previous result",
       nextResult: "Next result",
       zoomPercentage: "Zoom percentage",
       fitWidth: "Fit worksheet width",
-      copyValues: "Copy displayed values",
+      copyValues: "Copy displayed values as TSV",
       copyFormulas: "Copy formulas",
+      copyMarkdown: "Copy as Markdown table",
+      createSummaryNote: "Create workbook summary note",
       openExternally: "Open externally",
     },
     labels: {
@@ -113,29 +168,66 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
       selectedRange: (range) => `Selected ${range}`,
       formulaSafety:
         "Formulas are never recalculated; only stored text and cached values are shown.",
+      nameBox: "Cell, range, or named range",
+      hiddenSheets: (count) =>
+        count === 1 ? "1 hidden sheet" : `${count} hidden sheets`,
+      hiddenSheet: "Hidden worksheet",
+      veryHiddenSheet: "Very hidden worksheet",
     },
     status: {
       reading: (fileName) => `Reading ${fileName}…`,
       parsingSheet: (sheetName) => `Loading worksheet ${sheetName}…`,
       ready: (fileName, sheetName, rows, columns) =>
         `${fileName} · ${sheetName} · ${rows.toLocaleString()} rows × ${columns.toLocaleString()} columns`,
-      searching: (sheetName) => `Searching ${sheetName}…`,
+      searching: (sheetName, current, total) =>
+        `Searching ${sheetName} (${current}/${total})…`,
       searchResults: (count) =>
         count === 1 ? "1 result" : `${count.toLocaleString()} results`,
+      creatingSummary: (sheetName, current, total) =>
+        `Summarizing ${sheetName} (${current}/${total})…`,
       legacy: (fileName) => `${fileName} requires conversion to .xlsx`,
     },
     notices: {
-      copiedValues: "Copied displayed cell values",
+      copiedValues: "Copied displayed cell values as TSV",
       copiedFormulas: "Copied formulas and displayed values",
+      copiedMarkdown: "Copied selection as a Markdown table",
       copyFailed: (message) => `Could not copy cells: ${message}`,
       selectionTooLarge: (count, limit) =>
         `The selection contains ${count.toLocaleString()} cells. Copy at most ${limit.toLocaleString()} cells at once.`,
+      invalidReference: (value) =>
+        `Could not find cell, range, or named range: ${value}`,
+      openedExistingSummaryNote: "Opened existing spreadsheet summary note",
+      createdSummaryNote: "Created spreadsheet summary note",
+      summaryFailed: (message) =>
+        `Could not create spreadsheet summary: ${message}`,
       externalDesktopOnly:
         "External opening is only available in Obsidian Desktop",
       externalLocalVaultOnly: "External opening requires a local desktop vault",
       externalFailed: (message) => `Could not open workbook: ${message}`,
       linkConfirmation: (target) => `Open this workbook link?\n\n${target}`,
       blockedLink: "Only safe web, email, and in-workbook links can be opened",
+    },
+    summaryNote: {
+      sourceLabel: "Source",
+      currentSheetLabel: "Current worksheet",
+      selectedRangeLabel: "Selected range",
+      workbookOverviewHeading: "Workbook overview",
+      namedRangesHeading: "Named ranges",
+      selectedRangeHeading: "Selected range snapshot",
+      worksheetPreviewsHeading: "Worksheet previews",
+      keyFindingsHeading: "Key findings",
+      followUpsHeading: "Follow-ups",
+      cellHeader: "Cell",
+      displayedValueHeader: "Displayed value",
+      noNamedRanges: "No supported named ranges were found.",
+      noPreview: "No populated cells are available for this preview.",
+      visibility: {
+        visible: "visible",
+        hidden: "hidden",
+        veryHidden: "very hidden",
+      },
+      sheetSummary: (name, visibility, rows, columns, populatedCells) =>
+        `${name} (${visibility}) — ${rows.toLocaleString()} rows × ${columns.toLocaleString()} columns; ${populatedCells.toLocaleString()} populated cells`,
     },
     legacy: {
       title: "Legacy Excel workbook",
@@ -169,20 +261,25 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
   "zh-CN": {
     displayName: "电子表格阅读器",
     commands: {
-      focusSearch: "搜索当前电子表格",
-      copyValues: "复制选中区域显示值",
+      focusSearch: "搜索当前工作簿",
+      goToCell: "跳转到单元格或命名区域",
+      copyValues: "复制选中区域显示值为 TSV",
       copyFormulas: "复制选中区域公式",
+      copyMarkdown: "复制选区为 Markdown 表格",
+      createSummaryNote: "创建工作簿摘要笔记",
     },
     toolbar: {
       reload: "重新加载",
-      searchPlaceholder: "搜索当前工作表",
-      searchWorkbook: "搜索当前工作表",
+      searchPlaceholder: "搜索整个工作簿",
+      searchWorkbook: "搜索全部工作表",
       previousResult: "上一个结果",
       nextResult: "下一个结果",
       zoomPercentage: "缩放百分比",
       fitWidth: "适配工作表宽度",
-      copyValues: "复制显示值",
+      copyValues: "复制显示值为 TSV",
       copyFormulas: "复制公式",
+      copyMarkdown: "复制为 Markdown 表格",
+      createSummaryNote: "创建工作簿摘要笔记",
       openExternally: "外部打开",
     },
     labels: {
@@ -194,27 +291,62 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
       column: (column) => `第 ${column} 列`,
       selectedRange: (range) => `已选择 ${range}`,
       formulaSafety: "不会重新计算公式，只显示文件中保存的公式文本和缓存结果。",
+      nameBox: "单元格、区域或命名区域",
+      hiddenSheets: (count) => `${count} 个隐藏工作表`,
+      hiddenSheet: "隐藏工作表",
+      veryHiddenSheet: "深度隐藏工作表",
     },
     status: {
       reading: (fileName) => `正在读取 ${fileName}…`,
       parsingSheet: (sheetName) => `正在加载工作表 ${sheetName}…`,
       ready: (fileName, sheetName, rows, columns) =>
         `${fileName} · ${sheetName} · ${rows.toLocaleString()} 行 × ${columns.toLocaleString()} 列`,
-      searching: (sheetName) => `正在搜索 ${sheetName}…`,
+      searching: (sheetName, current, total) =>
+        `正在搜索 ${sheetName}（${current}/${total}）…`,
       searchResults: (count) => `${count.toLocaleString()} 个结果`,
+      creatingSummary: (sheetName, current, total) =>
+        `正在汇总 ${sheetName}（${current}/${total}）…`,
       legacy: (fileName) => `${fileName} 需要转换为 .xlsx`,
     },
     notices: {
-      copiedValues: "已复制单元格显示值",
+      copiedValues: "已将单元格显示值复制为 TSV",
       copiedFormulas: "已复制公式和非公式单元格的显示值",
+      copiedMarkdown: "已将选区复制为 Markdown 表格",
       copyFailed: (message) => `无法复制单元格：${message}`,
       selectionTooLarge: (count, limit) =>
         `选区包含 ${count.toLocaleString()} 个单元格，请一次最多复制 ${limit.toLocaleString()} 个。`,
+      invalidReference: (value) =>
+        `未找到单元格、区域或命名区域：${value}`,
+      openedExistingSummaryNote: "已打开现有电子表格摘要笔记",
+      createdSummaryNote: "已创建电子表格摘要笔记",
+      summaryFailed: (message) => `无法创建电子表格摘要：${message}`,
       externalDesktopOnly: "外部打开仅支持 Obsidian 桌面端",
       externalLocalVaultOnly: "外部打开需要本地桌面仓库",
       externalFailed: (message) => `无法打开工作簿：${message}`,
       linkConfirmation: (target) => `是否打开此工作簿链接？\n\n${target}`,
       blockedLink: "只能打开安全的网页、邮件和工作簿内部链接",
+    },
+    summaryNote: {
+      sourceLabel: "来源",
+      currentSheetLabel: "当前工作表",
+      selectedRangeLabel: "选中区域",
+      workbookOverviewHeading: "工作簿概览",
+      namedRangesHeading: "命名区域",
+      selectedRangeHeading: "选区快照",
+      worksheetPreviewsHeading: "工作表预览",
+      keyFindingsHeading: "关键发现",
+      followUpsHeading: "后续事项",
+      cellHeader: "单元格",
+      displayedValueHeader: "显示值",
+      noNamedRanges: "未发现受支持的命名区域。",
+      noPreview: "没有可用于预览的非空单元格。",
+      visibility: {
+        visible: "可见",
+        hidden: "隐藏",
+        veryHidden: "深度隐藏",
+      },
+      sheetSummary: (name, visibility, rows, columns, populatedCells) =>
+        `${name}（${visibility}）— ${rows.toLocaleString()} 行 × ${columns.toLocaleString()} 列；${populatedCells.toLocaleString()} 个非空单元格`,
     },
     legacy: {
       title: "旧版 Excel 工作簿",

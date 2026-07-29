@@ -153,6 +153,28 @@ if (Number(pkg.version.split(".")[0]) >= 3 && hasFile("dist/main.js")) {
   );
 }
 
+const [releaseMajor, releaseMinor] = pkg.version
+  .split(".")
+  .map((part) => Number(part));
+if (
+  releaseMajor === 3 &&
+  releaseMinor >= 1 &&
+  hasFile("dist/main.js")
+) {
+  const bundle = fs.readFileSync(path.join(rootDir, "dist/main.js"), "utf8");
+  for (const [marker, feature] of [
+    ["Search all worksheets", "workbook-wide XLSX search"],
+    ["Cell, range, or named range", "XLSX name-box navigation"],
+    ["spreadsheet-note", "XLSX summary notes"],
+    ["The XLSX summary was cancelled.", "cancellable XLSX summaries"],
+  ]) {
+    expect(
+      bundle.includes(marker),
+      `3.1.x production bundles must include ${feature}`,
+    );
+  }
+}
+
 if (failures.length > 0) {
   console.error("Release check failed:");
   for (const failure of failures) {

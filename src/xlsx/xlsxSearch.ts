@@ -1,5 +1,6 @@
 import type { XlsxCell } from "./xlsxTypes";
 import type { XlsxCellPosition } from "./xlsxSelection";
+import type { XlsxWorksheet } from "./xlsxWorksheet";
 
 const DEFAULT_SEARCH_CHUNK_SIZE = 1_000;
 
@@ -7,6 +8,27 @@ export interface XlsxSearchOptions {
   chunkSize?: number;
   isCancelled?: () => boolean;
   yieldControl?: () => Promise<void>;
+}
+
+export interface XlsxWorkbookSearchSource {
+  sheets: readonly { name: string }[];
+  getWorksheet: (
+    index: number,
+    options?: { isCancelled?: () => boolean },
+  ) => Promise<Pick<XlsxWorksheet, "getPopulatedCells">>;
+}
+
+export interface XlsxWorkbookSearchResult extends XlsxCellPosition {
+  sheetIndex: number;
+  sheetName: string;
+}
+
+export interface XlsxWorkbookSearchOptions extends XlsxSearchOptions {
+  onSheet?: (
+    sheetName: string,
+    sheetIndex: number,
+    sheetCount: number,
+  ) => void;
 }
 
 export class XlsxSearchCancelledError extends Error {
@@ -40,6 +62,50 @@ export async function searchXlsxCells(
       }
     }
     if (chunkEnd < cells.length && options.yieldControl) {
+      await options.yieldControl();
+    }
+  }
+  throwIfCancelled(options);
+  return results;
+}
+
+export async function searchXlsxWorkbook(
+  workbook: XlsxWorkbookSearchSource,
+  query: string,
+  options: XlsxWorkbookSearchOptions = {},
+): Promise<XlsxWorkbookSearchResult[]> {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return [];
+  }
+  const results: XlsxWorkbookSearchResult[] = [];
+  for (let sheetIndex = 0; sheetIndex < workbook.sheets.length; sheetIndex += 1) {
+    throwIfCancelled(options);
+    const descriptor = workbook.sheets[sheetIndex];
+    options.onSheet?.(
+      descriptor.name,
+      sheetIndex,
+      workbook.sheets.length,
+    );
+    const worksheet = await workbook.getWorksheet(sheetIndex, {
+      isCancelled: options.isCancelled,
+    });
+    const matches = await searchXlsxCells(
+      worksheet.getPopulatedCells(),
+      normalizedQuery,
+      options,
+    );
+    results.push(
+      ...matches.map((match) => ({
+        ...match,
+        sheetIndex,
+        sheetName: descriptor.name,
+      })),
+    );
+    if (
+      sheetIndex + 1 < workbook.sheets.length &&
+      options.yieldControl
+    ) {
       await options.yieldControl();
     }
   }

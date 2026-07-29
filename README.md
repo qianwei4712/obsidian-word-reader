@@ -18,8 +18,9 @@ Requires Obsidian Desktop 1.12.7 or newer.
 - Open `.xlsx` files in a bounded virtual grid with worksheet tabs, frozen
   panes, merged cells, row/column sizing, basic styles, number/date formats,
   and cached formula results.
-- Search the current worksheet, zoom or fit its width, select a rectangular
-  range, and copy displayed values or formulas as separate actions.
+- Navigate cells and supported named ranges, search the complete workbook,
+  inspect hidden sheets, zoom or fit width, export selected ranges as TSV or
+  Markdown, copy formulas separately, and create workbook summary notes.
 - Navigate presentations with rendered slide thumbnails, extracted titles,
   previous/next controls, page-number jump, keyboard shortcuts, continuous
   zoom, fit to window, fullscreen reading, and external open.
@@ -46,8 +47,9 @@ Requires Obsidian Desktop 1.12.7 or newer.
 - Show clearer messages for encrypted, damaged, or unsupported Word documents.
 - Avoid stale render results when switching or reloading documents.
 - Create or open same-name Markdown summary notes linked back to source
-  `.docx` and `.pptx` files. Presentation notes include numbered slide
-  references.
+  `.docx`, `.pptx`, and `.xlsx` files. Presentation notes include numbered
+  slide references; spreadsheet notes include workbook structure, named
+  ranges, the current selection, and bounded content previews.
 
 ## Supported Files
 
@@ -99,19 +101,28 @@ Requires Obsidian Desktop 1.12.7 or newer.
 
 ### Spreadsheet Reading
 
-- Switch among visible worksheets with the tabs below the grid.
+- Switch among visible worksheets with the tabs below the grid. A separate
+  indicator lists hidden and very-hidden worksheets and opens them only when
+  requested without changing the source workbook.
+- Enter `A1`, a rectangular range, a worksheet-qualified reference, or a
+  supported workbook/sheet-scoped named range in the formula-bar name box to
+  jump directly to it.
 - Scroll large sparse worksheets without mounting their complete row and
   column range. The grid keeps only the viewport, finite overscan, and visible
   frozen rows/columns mounted.
 - Use the mouse to drag a rectangular selection, `Shift` + click to extend it,
   or the arrow, page, `Home`, and `End` keys to move the active cell.
-- Search values and formula text in the current worksheet. Press
-  `Ctrl`/`Cmd` + `F` to focus search and use `Enter`/`Shift` + `Enter` to move
-  between results.
-- Copy displayed values by default. Use the separate formula-copy action when
-  formulas are required; formulas are never recalculated.
-- Inspect the selected cell's formula text and workbook-cached result in the
-  formula bar.
+- Search values and stored formula text across the complete workbook,
+  including hidden worksheets. Press `Ctrl`/`Cmd` + `F` to focus search and
+  use `Enter`/`Shift` + `Enter` to move between cross-sheet results.
+- Copy displayed values as TSV, export the selected rectangle as a Markdown
+  table, or use the separate formula-copy action. Clipboard operations are
+  capped at 250,000 cells.
+- Inspect the selected cell's complete stored formula text and
+  workbook-cached result in the read-only formula bar.
+- Create a same-name spreadsheet summary note containing sheet dimensions and
+  visibility, named ranges, the current selection, and up to 200 displayed
+  cell previews collected from workbook content.
 - Workbook hyperlinks open only after an explicit click and confirmation.
   External workbook references and data connections are never fetched.
 - The active worksheet, zoom/fit preference, and scroll position are restored
@@ -218,9 +229,9 @@ Available settings:
   reloaded, switched, or closed.
 - XLSX worksheets use a 2,500-cell mount ceiling with finite row/column
   overscan. Frozen panes remain visible without materializing the full sheet.
-- Worksheet parsing, switching, search, and scheduled grid rendering are
-  cancellable; package caches are bounded and released on reload, file switch,
-  and view close.
+- Worksheet parsing, switching, workbook-wide search, summary collection, and
+  scheduled grid rendering are cancellable; package caches are bounded and
+  released on reload, file switch, and view close.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
 - Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
 - Long previews defer off-screen page painting until pages approach the viewport.
@@ -249,7 +260,7 @@ The stable reader scope, manual test checklist, support boundaries, and maintena
 ### Summary Notes
 
 The summary note action creates a same-name Markdown file next to a Word
-document or PowerPoint presentation.
+document, PowerPoint presentation, or Excel workbook.
 
 Example:
 
@@ -258,6 +269,8 @@ Report.docx
 Report.md
 Quarterly review.pptx
 Quarterly review.md
+Data register.xlsx
+Data register.md
 ```
 
 The generated note includes frontmatter and starter sections:
@@ -288,6 +301,12 @@ Presentation notes use `type: presentation-note` and
 `reader_format: pptx`, record the current slide, and include a numbered
 reference list for every slide. If the same-name Markdown file already exists,
 the plugin opens it without overwriting content.
+
+Spreadsheet notes use `type: spreadsheet-note` and `reader_format: xlsx`,
+record the current worksheet and selection, list worksheet dimensions,
+visibility, and supported named ranges, and include at most 200 displayed-value
+preview cells. Existing same-name Markdown files are opened without being
+overwritten.
 
 ## Installation
 
@@ -428,7 +447,7 @@ CI and release workflows use Node.js 20.19.0.
 - The plugin never saves changes back to `.docx`, `.pptx`, or `.xlsx`.
 - Legacy `.xls` files are not rendered directly, and `.xlsm` is not
   registered. Pivot tables, slicers, full chart fidelity, comments, images,
-  and complex conditional formatting are outside the 3.0.0 XLSX scope.
+  and complex conditional formatting are outside the 3.1.0 XLSX scope.
 - Legacy `.doc` files are not rendered directly, but the plugin shows external-open and conversion guidance.
 - Complex Word layouts may not render exactly like Microsoft Word.
 - PPTX animation, transitions, audio/video playback, macros, editing, charts,

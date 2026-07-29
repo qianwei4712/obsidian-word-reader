@@ -8,6 +8,11 @@ export interface XlsxCellPosition {
   column: number;
 }
 
+export interface XlsxQualifiedRangeReference {
+  sheetName?: string;
+  range: XlsxMergeRange;
+}
+
 export function parseCellReference(reference: string): XlsxCellPosition {
   const match = /^\$?([A-Z]{1,3})\$?(\d{1,7})$/i.exec(reference);
   if (!match) {
@@ -70,4 +75,28 @@ export function parseRangeReference(reference: string): XlsxMergeRange {
     endRow: Math.max(start.row, end.row),
     endColumn: Math.max(start.column, end.column),
   };
+}
+
+export function parseQualifiedRangeReference(
+  value: string,
+): XlsxQualifiedRangeReference | null {
+  const match =
+    /^(?:(?:'((?:[^']|'')+)'|([^!]+))!)?(\$?[A-Z]{1,3}\$?\d{1,7}(?::\$?[A-Z]{1,3}\$?\d{1,7})?)$/i.exec(
+      value.trim(),
+    );
+  if (!match) {
+    return null;
+  }
+  const sheetName = (match[1] ?? match[2])?.replace(/''/g, "'");
+  if (sheetName?.includes("[") || sheetName?.includes("]")) {
+    return null;
+  }
+  try {
+    return {
+      sheetName,
+      range: parseRangeReference(match[3]),
+    };
+  } catch {
+    return null;
+  }
 }

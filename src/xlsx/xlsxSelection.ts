@@ -1,3 +1,4 @@
+import { columnIndexToName } from "./xlsxReferences";
 import type { XlsxCell } from "./xlsxTypes";
 import type { XlsxWorksheet } from "./xlsxWorksheet";
 
@@ -56,10 +57,7 @@ export function xlsxSelectionToTsv(
   selection: XlsxSelectionRange,
   mode: XlsxCopyMode,
 ): string {
-  const cellCount = getXlsxSelectionCellCount(selection);
-  if (cellCount > MAX_XLSX_COPY_CELLS) {
-    throw new XlsxSelectionTooLargeError(cellCount);
-  }
+  assertCopySize(selection);
 
   const lines: string[] = [];
   for (let row = selection.startRow; row <= selection.endRow; row += 1) {
@@ -80,12 +78,54 @@ export function xlsxSelectionToTsv(
   return lines.join("\n");
 }
 
+export function xlsxSelectionToMarkdown(
+  worksheet: Pick<XlsxWorksheet, "getCell">,
+  selection: XlsxSelectionRange,
+): string {
+  assertCopySize(selection);
+  const headers: string[] = [];
+  for (
+    let column = selection.startColumn;
+    column <= selection.endColumn;
+    column += 1
+  ) {
+    headers.push(columnIndexToName(column));
+  }
+  const rows = [
+    markdownRow(headers),
+    markdownRow(headers.map(() => "---")),
+  ];
+  for (let row = selection.startRow; row <= selection.endRow; row += 1) {
+    const values: string[] = [];
+    for (
+      let column = selection.startColumn;
+      column <= selection.endColumn;
+      column += 1
+    ) {
+      values.push(
+        escapeMarkdownTableValue(
+          getCellCopyValue(worksheet.getCell(row, column), "display"),
+        ),
+      );
+    }
+    rows.push(markdownRow(values));
+  }
+  return rows.join("\n");
+}
+
 export class XlsxSelectionTooLargeError extends Error {
   constructor(readonly cellCount: number) {
     super(
       `The selected range contains ${cellCount} cells, exceeding the ${MAX_XLSX_COPY_CELLS} cell copy limit.`,
     );
     this.name = "XlsxSelectionTooLargeError";
+  }
+}
+
+function assertCopySize(selection: XlsxSelectionRange): void {
+  const cellCount = getXlsxSelectionCellCount(selection);
+  if (cellCount > MAX_XLSX_COPY_CELLS) {
+    throw new XlsxSelectionTooLargeError(cellCount);
   }
 }
 
@@ -107,4 +147,18 @@ function escapeTsvValue(value: string): string {
     return value;
   }
   return `"${value.replace(/"/g, "\"\"")}"`;
+}
+
+function escapeMarkdownTableValue(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r\n|\r|\n/g, "<br>");
+}
+
+function markdownRow(values: readonly string[]): string {
+  return `| ${values.join(" | ")} |`;
 }

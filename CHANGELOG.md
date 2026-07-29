@@ -1,5 +1,78 @@
 # Changelog
 
+## 3.1.0 - 2026-07-29
+
+### English
+
+#### Added
+
+- Added an editable spreadsheet name box for direct `A1`/range navigation,
+  qualified worksheet references, and workbook- or sheet-scoped named ranges.
+- Added workbook-wide search across visible, hidden, and very-hidden
+  worksheets, with cancellable sequential parsing and cross-sheet result
+  navigation.
+- Added an explicit hidden-worksheet indicator and local navigation menu while
+  retaining the active hidden sheet in the worksheet tab strip.
+- Expanded the read-only formula bar with a standard name box, full stored
+  formula text, displayed or workbook-cached results, and the existing
+  cached-only safety notice.
+- Added explicit displayed-value TSV copy and Markdown-table export for the
+  selected rectangular range. Markdown export preserves every selected row
+  under generated spreadsheet column headings.
+- Added same-name XLSX summary notes containing workbook and worksheet
+  dimensions, visibility, named ranges, the current selection, and bounded
+  displayed-value previews from workbook content.
+
+#### Security and performance
+
+- Named ranges accept only local static A1 cell or rectangular range targets;
+  external workbook references, formulas, unions, and dynamic names are not
+  resolved.
+- Workbook search and summary collection are cancellable during reload,
+  worksheet/file switching, and view close. Worksheet/package caches remain
+  bounded and are released with the workbook.
+- Summary previews are capped at 200 populated cells across the workbook, and
+  clipboard materialization retains the existing 250,000-cell ceiling.
+
+#### Changed
+
+- Updated XLSX search from current-sheet scope to the complete workbook and
+  made result counters identify the target worksheet and cell.
+- Updated version metadata, documentation, release checks, and the manual
+  checklist for the 3.1.0 workbook navigation and knowledge-extraction scope.
+
+### 中文
+
+#### 新增
+
+- 新增可输入的电子表格名称框，支持直接跳转 `A1`/矩形区域、带工作表限定的
+  引用，以及工作簿级或工作表级命名区域。
+- 新增覆盖可见、隐藏和深度隐藏工作表的工作簿级搜索；按工作表顺序解析、
+  支持协作取消，并可跨表跳转结果。
+- 新增明确的隐藏工作表数量提示和本地导航菜单；打开隐藏表后仍会在工作表
+  标签栏保留当前表。
+- 完善只读公式栏，包含标准名称框、完整的已保存公式文本、显示值或工作簿缓存
+  结果，以及原有的“只使用缓存、不重算”安全提示。
+- 新增明确的显示值 TSV 复制和选中矩形区域 Markdown 表格导出；Markdown
+  使用生成的列标题并保留全部选中数据行。
+- 新增同名 XLSX 摘要笔记，包含工作簿/工作表尺寸、可见性、命名区域、当前
+  选区，以及从工作簿内容生成的有界显示值预览。
+
+#### 安全与性能
+
+- 命名区域只解析包内静态 A1 单元格或矩形区域；不解析外部工作簿引用、公式、
+  多区域并集和动态名称。
+- 工作簿搜索和摘要收集会在重新加载、切表、切文件和关闭视图时取消；工作表
+  与包缓存继续保持有界，并随工作簿释放。
+- 摘要预览在整个工作簿内最多收集 200 个非空单元格；剪贴板物化继续遵守
+  250,000 单元格上限。
+
+#### 变更
+
+- XLSX 搜索从当前工作表升级为整个工作簿，结果计数会显示目标工作表与单元格。
+- 更新 3.1.0 工作簿导航与知识提取范围对应的版本元数据、文档、发布检查和
+  手动验收清单。
+
 ## 3.0.0 - 2026-07-29
 
 ### English

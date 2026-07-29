@@ -34,6 +34,8 @@ void test("format adapters own recognition and capability declarations", () => {
   assert.equal(XLSX_ADAPTER.supports({ extension: "xlsm" }), false);
   assert.equal(XLSX_ADAPTER.capabilities.search, true);
   assert.equal(XLSX_ADAPTER.capabilities.copyText, true);
+  assert.equal(XLSX_ADAPTER.capabilities.copyMarkdown, true);
+  assert.equal(XLSX_ADAPTER.capabilities.summaryNote, true);
   assert.equal(XLSX_ADAPTER.capabilities.openExternal, true);
   assert.equal(XLSX_ADAPTER.capabilities.notes, false);
 });

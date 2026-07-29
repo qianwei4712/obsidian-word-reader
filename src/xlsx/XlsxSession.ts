@@ -6,6 +6,7 @@ import {
   setIcon,
 } from "obsidian";
 
+import { createNoteFromXlsx } from "../commands/createNoteFromXlsx";
 import { openExternalFile } from "../commands/openExternal";
 import type WordReaderPlugin from "../main";
 import type { ReaderCapability } from "../reader/capabilities";
@@ -18,11 +19,17 @@ import {
   type ReaderStatus,
 } from "../reader/status";
 import { normalizeZoom, preserveZoomAnchor } from "../reader/zoom";
-import { columnIndexToName, parseCellReference } from "./xlsxReferences";
+import {
+  columnIndexToName,
+  parseCellReference,
+  parseQualifiedRangeReference,
+} from "./xlsxReferences";
+import { resolveXlsxDefinedName } from "./xlsxDefinedNames";
 import {
   MAX_XLSX_COPY_CELLS,
   normalizeXlsxSelection,
   xlsxSelectionContains,
+  xlsxSelectionToMarkdown,
   xlsxSelectionToTsv,
   XlsxSelectionTooLargeError,
   type XlsxCellPosition,
@@ -45,9 +52,14 @@ import {
 } from "./xlsxI18n";
 import { XlsxPackage } from "./xlsxPackage";
 import {
-  searchXlsxCells,
+  searchXlsxWorkbook,
   XlsxSearchCancelledError,
+  type XlsxWorkbookSearchResult,
 } from "./xlsxSearch";
+import {
+  collectXlsxWorkbookSummary,
+  XlsxSummaryCancelledError,
+} from "./xlsxSummaryNote";
 import type {
   XlsxCell,
   XlsxHyperlink,
@@ -80,8 +92,9 @@ export class XlsxSession extends FileView implements ReaderSession {
   private rootEl: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
   private bodyEl: HTMLElement | null = null;
-  private formulaNameEl: HTMLElement | null = null;
-  private formulaValueEl: HTMLElement | null = null;
+  private formulaNameEl: HTMLInputElement | null = null;
+  private formulaValueEl: HTMLTextAreaElement | null = null;
+  private nameSuggestionsEl: HTMLDataListElement | null = null;
   private formulaCachedEl: HTMLElement | null = null;
   private formulaSafetyEl: HTMLElement | null = null;
   private linkButtonEl: HTMLButtonElement | null = null;
@@ -111,15 +124,17 @@ export class XlsxSession extends FileView implements ReaderSession {
   private selectionFocus: XlsxCellPosition = { row: 0, column: 0 };
   private draggingSelection = false;
   private searchQuery = "";
-  private searchResults: XlsxCellPosition[] = [];
+  private searchResults: XlsxWorkbookSearchResult[] = [];
   private searchResultKeys = new Set<string>();
   private currentSearchResult = -1;
+  private completedSearchQuery = "";
   private searchTimer: number | null = null;
   private renderFrameId: number | null = null;
   private stateSaveTimer: number | null = null;
   private readonly loadLifecycle = new ReaderLifecycle();
   private readonly sheetLifecycle = new ReaderLifecycle();
   private readonly searchLifecycle = new ReaderLifecycle();
+  private readonly summaryLifecycle = new ReaderLifecycle();
   private readonly readerStatus = new ReaderStatusController((status) => {
     this.renderStatus(status);
   });
@@ -169,6 +184,7 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.loadLifecycle.cancel();
     this.sheetLifecycle.cancel();
     this.searchLifecycle.cancel();
+    this.summaryLifecycle.cancel();
     this.releaseWorkbook();
   }
 
@@ -184,6 +200,7 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.loadLifecycle.cancel();
     this.sheetLifecycle.cancel();
     this.searchLifecycle.cancel();
+    this.summaryLifecycle.cancel();
     this.cancelScheduledWork();
     this.releaseWorkbook();
     this.setStatus("");
@@ -217,9 +234,87 @@ export class XlsxSession extends FileView implements ReaderSession {
     await this.copySelection("formula");
   }
 
+  async copyMarkdown(): Promise<void> {
+    await this.copySelectionAsMarkdown();
+  }
+
+  async createSummaryNote(): Promise<void> {
+    const workbook = this.workbook;
+    const worksheet = this.worksheet;
+    const file = this.file;
+    if (!workbook || !worksheet || !file) {
+      return;
+    }
+    const token = this.summaryLifecycle.begin();
+    const sheetIndex = this.activeSheetIndex;
+    const rangeLabel = this.getSelectionLabel();
+    let selectedRangeMarkdown: string;
+    try {
+      selectedRangeMarkdown = xlsxSelectionToMarkdown(
+        worksheet,
+        this.selection,
+      );
+    } catch (error) {
+      this.handleCopyError(error);
+      return;
+    }
+    try {
+      const summary = await collectXlsxWorkbookSummary(workbook, {
+        isCancelled: () =>
+          !this.summaryLifecycle.isCurrent(token) ||
+          this.workbook !== workbook ||
+          this.activeSheetIndex !== sheetIndex,
+        yieldControl: () => yieldToWindow(this.contentEl.win),
+        onSheet: (sheetName, index, count) => {
+          this.setStatus(
+            this.text.status.creatingSummary(
+              sheetName,
+              index + 1,
+              count,
+            ),
+            false,
+            true,
+          );
+        },
+      });
+      if (
+        !this.summaryLifecycle.isCurrent(token) ||
+        this.workbook !== workbook
+      ) {
+        return;
+      }
+      await createNoteFromXlsx(
+        this.app,
+        file,
+        summary,
+        sheetIndex,
+        rangeLabel,
+        selectedRangeMarkdown,
+        this.text,
+      );
+    } catch (error) {
+      if (
+        error instanceof XlsxSummaryCancelledError ||
+        error instanceof XlsxWorksheetCancelledError
+      ) {
+        return;
+      }
+      new Notice(this.text.notices.summaryFailed(getErrorMessage(error)));
+    } finally {
+      if (this.summaryLifecycle.isCurrent(token)) {
+        this.setReadyStatus();
+      }
+    }
+  }
+
   focusSearch(): void {
     this.searchInputEl?.focus();
     this.searchInputEl?.select();
+  }
+
+  focusNameBox(): void {
+    this.formulaNameEl?.focus();
+    this.formulaNameEl?.select();
   }
 
   refreshInterfaceLanguage(): void {
@@ -235,6 +330,7 @@ export class XlsxSession extends FileView implements ReaderSession {
     }
     if (this.workbook && this.worksheet) {
       this.renderSheetTabs();
+      this.renderNameSuggestions();
       this.updateFormulaBar();
       this.applyScale();
       this.restoreScrollPosition();
@@ -285,12 +381,13 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.searchInputEl.value = this.searchQuery;
     this.searchInputEl.addEventListener("input", () => {
       this.searchQuery = this.searchInputEl?.value ?? "";
+      this.completedSearchQuery = "";
       this.scheduleSearch();
     });
     this.searchInputEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        this.goToSearchResult(event.shiftKey ? -1 : 1);
+        void this.goToSearchResult(event.shiftKey ? -1 : 1);
       }
     });
     this.createIconButton(
@@ -298,7 +395,7 @@ export class XlsxSession extends FileView implements ReaderSession {
       "chevron-up",
       text.toolbar.previousResult,
       () => {
-        this.goToSearchResult(-1);
+        void this.goToSearchResult(-1);
       },
     );
     this.createIconButton(
@@ -306,7 +403,7 @@ export class XlsxSession extends FileView implements ReaderSession {
       "chevron-down",
       text.toolbar.nextResult,
       () => {
-        this.goToSearchResult(1);
+        void this.goToSearchResult(1);
       },
     );
     this.searchCountEl = searchEl.createSpan({
@@ -361,6 +458,24 @@ export class XlsxSession extends FileView implements ReaderSession {
     );
     this.createToolbarButton(
       layout.toolbarEl,
+      "copyMarkdown",
+      "table-properties",
+      text.toolbar.copyMarkdown,
+      () => {
+        void this.copySelectionAsMarkdown();
+      },
+    );
+    this.createToolbarButton(
+      layout.toolbarEl,
+      "summaryNote",
+      "notebook-pen",
+      text.toolbar.createSummaryNote,
+      () => {
+        void this.createSummaryNote();
+      },
+    );
+    this.createToolbarButton(
+      layout.toolbarEl,
       "openExternal",
       "external-link",
       text.toolbar.openExternally,
@@ -372,11 +487,45 @@ export class XlsxSession extends FileView implements ReaderSession {
     const formulaBarEl = this.bodyEl.createDiv({
       cls: "xlsx-reader-formula-bar",
     });
-    this.formulaNameEl = formulaBarEl.createDiv({
+    const nameListId = `${this.cellIdPrefix}-defined-names`;
+    this.formulaNameEl = formulaBarEl.createEl("input", {
       cls: "xlsx-reader-name-box",
+      attr: {
+        type: "text",
+        list: nameListId,
+        placeholder: text.labels.nameBox,
+        "aria-label": text.labels.nameBox,
+        title: text.labels.nameBox,
+        autocomplete: "off",
+        spellcheck: "false",
+      },
     });
-    this.formulaValueEl = formulaBarEl.createDiv({
+    this.formulaNameEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void this.navigateFromNameBox();
+      } else if (event.key === "Escape") {
+        this.updateFormulaBar();
+        this.rootEl?.focus();
+      }
+    });
+    this.nameSuggestionsEl = formulaBarEl.createEl("datalist", {
+      attr: { id: nameListId },
+    });
+    formulaBarEl.createSpan({
+      cls: "xlsx-reader-formula-prefix",
+      text: "fx",
+      attr: { "aria-hidden": "true" },
+    });
+    this.formulaValueEl = formulaBarEl.createEl("textarea", {
       cls: "xlsx-reader-formula-value",
+      attr: {
+        rows: "1",
+        readonly: "",
+        spellcheck: "false",
+        "aria-label": text.labels.formula,
+        placeholder: text.labels.formula,
+      },
     });
     this.formulaCachedEl = formulaBarEl.createDiv({
       cls: "xlsx-reader-cached-value",
@@ -446,11 +595,13 @@ export class XlsxSession extends FileView implements ReaderSession {
     const token = this.loadLifecycle.begin();
     this.sheetLifecycle.cancel();
     this.searchLifecycle.cancel();
+    this.summaryLifecycle.cancel();
     this.releaseWorkbook();
     this.clearGridMessage();
     this.searchResults = [];
     this.searchResultKeys.clear();
     this.currentSearchResult = -1;
+    this.completedSearchQuery = "";
     this.updateSearchCount();
 
     if (file.extension.toLowerCase() === "xls") {
@@ -471,7 +622,15 @@ export class XlsxSession extends FileView implements ReaderSession {
         workbook,
       );
       this.renderSheetTabs();
+      this.renderNameSuggestions();
       await this.loadWorksheet(this.activeSheetIndex, true);
+      if (
+        this.loadLifecycle.isCurrent(token) &&
+        this.workbook === workbook &&
+        this.searchQuery.trim()
+      ) {
+        await this.runSearch();
+      }
     } catch (error) {
       if (this.loadLifecycle.isCurrent(token)) {
         this.releaseWorkbook();
@@ -492,6 +651,7 @@ export class XlsxSession extends FileView implements ReaderSession {
 
     const token = this.sheetLifecycle.begin();
     this.searchLifecycle.cancel();
+    this.summaryLifecycle.cancel();
     this.clearWorksheet();
     this.activeSheetIndex = index;
     this.renderSheetTabs();
@@ -529,7 +689,7 @@ export class XlsxSession extends FileView implements ReaderSession {
       this.scheduleGridRender();
       this.setReadyStatus();
       this.saveReadingState();
-      void this.runSearch();
+      this.refreshSearchResultKeys();
     } catch (error) {
       if (error instanceof XlsxWorksheetCancelledError) {
         return;
@@ -562,6 +722,7 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.workbook = null;
     this.clearWorksheet();
     this.sheetTabsEl?.empty();
+    this.nameSuggestionsEl?.empty();
   }
 
   private renderSheetTabs(): void {
@@ -596,8 +757,70 @@ export class XlsxSession extends FileView implements ReaderSession {
       buttonEl.addEventListener("click", () => {
         if (index !== this.activeSheetIndex) {
           this.pendingScrollPosition = { left: 0, top: 0 };
-          void this.loadWorksheet(index, false);
+          void this.selectWorksheet(index);
         }
+      });
+    }
+    const hidden = workbook.sheets
+      .map((sheet, index) => ({ sheet, index }))
+      .filter(({ sheet }) => sheet.state !== "visible");
+    if (hidden.length > 0) {
+      const hiddenEl = tabsEl.createEl("details", {
+        cls: "xlsx-reader-hidden-sheets",
+      });
+      hiddenEl.createEl("summary", {
+        text: this.text.labels.hiddenSheets(hidden.length),
+      });
+      const menuEl = hiddenEl.createDiv({
+        cls: "xlsx-reader-hidden-sheet-menu",
+      });
+      for (const { sheet, index } of hidden) {
+        const stateLabel =
+          sheet.state === "veryHidden"
+            ? this.text.labels.veryHiddenSheet
+            : this.text.labels.hiddenSheet;
+        const buttonEl = menuEl.createEl("button", {
+          text: sheet.name,
+          attr: {
+            type: "button",
+            title: `${sheet.name} · ${stateLabel}`,
+          },
+        });
+        buttonEl.addEventListener("click", () => {
+          hiddenEl.removeAttribute("open");
+          if (index !== this.activeSheetIndex) {
+            void this.selectWorksheet(index);
+          }
+        });
+      }
+    }
+  }
+
+  private async selectWorksheet(index: number): Promise<void> {
+    this.pendingScrollPosition = { left: 0, top: 0 };
+    await this.loadWorksheet(index, false);
+    const query = this.searchQuery.trim().toLocaleLowerCase();
+    if (query && this.completedSearchQuery !== query) {
+      await this.runSearch();
+    }
+  }
+
+  private renderNameSuggestions(): void {
+    const suggestionsEl = this.nameSuggestionsEl;
+    const workbook = this.workbook;
+    if (!suggestionsEl) {
+      return;
+    }
+    suggestionsEl.empty();
+    if (!workbook) {
+      return;
+    }
+    for (const name of workbook.definedNames) {
+      suggestionsEl.createEl("option", {
+        attr: {
+          value: name.name,
+          label: name.target,
+        },
       });
     }
   }
@@ -1041,13 +1264,10 @@ export class XlsxSession extends FileView implements ReaderSession {
     const singleCell =
       selection.startRow === selection.endRow &&
       selection.startColumn === selection.endColumn;
-    const rangeLabel = singleCell
-      ? toCellReference(selection.startRow, selection.startColumn)
-      : `${toCellReference(
-          selection.startRow,
-          selection.startColumn,
-        )}:${toCellReference(selection.endRow, selection.endColumn)}`;
-    this.formulaNameEl?.setText(rangeLabel);
+    const rangeLabel = this.getSelectionLabel();
+    if (this.formulaNameEl) {
+      this.formulaNameEl.value = rangeLabel;
+    }
     this.formulaNameEl?.setAttribute(
       "title",
       this.text.labels.selectedRange(rangeLabel),
@@ -1055,13 +1275,10 @@ export class XlsxSession extends FileView implements ReaderSession {
     const cell = singleCell
       ? worksheet?.getCell(selection.startRow, selection.startColumn)
       : undefined;
-    this.formulaValueEl?.setText(
-      cell?.formula ? `=${cell.formula.text}` : cell?.displayValue ?? "",
-    );
-    this.formulaValueEl?.setAttribute(
-      "data-label",
-      this.text.labels.formula,
-    );
+    if (this.formulaValueEl) {
+      this.formulaValueEl.value =
+        cell?.formula ? `=${cell.formula.text}` : cell?.displayValue ?? "";
+    }
     this.formulaCachedEl?.setText(
       cell?.formula
         ? `${this.text.labels.cachedValue}: ${cell.displayValue}`
@@ -1090,17 +1307,113 @@ export class XlsxSession extends FileView implements ReaderSession {
           : this.text.notices.copiedValues,
       );
     } catch (error) {
-      if (error instanceof XlsxSelectionTooLargeError) {
-        new Notice(
-          this.text.notices.selectionTooLarge(
-            error.cellCount,
-            MAX_XLSX_COPY_CELLS,
-          ),
-        );
-        return;
-      }
-      new Notice(this.text.notices.copyFailed(getErrorMessage(error)));
+      this.handleCopyError(error);
     }
+  }
+
+  private async copySelectionAsMarkdown(): Promise<void> {
+    const worksheet = this.worksheet;
+    if (!worksheet) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(
+        xlsxSelectionToMarkdown(worksheet, this.selection),
+      );
+      new Notice(this.text.notices.copiedMarkdown);
+    } catch (error) {
+      this.handleCopyError(error);
+    }
+  }
+
+  private handleCopyError(error: unknown): void {
+    if (error instanceof XlsxSelectionTooLargeError) {
+      new Notice(
+        this.text.notices.selectionTooLarge(
+          error.cellCount,
+          MAX_XLSX_COPY_CELLS,
+        ),
+      );
+      return;
+    }
+    new Notice(this.text.notices.copyFailed(getErrorMessage(error)));
+  }
+
+  private getSelectionLabel(): string {
+    const selection = this.selection;
+    const start = toCellReference(
+      selection.startRow,
+      selection.startColumn,
+    );
+    const end = toCellReference(
+      selection.endRow,
+      selection.endColumn,
+    );
+    return start === end ? start : `${start}:${end}`;
+  }
+
+  private async navigateFromNameBox(): Promise<void> {
+    const workbook = this.workbook;
+    const input = this.formulaNameEl?.value.trim() ?? "";
+    if (!workbook || !input) {
+      this.updateFormulaBar();
+      return;
+    }
+    const definedName = resolveXlsxDefinedName(
+      workbook.definedNames,
+      input,
+      this.activeSheetIndex,
+    );
+    if (definedName) {
+      await this.navigateToRange(
+        definedName.sheetIndex,
+        definedName.range,
+      );
+      return;
+    }
+    const parsed = parseQualifiedRangeReference(input);
+    if (!parsed) {
+      new Notice(this.text.notices.invalidReference(input));
+      this.updateFormulaBar();
+      return;
+    }
+    const sheetIndex = parsed.sheetName
+      ? workbook.sheets.findIndex(
+          (sheet) => sheet.name === parsed.sheetName,
+        )
+      : this.activeSheetIndex;
+    if (sheetIndex < 0) {
+      new Notice(this.text.notices.invalidReference(input));
+      this.updateFormulaBar();
+      return;
+    }
+    await this.navigateToRange(sheetIndex, parsed.range);
+  }
+
+  private async navigateToRange(
+    sheetIndex: number,
+    range: XlsxMergeRange,
+  ): Promise<void> {
+    if (sheetIndex !== this.activeSheetIndex) {
+      await this.loadWorksheet(sheetIndex, false);
+    }
+    if (!this.worksheet || sheetIndex !== this.activeSheetIndex) {
+      return;
+    }
+    const anchor = this.clampCellPosition({
+      row: range.startRow,
+      column: range.startColumn,
+    });
+    const focus = this.clampCellPosition({
+      row: range.endRow,
+      column: range.endColumn,
+    });
+    this.selectionAnchor = anchor;
+    this.selectionFocus = focus;
+    this.scrollCellIntoView(anchor);
+    this.updateFormulaBar();
+    this.scheduleGridRender();
+    this.rootEl?.focus();
   }
 
   private scheduleSearch(): void {
@@ -1114,49 +1427,65 @@ export class XlsxSession extends FileView implements ReaderSession {
   }
 
   private async runSearch(): Promise<void> {
-    const worksheet = this.worksheet;
+    const workbook = this.workbook;
     const query = this.searchQuery.trim().toLocaleLowerCase();
     const token = this.searchLifecycle.begin();
     this.searchResults = [];
     this.searchResultKeys.clear();
     this.currentSearchResult = -1;
+    this.completedSearchQuery = "";
     this.updateSearchCount();
     this.scheduleGridRender();
-    if (!worksheet || !query) {
+    if (!workbook || !query) {
       this.setReadyStatus();
       return;
     }
-    this.setStatus(
-      this.text.status.searching(worksheet.name),
-      false,
-      true,
-    );
     try {
-      this.searchResults = await searchXlsxCells(
-        worksheet.getPopulatedCells(),
+      const results = await searchXlsxWorkbook(
+        workbook,
         query,
         {
           isCancelled: () =>
             !this.searchLifecycle.isCurrent(token) ||
-            this.worksheet !== worksheet,
+            this.workbook !== workbook,
           yieldControl: () => yieldToWindow(this.contentEl.win),
+          onSheet: (sheetName, index, count) => {
+            this.setStatus(
+              this.text.status.searching(
+                sheetName,
+                index + 1,
+                count,
+              ),
+              false,
+              true,
+            );
+          },
         },
       );
+      if (
+        !this.searchLifecycle.isCurrent(token) ||
+        this.workbook !== workbook
+      ) {
+        return;
+      }
+      this.searchResults = results;
     } catch (error) {
-      if (error instanceof XlsxSearchCancelledError) {
+      if (
+        error instanceof XlsxSearchCancelledError ||
+        error instanceof XlsxWorksheetCancelledError
+      ) {
         return;
       }
       throw error;
     }
-    this.searchResultKeys = new Set(
-      this.searchResults.map((cell) => cellKey(cell.row, cell.column)),
-    );
+    this.completedSearchQuery = query;
+    this.refreshSearchResultKeys();
     this.updateSearchCount();
     this.scheduleGridRender();
     this.setReadyStatus();
   }
 
-  private goToSearchResult(direction: -1 | 1): void {
+  private async goToSearchResult(direction: -1 | 1): Promise<void> {
     if (this.searchResults.length === 0) {
       return;
     }
@@ -1167,12 +1496,29 @@ export class XlsxSession extends FileView implements ReaderSession {
         this.searchResults.length
       ) % this.searchResults.length;
     const result = this.searchResults[this.currentSearchResult];
+    if (result.sheetIndex !== this.activeSheetIndex) {
+      await this.loadWorksheet(result.sheetIndex, false);
+    }
+    if (
+      !this.worksheet ||
+      this.activeSheetIndex !== result.sheetIndex
+    ) {
+      return;
+    }
     this.selectionAnchor = result;
     this.selectionFocus = result;
     this.scrollCellIntoView(result);
     this.updateFormulaBar();
     this.updateSearchCount();
     this.scheduleGridRender();
+  }
+
+  private refreshSearchResultKeys(): void {
+    this.searchResultKeys = new Set(
+      this.searchResults
+        .filter((result) => result.sheetIndex === this.activeSheetIndex)
+        .map((result) => cellKey(result.row, result.column)),
+    );
   }
 
   private updateSearchCount(): void {
@@ -1184,9 +1530,13 @@ export class XlsxSession extends FileView implements ReaderSession {
       return;
     }
     const total = this.searchResults.length;
+    const current =
+      this.currentSearchResult >= 0
+        ? this.searchResults[this.currentSearchResult]
+        : undefined;
     this.searchCountEl.setText(
       this.currentSearchResult >= 0 && total > 0
-        ? `${this.currentSearchResult + 1}/${total}`
+        ? `${this.currentSearchResult + 1}/${total} · ${current?.sheetName ?? ""}!${toCellReference(current?.row ?? 0, current?.column ?? 0)}`
         : this.text.status.searchResults(total),
     );
   }

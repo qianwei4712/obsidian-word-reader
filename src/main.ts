@@ -96,6 +96,7 @@ export default class WordReaderPlugin extends Plugin {
       "copy-markdown",
       text.commands.copyMarkdown,
       (session) =>
+        session.adapter.format === "docx" &&
         session.capabilities.copyMarkdown && Boolean(session.copyMarkdown),
       (session) => session.copyMarkdown?.(),
     );
@@ -103,6 +104,7 @@ export default class WordReaderPlugin extends Plugin {
       "create-note",
       text.commands.createNote,
       (session) =>
+        session.adapter.format === "docx" &&
         session.capabilities.summaryNote &&
         Boolean(session.createSummaryNote),
       (session) => session.createSummaryNote?.(),
@@ -187,6 +189,15 @@ export default class WordReaderPlugin extends Plugin {
       (session) => session.focusSearch?.(),
     );
     this.registerReaderCommand(
+      "go-to-spreadsheet-cell",
+      xlsxText.commands.goToCell,
+      (session) =>
+        session.adapter.format === "xlsx" &&
+        session.capabilities.navigation &&
+        Boolean(session.focusNameBox),
+      (session) => session.focusNameBox?.(),
+    );
+    this.registerReaderCommand(
       "copy-spreadsheet-values",
       xlsxText.commands.copyValues,
       (session) =>
@@ -203,6 +214,24 @@ export default class WordReaderPlugin extends Plugin {
         session.capabilities.copyText &&
         Boolean(session.copyFormulas),
       (session) => session.copyFormulas?.(),
+    );
+    this.registerReaderCommand(
+      "copy-spreadsheet-markdown",
+      xlsxText.commands.copyMarkdown,
+      (session) =>
+        session.adapter.format === "xlsx" &&
+        session.capabilities.copyMarkdown &&
+        Boolean(session.copyMarkdown),
+      (session) => session.copyMarkdown?.(),
+    );
+    this.registerReaderCommand(
+      "create-spreadsheet-note",
+      xlsxText.commands.createSummaryNote,
+      (session) =>
+        session.adapter.format === "xlsx" &&
+        session.capabilities.summaryNote &&
+        Boolean(session.createSummaryNote),
+      (session) => session.createSummaryNote?.(),
     );
   }
 

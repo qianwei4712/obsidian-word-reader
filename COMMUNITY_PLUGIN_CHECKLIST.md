@@ -56,6 +56,18 @@ Community directory and before publishing later releases.
   caches after reload, file switch, and view close.
 - [ ] Confirm displayed-value copy and formula copy are separate actions, and
   persisted XLSX state excludes cell values and formulas.
+- [ ] Confirm the XLSX name box navigates direct/qualified ranges and local or
+  workbook named ranges while rejecting dynamic and external targets.
+- [ ] Confirm workbook search covers visible and hidden worksheets, identifies
+  the result sheet/cell, and cancels cleanly on query, sheet, file, or view
+  changes.
+- [ ] Confirm hidden-sheet indicators require direct user navigation and do not
+  alter source workbook visibility.
+- [ ] Confirm selected ranges copy as explicit TSV and complete Markdown
+  tables under the 250,000-cell ceiling.
+- [ ] Confirm XLSX summary notes include worksheet structure, visibility,
+  supported names, the current selection, and at most 200 content preview
+  cells; existing same-name notes are not overwritten.
 - [ ] Confirm PPTX search, text copy, speaker notes, and summary-note creation
   operate only on locally parsed presentation content.
 - [ ] Confirm presentation thumbnails mount only for visible and nearby
@@ -75,7 +87,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `3.0.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `3.1.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

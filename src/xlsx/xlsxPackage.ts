@@ -22,8 +22,10 @@ import {
   textContent,
 } from "../pptx/xml";
 import { LruCache } from "../reader/lruCache";
+import { parseXlsxDefinedNameTarget } from "./xlsxDefinedNames";
 import { XlsxStyleTable } from "./xlsxStyles";
 import type {
+  XlsxDefinedName,
   XlsxImage,
   XlsxPackageDiagnostics,
   XlsxSheetDescriptor,
@@ -78,6 +80,7 @@ export class XlsxPackage {
   private constructor(
     private readonly zip: JSZip,
     readonly sheets: readonly XlsxSheetDescriptor[],
+    readonly definedNames: readonly XlsxDefinedName[],
     readonly styles: XlsxStyleTable,
     readonly date1904: boolean,
     readonly zipSummary: ZipSafetySummary,
@@ -190,11 +193,16 @@ export class XlsxPackage {
     ignoredExternalRelationships += Array.from(relationships.values()).filter(
       (relationship) => relationship.external,
     ).length;
+    const definedNames = parseWorkbookDefinedNames(
+      workbook.documentElement,
+      sheets,
+    );
     checkCancelled(options.isCancelled);
 
     return new XlsxPackage(
       zip,
       sheets,
+      definedNames,
       styles,
       date1904,
       zipSummary,
@@ -340,6 +348,61 @@ export class XlsxPackage {
     }
     return images;
   }
+}
+
+function parseWorkbookDefinedNames(
+  workbook: Element,
+  sheets: readonly XlsxSheetDescriptor[],
+): XlsxDefinedName[] {
+  const names: XlsxDefinedName[] = [];
+  for (const element of descendantsNamed(workbook, "definedName")) {
+    const name = attribute(element, "name")?.trim();
+    if (
+      !name ||
+      name.toLocaleLowerCase().startsWith("_xlnm.") ||
+      readBooleanAttribute(element, "hidden")
+    ) {
+      continue;
+    }
+    const target = textContent(element).trim();
+    const localSheetIdValue = attribute(element, "localSheetId");
+    const localSheetId = parseOptionalSheetIndex(
+      localSheetIdValue,
+      sheets.length,
+    );
+    if (localSheetIdValue !== null && localSheetId === undefined) {
+      continue;
+    }
+    const parsed = parseXlsxDefinedNameTarget(
+      target,
+      sheets,
+      localSheetId,
+    );
+    if (!parsed) {
+      continue;
+    }
+    names.push({
+      name,
+      target,
+      sheetIndex: parsed.sheetIndex,
+      scopeSheetIndex: localSheetId,
+      range: parsed.range,
+    });
+  }
+  return names;
+}
+
+function parseOptionalSheetIndex(
+  value: string | null,
+  sheetCount: number,
+): number | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  const index = Number(value);
+  return Number.isInteger(index) && index >= 0 && index < sheetCount
+    ? index
+    : undefined;
 }
 
 export function parseSharedStrings(xml: string, path: string): string[] {

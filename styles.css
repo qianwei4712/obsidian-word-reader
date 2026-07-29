@@ -932,18 +932,22 @@
 }
 
 .xlsx-reader-search-count {
-  min-width: 58px;
+  min-width: 96px;
+  max-width: 240px;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .xlsx-reader-formula-bar {
   display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(160px, 1fr) auto auto auto;
+  grid-template-columns: minmax(92px, 140px) auto minmax(180px, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
+  min-height: 44px;
   padding: 4px 8px;
   border-bottom: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
@@ -965,12 +969,24 @@
 }
 
 .xlsx-reader-name-box {
+  width: 100%;
   text-align: center;
 }
 
-.xlsx-reader-formula-value:empty::before {
-  content: attr(data-label);
-  color: var(--text-faint);
+.xlsx-reader-formula-prefix {
+  color: var(--text-accent);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+}
+
+.xlsx-reader-formula-value {
+  width: 100%;
+  min-height: 30px;
+  max-height: 92px;
+  resize: vertical;
+  line-height: 1.35;
+  white-space: pre-wrap;
 }
 
 .xlsx-reader-cached-value {
@@ -1193,6 +1209,53 @@
   content: "•";
 }
 
+.xlsx-reader-hidden-sheets {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.xlsx-reader-hidden-sheets[open] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.xlsx-reader-hidden-sheets > summary {
+  padding: 4px 6px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  user-select: none;
+}
+
+.xlsx-reader-hidden-sheets > summary:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.xlsx-reader-hidden-sheet-menu {
+  display: flex;
+  min-width: 0;
+  max-width: min(520px, 48vw);
+  padding: 0;
+  flex-direction: row;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.xlsx-reader-hidden-sheet-menu button {
+  padding: 5px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-normal);
+  text-align: left;
+}
+
+.xlsx-reader-hidden-sheet-menu button:hover {
+  background: var(--background-modifier-hover);
+}
+
 .xlsx-reader-message {
   position: absolute;
   z-index: 12;
@@ -1202,7 +1265,7 @@
 
 @media (max-width: 720px) {
   .xlsx-reader-formula-bar {
-    grid-template-columns: minmax(64px, auto) minmax(120px, 1fr) auto;
+    grid-template-columns: minmax(76px, 112px) auto minmax(120px, 1fr) auto;
   }
 
   .xlsx-reader-cached-value,

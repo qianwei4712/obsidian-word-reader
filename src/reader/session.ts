@@ -25,6 +25,7 @@ export interface ReaderSession {
   toggleNotes?: () => void;
   toggleFullscreen?: () => Promise<void>;
   focusSearch?: () => void;
+  focusNameBox?: () => void;
 }
 
 export type ReaderCommand =
@@ -39,7 +40,8 @@ export type ReaderCommand =
   | "nextPage"
   | "toggleNotes"
   | "toggleFullscreen"
-  | "focusSearch";
+  | "focusSearch"
+  | "focusNameBox";
 
 export function isReaderSession(value: unknown): value is ReaderSession {
   if (typeof value !== "object" || value === null) {

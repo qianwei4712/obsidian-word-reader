@@ -81,15 +81,34 @@ export class XlsxWorksheet {
     return this.cellsByRow.get(row)?.get(column);
   }
 
-  getPopulatedCells(): XlsxCell[] {
+  getPopulatedCells(limit = Number.POSITIVE_INFINITY): XlsxCell[] {
+    const normalizedLimit =
+      Number.isFinite(limit) && limit >= 0
+        ? Math.floor(limit)
+        : Number.POSITIVE_INFINITY;
     const cells: XlsxCell[] = [];
-    for (const row of this.cellsByRow.values()) {
-      cells.push(...row.values());
-    }
-    return cells.sort(
-      (left, right) =>
-        left.row - right.row || left.column - right.column,
+    const rows = Array.from(this.cellsByRow.keys()).sort(
+      (left, right) => left - right,
     );
+    for (const rowIndex of rows) {
+      const row = this.cellsByRow.get(rowIndex);
+      if (!row) {
+        continue;
+      }
+      const columns = Array.from(row.keys()).sort(
+        (left, right) => left - right,
+      );
+      for (const columnIndex of columns) {
+        const cell = row.get(columnIndex);
+        if (cell) {
+          cells.push(cell);
+        }
+        if (cells.length >= normalizedLimit) {
+          return cells;
+        }
+      }
+    }
+    return cells;
   }
 
   getCellsInWindow(

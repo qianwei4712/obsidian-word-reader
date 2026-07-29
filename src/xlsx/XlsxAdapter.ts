@@ -23,6 +23,8 @@ implements OfficeReaderAdapter<XlsxPackage, XlsxWorksheet> {
     navigation: true,
     search: true,
     copyText: true,
+    copyMarkdown: true,
+    summaryNote: true,
     openExternal: true,
   });
 

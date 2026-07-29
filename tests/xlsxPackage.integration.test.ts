@@ -14,6 +14,31 @@ void test("XlsxPackage parses safe workbook structure and rich cell data", async
   assert.equal(workbook.sheetCount, 2);
   assert.equal(workbook.sheets[0].name, "Summary");
   assert.equal(workbook.sheets[1].state, "hidden");
+  assert.deepEqual(
+    workbook.definedNames.map((name) => ({
+      name: name.name,
+      target: name.target,
+      sheetIndex: name.sheetIndex,
+      scopeSheetIndex: name.scopeSheetIndex,
+      ref: name.range.ref,
+    })),
+    [
+      {
+        name: "ReportArea",
+        target: "'Summary'!$A$1:$E$2",
+        sheetIndex: 0,
+        scopeSheetIndex: undefined,
+        ref: "$A$1:$E$2",
+      },
+      {
+        name: "LocalTail",
+        target: "Summary!$Z$100000",
+        sheetIndex: 0,
+        scopeSheetIndex: 0,
+        ref: "$Z$100000",
+      },
+    ],
+  );
   assert.equal(workbook.date1904, false);
   assert.equal(workbook.diagnostics.formulaCalculation, "cached-only");
   assert.ok(workbook.diagnostics.ignoredDataConnections >= 2);

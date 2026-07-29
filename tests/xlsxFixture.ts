@@ -45,6 +45,13 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
     <sheet name="Summary" sheetId="1" r:id="rId1"/>
     <sheet name="Hidden data" sheetId="2" state="hidden" r:id="rId2"/>
   </sheets>
+  <definedNames>
+    <definedName name="ReportArea">'Summary'!$A$1:$E$2</definedName>
+    <definedName name="LocalTail" localSheetId="0">Summary!$Z$100000</definedName>
+    <definedName name="InvalidScope" localSheetId="99">Summary!$A$1</definedName>
+    <definedName name="_xlnm.Print_Area" localSheetId="0">Summary!$A$1:$Z$100000</definedName>
+    <definedName name="ExternalRange">[remote.xlsx]Sheet1!$A$1</definedName>
+  </definedNames>
   <calcPr calcId="0" calcMode="manual" fullCalcOnLoad="0" forceFullCalc="0"/>
 </workbook>`,
   );
