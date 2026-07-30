@@ -1,14 +1,20 @@
 {
   "fixture": "generated-rich-100000-row-sparse",
-  "description": "Pre-release XLSX parser and virtual-grid budget. The fixture declares 100,000 rows, stores eight populated cells, and includes styles, formulas, links and one image.",
+  "description": "XLSX parser and virtual-grid budget. The sparse fixture declares 100,000 rows and includes rich content; the dense fixture contains 20,000 rows and 80,000 cells and must use bounded streamed worksheet parsing.",
   "maximums": {
     "firstPaintMs": 2000,
     "scrollFrameP95Ms": 20,
     "peakHeapMiB": 192,
-    "maximumDomNodes": 3000
+    "maximumDomNodes": 3000,
+    "denseParseMs": 3000,
+    "densePeakHeapMiB": 192,
+    "maximumSheetDataBufferKiB": 256
   },
   "requirements": {
     "cancellationPassed": true,
-    "rowCount": 100000
+    "rowCount": 100000,
+    "denseRows": 20000,
+    "densePopulatedCells": 80000,
+    "streamedParsingPassed": true
   }
 }

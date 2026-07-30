@@ -5,6 +5,8 @@ const DEFAULT_OVERSCAN_ROWS = 4;
 const DEFAULT_OVERSCAN_COLUMNS = 2;
 const DEFAULT_MAX_MOUNTED_CELLS = 2_500;
 const MAX_OVERSCAN = 50;
+const MAX_ESTIMATED_MOUNTED_DRAWINGS = 12;
+const ESTIMATED_NODES_PER_DRAWING = 64;
 
 export interface XlsxGridViewport {
   scrollTop: number;
@@ -168,6 +170,21 @@ export class XlsxVirtualGrid {
     const mountedRows = Math.max(0, endRow - startRow);
     const mountedColumns = Math.max(0, endColumn - startColumn);
     const mountedCellCount = mountedRows * mountedColumns;
+    const drawingCount = [
+      ...this.worksheet.images,
+      ...this.worksheet.charts,
+    ].filter((drawing) => {
+      const end = drawing.anchor.to ?? drawing.anchor.from;
+      return (
+        end.row >= startRow &&
+        drawing.anchor.from.row < endRow &&
+        end.column >= startColumn &&
+        drawing.anchor.from.column < endColumn
+      );
+    }).length;
+    const estimatedDrawingNodes =
+      Math.min(drawingCount, MAX_ESTIMATED_MOUNTED_DRAWINGS) *
+      ESTIMATED_NODES_PER_DRAWING;
     return {
       startRow,
       endRow,
@@ -181,7 +198,11 @@ export class XlsxVirtualGrid {
       height: this.rows.offsetAt(endRow) - this.rows.offsetAt(startRow),
       mountedCellCount,
       estimatedDomNodeCount:
-        3 + mountedRows + mountedColumns + mountedCellCount,
+        3 +
+        mountedRows +
+        mountedColumns +
+        mountedCellCount +
+        estimatedDrawingNodes,
       populatedCells: this.worksheet.getCellsInWindow(
         startRow,
         endRow,

@@ -32,6 +32,13 @@ void test("XLSX summary notes contain workbook structure, names, and bounded con
   assert.match(note, /selected_range: "A1:E2"/);
   assert.match(note, /sheet_count: 2/);
   assert.match(note, /named_range_count: 2/);
+  assert.match(note, /comment_count: 2/);
+  assert.match(note, /image_count: 1/);
+  assert.match(note, /chart_count: 1/);
+  assert.match(
+    note,
+    /2 comments, 1 images, 1 charts, 3 conditional-formatting rules/,
+  );
   assert.match(note, /ReportArea.*Summary.*A.*E.*2/);
   assert.match(note, /Hidden data \(hidden\)/);
   assert.match(note, /Sparse tail/);

@@ -37,10 +37,16 @@ export interface XlsxReaderText {
     hiddenSheets: (count: number) => string;
     hiddenSheet: string;
     veryHiddenSheet: string;
+    comment: (author: string, text: string) => string;
+    unknownCommentAuthor: string;
+    worksheetImage: string;
+    chartKind: (kind: string) => string;
+    unsupportedChart: string;
   };
   status: {
     reading: (fileName: string) => string;
     parsingSheet: (sheetName: string) => string;
+    parsingSheetProgress: (sheetName: string, percent: number) => string;
     ready: (
       fileName: string,
       sheetName: string,
@@ -101,6 +107,10 @@ export interface XlsxReaderText {
       rows: number,
       columns: number,
       populatedCells: number,
+      comments: number,
+      images: number,
+      charts: number,
+      conditionalRules: number,
     ) => string;
   };
   legacy: {
@@ -173,10 +183,31 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
         count === 1 ? "1 hidden sheet" : `${count} hidden sheets`,
       hiddenSheet: "Hidden worksheet",
       veryHiddenSheet: "Very hidden worksheet",
+      comment: (author, text) => `${author}: ${text}`,
+      unknownCommentAuthor: "Unknown author",
+      worksheetImage: "Worksheet image",
+      chartKind: (kind) => {
+        switch (kind) {
+          case "area":
+            return "Area chart";
+          case "bar":
+            return "Bar chart";
+          case "line":
+            return "Line chart";
+          case "pie":
+            return "Pie chart";
+          default:
+            return "Chart";
+        }
+      },
+      unsupportedChart:
+        "This chart type is not included in the read-only preview subset.",
     },
     status: {
       reading: (fileName) => `Reading ${fileName}…`,
       parsingSheet: (sheetName) => `Loading worksheet ${sheetName}…`,
+      parsingSheetProgress: (sheetName, percent) =>
+        `Loading worksheet ${sheetName}… ${percent}%`,
       ready: (fileName, sheetName, rows, columns) =>
         `${fileName} · ${sheetName} · ${rows.toLocaleString()} rows × ${columns.toLocaleString()} columns`,
       searching: (sheetName, current, total) =>
@@ -226,8 +257,18 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
         hidden: "hidden",
         veryHidden: "very hidden",
       },
-      sheetSummary: (name, visibility, rows, columns, populatedCells) =>
-        `${name} (${visibility}) — ${rows.toLocaleString()} rows × ${columns.toLocaleString()} columns; ${populatedCells.toLocaleString()} populated cells`,
+      sheetSummary: (
+        name,
+        visibility,
+        rows,
+        columns,
+        populatedCells,
+        comments,
+        images,
+        charts,
+        conditionalRules,
+      ) =>
+        `${name} (${visibility}) — ${rows.toLocaleString()} rows × ${columns.toLocaleString()} columns; ${populatedCells.toLocaleString()} populated cells; ${comments.toLocaleString()} comments, ${images.toLocaleString()} images, ${charts.toLocaleString()} charts, ${conditionalRules.toLocaleString()} conditional-formatting rules`,
     },
     legacy: {
       title: "Legacy Excel workbook",
@@ -295,10 +336,30 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
       hiddenSheets: (count) => `${count} 个隐藏工作表`,
       hiddenSheet: "隐藏工作表",
       veryHiddenSheet: "深度隐藏工作表",
+      comment: (author, text) => `${author}：${text}`,
+      unknownCommentAuthor: "未知作者",
+      worksheetImage: "工作表图片",
+      chartKind: (kind) => {
+        switch (kind) {
+          case "area":
+            return "面积图";
+          case "bar":
+            return "柱状图";
+          case "line":
+            return "折线图";
+          case "pie":
+            return "饼图";
+          default:
+            return "图表";
+        }
+      },
+      unsupportedChart: "此图表类型不在只读预览支持子集内。",
     },
     status: {
       reading: (fileName) => `正在读取 ${fileName}…`,
       parsingSheet: (sheetName) => `正在加载工作表 ${sheetName}…`,
+      parsingSheetProgress: (sheetName, percent) =>
+        `正在加载工作表 ${sheetName}… ${percent}%`,
       ready: (fileName, sheetName, rows, columns) =>
         `${fileName} · ${sheetName} · ${rows.toLocaleString()} 行 × ${columns.toLocaleString()} 列`,
       searching: (sheetName, current, total) =>
@@ -345,8 +406,18 @@ const XLSX_READER_TEXT: Record<WordReaderLanguage, XlsxReaderText> = {
         hidden: "隐藏",
         veryHidden: "深度隐藏",
       },
-      sheetSummary: (name, visibility, rows, columns, populatedCells) =>
-        `${name}（${visibility}）— ${rows.toLocaleString()} 行 × ${columns.toLocaleString()} 列；${populatedCells.toLocaleString()} 个非空单元格`,
+      sheetSummary: (
+        name,
+        visibility,
+        rows,
+        columns,
+        populatedCells,
+        comments,
+        images,
+        charts,
+        conditionalRules,
+      ) =>
+        `${name}（${visibility}）— ${rows.toLocaleString()} 行 × ${columns.toLocaleString()} 列；${populatedCells.toLocaleString()} 个非空单元格；${comments.toLocaleString()} 条批注、${images.toLocaleString()} 张图片、${charts.toLocaleString()} 个图表、${conditionalRules.toLocaleString()} 条条件格式规则`,
     },
     legacy: {
       title: "旧版 Excel 工作簿",

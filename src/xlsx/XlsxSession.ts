@@ -35,7 +35,9 @@ import {
   type XlsxCellPosition,
   type XlsxCopyMode,
 } from "./xlsxSelection";
-import { xlsxCellStyleToCss } from "./xlsxStyleCss";
+import {
+  xlsxCellStyleToCss,
+} from "./xlsxStyleCss";
 import {
   XLSX_ADAPTER,
   XLSX_VIEW_TYPE,
@@ -62,7 +64,11 @@ import {
 } from "./xlsxSummaryNote";
 import type {
   XlsxCell,
+  XlsxChart,
+  XlsxComment,
+  XlsxDrawingAnchor,
   XlsxHyperlink,
+  XlsxImage,
   XlsxMergeRange,
 } from "./xlsxTypes";
 import { XlsxVirtualGrid } from "./xlsxVirtualGrid";
@@ -75,6 +81,9 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.05;
 const SEARCH_DEBOUNCE_MS = 160;
+const MAX_XLSX_IMAGE_URLS = 8;
+const MAX_XLSX_MOUNTED_DRAWINGS = 12;
+const MAX_XLSX_RENDERED_CHART_POINTS = 48;
 let xlsxSessionSequence = 0;
 
 interface CellCoordinate {
@@ -97,6 +106,7 @@ export class XlsxSession extends FileView implements ReaderSession {
   private nameSuggestionsEl: HTMLDataListElement | null = null;
   private formulaCachedEl: HTMLElement | null = null;
   private formulaSafetyEl: HTMLElement | null = null;
+  private formulaCommentEl: HTMLElement | null = null;
   private linkButtonEl: HTMLButtonElement | null = null;
   private gridShellEl: HTMLElement | null = null;
   private viewportEl: HTMLElement | null = null;
@@ -135,6 +145,12 @@ export class XlsxSession extends FileView implements ReaderSession {
   private readonly sheetLifecycle = new ReaderLifecycle();
   private readonly searchLifecycle = new ReaderLifecycle();
   private readonly summaryLifecycle = new ReaderLifecycle();
+  private readonly imageObjectUrls = new Map<string, string>();
+  private readonly pendingImageObjectUrls = new Map<
+    string,
+    Promise<string | null>
+  >();
+  private imageResourceGeneration = 0;
   private readonly readerStatus = new ReaderStatusController((status) => {
     this.renderStatus(status);
   });
@@ -530,6 +546,13 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.formulaCachedEl = formulaBarEl.createDiv({
       cls: "xlsx-reader-cached-value",
     });
+    this.formulaCommentEl = formulaBarEl.createDiv({
+      cls: "xlsx-reader-comment-detail",
+      attr: {
+        role: "note",
+        hidden: "",
+      },
+    });
     this.formulaSafetyEl = formulaBarEl.createDiv({
       cls: "xlsx-reader-formula-safety",
       text: text.labels.formulaSafety,
@@ -660,12 +683,31 @@ export class XlsxSession extends FileView implements ReaderSession {
       false,
       true,
     );
+    let lastReportedProgress = -1;
 
     try {
       const worksheet = await workbook.getWorksheet(index, {
         isCancelled: () =>
           !this.sheetLifecycle.isCurrent(token) ||
           this.workbook !== workbook,
+        onProgress: (percent) => {
+          const roundedPercent = Math.round(percent);
+          if (
+            roundedPercent !== lastReportedProgress &&
+            this.sheetLifecycle.isCurrent(token) &&
+            this.workbook === workbook
+          ) {
+            lastReportedProgress = roundedPercent;
+            this.setStatus(
+              this.text.status.parsingSheetProgress(
+                descriptor.name,
+                roundedPercent,
+              ),
+              false,
+              true,
+            );
+          }
+        },
       });
       if (
         !this.sheetLifecycle.isCurrent(token) ||
@@ -704,6 +746,7 @@ export class XlsxSession extends FileView implements ReaderSession {
   }
 
   private clearWorksheet(): void {
+    this.releaseImageObjectUrls();
     this.worksheet = null;
     this.virtualGrid = null;
     this.cellsEl?.empty();
@@ -925,6 +968,7 @@ export class XlsxSession extends FileView implements ReaderSession {
       this.renderCell(coordinate.row, coordinate.column, null, scale);
       mounted.add(key);
     }
+    this.renderDrawings(scale);
     this.updateFormulaBar();
   }
 
@@ -993,6 +1037,7 @@ export class XlsxSession extends FileView implements ReaderSession {
       return;
     }
     const cell = worksheet.getCell(row, column);
+    const comment = worksheet.getComment(row, column);
     const endRow = merge?.endRow ?? row;
     const endColumn = merge?.endColumn ?? column;
     const frozenRows = worksheet.frozenPane?.rows ?? 0;
@@ -1042,8 +1087,23 @@ export class XlsxSession extends FileView implements ReaderSession {
       }
       cellEl.toggleClass("has-formula", Boolean(cell.formula));
       cellEl.toggleClass("has-hyperlink", Boolean(cell.hyperlink));
-      cellEl.title = getCellTitle(cell);
     }
+    const conditional = worksheet.getConditionalPresentation(row, column);
+    if (conditional) {
+      Object.assign(cellEl.style, conditional.css);
+      if (conditional.dataBar) {
+        const barEl = cellEl.createSpan({
+          cls: "xlsx-reader-data-bar",
+          attr: { "aria-hidden": "true" },
+        });
+        barEl.style.width = `${conditional.dataBar.fraction * 100}%`;
+        barEl.style.backgroundColor = conditional.dataBar.color;
+      }
+    }
+    if (comment) {
+      cellEl.addClass("has-comment");
+    }
+    cellEl.title = getCellTitle(cell, comment, row, column);
     const selection = this.selection;
     cellEl.toggleClass(
       "is-selected",
@@ -1072,6 +1132,273 @@ export class XlsxSession extends FileView implements ReaderSession {
       if (cell?.hyperlink) {
         void this.openHyperlink(cell.hyperlink);
       }
+    });
+  }
+
+  private renderDrawings(scale: number): void {
+    const worksheet = this.worksheet;
+    const cellsEl = this.cellsEl;
+    if (!worksheet || !cellsEl) {
+      return;
+    }
+    let mountedDrawings = 0;
+    for (const image of worksheet.images) {
+      if (mountedDrawings >= MAX_XLSX_MOUNTED_DRAWINGS) {
+        break;
+      }
+      const bounds = this.getDrawingBounds(image.anchor, 160, 120);
+      if (!bounds || !this.drawingIsVisible(bounds, image.anchor)) {
+        continue;
+      }
+      const label =
+        image.description ||
+        image.name ||
+        this.text.labels.worksheetImage;
+      const wrapperEl = cellsEl.createDiv({
+        cls: "xlsx-reader-drawing xlsx-reader-drawing-image",
+        attr: {
+          role: "img",
+          "aria-label": label,
+          title: label,
+          tabindex: "0",
+        },
+      });
+      this.positionDrawing(wrapperEl, bounds, image.anchor, scale);
+      const imageEl = wrapperEl.createEl("img", {
+        attr: {
+          alt: label,
+          loading: "lazy",
+          decoding: "async",
+          draggable: "false",
+        },
+      });
+      void this.attachWorksheetImage(imageEl, image);
+      mountedDrawings += 1;
+    }
+    for (const chart of worksheet.charts) {
+      if (mountedDrawings >= MAX_XLSX_MOUNTED_DRAWINGS) {
+        break;
+      }
+      const bounds = this.getDrawingBounds(chart.anchor, 320, 200);
+      if (!bounds || !this.drawingIsVisible(bounds, chart.anchor)) {
+        continue;
+      }
+      const label =
+        chart.title ||
+        this.text.labels.chartKind(chart.kind);
+      const wrapperEl = cellsEl.createDiv({
+        cls: "xlsx-reader-drawing xlsx-reader-chart",
+        attr: {
+          role: "figure",
+          "aria-label": label,
+          title: label,
+          tabindex: "0",
+        },
+      });
+      this.positionDrawing(wrapperEl, bounds, chart.anchor, scale);
+      this.renderChart(wrapperEl, chart);
+      mountedDrawings += 1;
+    }
+  }
+
+  private getDrawingBounds(
+    anchor: XlsxDrawingAnchor,
+    fallbackWidth: number,
+    fallbackHeight: number,
+  ): { left: number; top: number; width: number; height: number } | null {
+    const grid = this.virtualGrid;
+    if (!grid) {
+      return null;
+    }
+    const left =
+      grid.columnOffset(anchor.from.column) +
+      anchor.from.columnOffsetPx;
+    const top =
+      grid.rowOffset(anchor.from.row) +
+      anchor.from.rowOffsetPx;
+    const right = anchor.to
+      ? grid.columnOffset(anchor.to.column) +
+        anchor.to.columnOffsetPx
+      : left + (anchor.widthPx ?? fallbackWidth);
+    const bottom = anchor.to
+      ? grid.rowOffset(anchor.to.row) +
+        anchor.to.rowOffsetPx
+      : top + (anchor.heightPx ?? fallbackHeight);
+    return {
+      left,
+      top,
+      width: clamp(right - left, 24, 4_096),
+      height: clamp(bottom - top, 18, 4_096),
+    };
+  }
+
+  private drawingIsVisible(
+    bounds: { left: number; top: number; width: number; height: number },
+    anchor: XlsxDrawingAnchor,
+  ): boolean {
+    const viewportEl = this.viewportEl;
+    const worksheet = this.worksheet;
+    if (!viewportEl || !worksheet) {
+      return false;
+    }
+    const scale = this.getEffectiveScale();
+    const scrollLeft = viewportEl.scrollLeft / scale;
+    const scrollTop = viewportEl.scrollTop / scale;
+    const visibleRight = scrollLeft + viewportEl.clientWidth / scale;
+    const visibleBottom = scrollTop + viewportEl.clientHeight / scale;
+    const frozenRow =
+      anchor.from.row < (worksheet.frozenPane?.rows ?? 0);
+    const frozenColumn =
+      anchor.from.column < (worksheet.frozenPane?.columns ?? 0);
+    const horizontallyVisible =
+      frozenColumn ||
+      bounds.left + bounds.width >= scrollLeft &&
+        bounds.left <= visibleRight;
+    const verticallyVisible =
+      frozenRow ||
+      bounds.top + bounds.height >= scrollTop &&
+        bounds.top <= visibleBottom;
+    return horizontallyVisible && verticallyVisible;
+  }
+
+  private positionDrawing(
+    element: HTMLElement,
+    bounds: { left: number; top: number; width: number; height: number },
+    anchor: XlsxDrawingAnchor,
+    scale: number,
+  ): void {
+    const worksheet = this.worksheet;
+    const viewportEl = this.viewportEl;
+    const frozenRow =
+      anchor.from.row < (worksheet?.frozenPane?.rows ?? 0);
+    const frozenColumn =
+      anchor.from.column < (worksheet?.frozenPane?.columns ?? 0);
+    element.style.left = `${
+      bounds.left * scale +
+      (frozenColumn ? (viewportEl?.scrollLeft ?? 0) : 0)
+    }px`;
+    element.style.top = `${
+      bounds.top * scale +
+      (frozenRow ? (viewportEl?.scrollTop ?? 0) : 0)
+    }px`;
+    element.style.width = `${bounds.width * scale}px`;
+    element.style.height = `${bounds.height * scale}px`;
+  }
+
+  private async attachWorksheetImage(
+    imageEl: HTMLImageElement,
+    image: XlsxImage,
+  ): Promise<void> {
+    const url = await this.getImageObjectUrl(image);
+    if (url && imageEl.isConnected) {
+      imageEl.src = url;
+    }
+  }
+
+  private getImageObjectUrl(image: XlsxImage): Promise<string | null> {
+    const cached = this.imageObjectUrls.get(image.path);
+    if (cached) {
+      this.imageObjectUrls.delete(image.path);
+      this.imageObjectUrls.set(image.path, cached);
+      return Promise.resolve(cached);
+    }
+    const pending = this.pendingImageObjectUrls.get(image.path);
+    if (pending) {
+      return pending;
+    }
+    const workbook = this.workbook;
+    const generation = this.imageResourceGeneration;
+    if (!workbook) {
+      return Promise.resolve(null);
+    }
+    const loading = workbook
+      .getImageBinary(image.path)
+      .then((bytes) => {
+        if (
+          !bytes ||
+          this.workbook !== workbook ||
+          generation !== this.imageResourceGeneration
+        ) {
+          return null;
+        }
+        const copy = new Uint8Array(bytes.byteLength);
+        copy.set(bytes);
+        const url = URL.createObjectURL(
+          new Blob([copy.buffer], { type: image.mimeType }),
+        );
+        this.imageObjectUrls.set(image.path, url);
+        this.trimImageObjectUrls();
+        return url;
+      })
+      .finally(() => {
+        if (this.pendingImageObjectUrls.get(image.path) === loading) {
+          this.pendingImageObjectUrls.delete(image.path);
+        }
+      });
+    this.pendingImageObjectUrls.set(image.path, loading);
+    return loading;
+  }
+
+  private trimImageObjectUrls(): void {
+    while (this.imageObjectUrls.size > MAX_XLSX_IMAGE_URLS) {
+      const oldest = this.imageObjectUrls.entries().next().value as
+        | [string, string]
+        | undefined;
+      if (!oldest) {
+        return;
+      }
+      this.imageObjectUrls.delete(oldest[0]);
+      URL.revokeObjectURL(oldest[1]);
+    }
+  }
+
+  private releaseImageObjectUrls(): void {
+    this.imageResourceGeneration += 1;
+    this.pendingImageObjectUrls.clear();
+    for (const url of this.imageObjectUrls.values()) {
+      URL.revokeObjectURL(url);
+    }
+    this.imageObjectUrls.clear();
+  }
+
+  private renderChart(parentEl: HTMLElement, chart: XlsxChart): void {
+    const displayChart = sampleChartForRendering(chart);
+    const titleEl = parentEl.createDiv({
+      cls: "xlsx-reader-chart-title",
+      text:
+        chart.title ||
+        this.text.labels.chartKind(chart.kind),
+    });
+    if (chart.kind === "unsupported" || chart.series.length === 0) {
+      parentEl.createDiv({
+        cls: "xlsx-reader-chart-fallback",
+        text: this.text.labels.unsupportedChart,
+      });
+      return;
+    }
+    titleEl.toggleClass("is-truncated", displayChart.truncated);
+    const svg = createSvgElement(
+      parentEl.ownerDocument,
+      "svg",
+      {
+        viewBox: "0 0 320 180",
+        "aria-hidden": "true",
+      },
+    );
+    svg.classList.add("xlsx-reader-chart-plot");
+    parentEl.appendChild(svg);
+    renderChartSvg(svg, displayChart);
+    const legendEl = parentEl.createDiv({
+      cls: "xlsx-reader-chart-legend",
+    });
+    chart.series.slice(0, 6).forEach((series, index) => {
+      const itemEl = legendEl.createSpan({
+        text: series.name,
+      });
+      itemEl.style.setProperty(
+        "--xlsx-chart-series-color",
+        chartSeriesColor(index),
+      );
     });
   }
 
@@ -1275,6 +1602,9 @@ export class XlsxSession extends FileView implements ReaderSession {
     const cell = singleCell
       ? worksheet?.getCell(selection.startRow, selection.startColumn)
       : undefined;
+    const comment = singleCell
+      ? worksheet?.getComment(selection.startRow, selection.startColumn)
+      : undefined;
     if (this.formulaValueEl) {
       this.formulaValueEl.value =
         cell?.formula ? `=${cell.formula.text}` : cell?.displayValue ?? "";
@@ -1285,6 +1615,17 @@ export class XlsxSession extends FileView implements ReaderSession {
         : "",
     );
     this.formulaSafetyEl?.toggleAttribute("hidden", !cell?.formula);
+    if (this.formulaCommentEl) {
+      this.formulaCommentEl.setText(
+        comment
+          ? this.text.labels.comment(
+              comment.author || this.text.labels.unknownCommentAuthor,
+              comment.text,
+            )
+          : "",
+      );
+      this.formulaCommentEl.toggleAttribute("hidden", !comment);
+    }
     this.linkButtonEl?.toggleAttribute("hidden", !cell?.hyperlink);
     const focusId = this.getCellElementId(
       this.selectionFocus.row,
@@ -1989,15 +2330,231 @@ function mergeIntersectsAxes(
   );
 }
 
-function getCellTitle(cell: XlsxCell): string {
-  const details = [cell.ref, cell.displayValue];
-  if (cell.formula) {
+function getCellTitle(
+  cell: XlsxCell | undefined,
+  comment: XlsxComment | undefined,
+  row: number,
+  column: number,
+): string {
+  const details = [
+    cell?.ref ?? toCellReference(row, column),
+    cell?.displayValue ?? "",
+  ];
+  if (cell?.formula) {
     details.push(`=${cell.formula.text}`);
   }
-  if (cell.hyperlink?.tooltip) {
+  if (cell?.hyperlink?.tooltip) {
     details.push(cell.hyperlink.tooltip);
   }
+  if (comment) {
+    details.push(
+      comment.author
+        ? `${comment.author}: ${comment.text}`
+        : comment.text,
+    );
+  }
   return details.filter(Boolean).join("\n");
+}
+
+function renderChartSvg(svg: SVGSVGElement, chart: XlsxChart): void {
+  const values = chart.series.flatMap((series) => [...series.values]);
+  if (chart.kind === "pie") {
+    renderPieChart(svg, chart);
+    return;
+  }
+  const minimum = Math.min(0, ...values);
+  const maximum = Math.max(0, ...values);
+  const span = maximum === minimum ? 1 : maximum - minimum;
+  const plot = { left: 28, right: 312, top: 10, bottom: 164 };
+  const y = (value: number): number =>
+    plot.bottom - ((value - minimum) / span) * (plot.bottom - plot.top);
+  const baseline = y(0);
+  const axis = createSvgElement(svg.ownerDocument, "line", {
+    x1: String(plot.left),
+    x2: String(plot.right),
+    y1: String(baseline),
+    y2: String(baseline),
+    class: "xlsx-reader-chart-axis",
+  });
+  svg.appendChild(axis);
+  if (chart.kind === "bar") {
+    const pointCount = Math.max(
+      1,
+      ...chart.series.map((series) => series.values.length),
+    );
+    const groupWidth = (plot.right - plot.left) / pointCount;
+    const barWidth = Math.max(
+      0.5,
+      (groupWidth * 0.78) / Math.max(1, chart.series.length),
+    );
+    chart.series.forEach((series, seriesIndex) => {
+      series.values.forEach((value, pointIndex) => {
+        const valueY = y(value);
+        const rect = createSvgElement(svg.ownerDocument, "rect", {
+          x: String(
+            plot.left +
+              pointIndex * groupWidth +
+              groupWidth * 0.11 +
+              seriesIndex * barWidth,
+          ),
+          y: String(Math.min(valueY, baseline)),
+          width: String(barWidth),
+          height: String(Math.max(1, Math.abs(baseline - valueY))),
+          fill: chartSeriesColor(seriesIndex),
+        });
+        appendSvgTitle(
+          rect,
+          `${series.categories[pointIndex] ?? pointIndex + 1}: ${value}`,
+        );
+        svg.appendChild(rect);
+      });
+    });
+    return;
+  }
+  chart.series.forEach((series, seriesIndex) => {
+    const pointCount = Math.max(1, series.values.length - 1);
+    const points = series.values.map((value, index) => [
+      plot.left + (index / pointCount) * (plot.right - plot.left),
+      y(value),
+    ]);
+    if (chart.kind === "area" && points.length > 0) {
+      const polygon = createSvgElement(svg.ownerDocument, "polygon", {
+        points: [
+          `${points[0][0]},${baseline}`,
+          ...points.map((point) => `${point[0]},${point[1]}`),
+          `${points.at(-1)?.[0] ?? plot.left},${baseline}`,
+        ].join(" "),
+        fill: chartSeriesColor(seriesIndex),
+        class: "xlsx-reader-chart-area",
+      });
+      svg.appendChild(polygon);
+    }
+    const polyline = createSvgElement(svg.ownerDocument, "polyline", {
+      points: points.map((point) => `${point[0]},${point[1]}`).join(" "),
+      fill: "none",
+      stroke: chartSeriesColor(seriesIndex),
+      "stroke-width": "2",
+      class: "xlsx-reader-chart-line",
+    });
+    svg.appendChild(polyline);
+  });
+}
+
+function sampleChartForRendering(chart: XlsxChart): XlsxChart {
+  const sourceSeries = chart.series.slice(0, 8);
+  const pointsPerSeries = Math.max(
+    2,
+    Math.floor(
+      MAX_XLSX_RENDERED_CHART_POINTS /
+        Math.max(1, sourceSeries.length),
+    ),
+  );
+  let sampled = chart.series.length > sourceSeries.length;
+  const series = sourceSeries.map((candidate) => {
+    if (candidate.values.length <= pointsPerSeries) {
+      return candidate;
+    }
+    sampled = true;
+    const indexes = Array.from(
+      { length: pointsPerSeries },
+      (_, index) =>
+        Math.round(
+          (index / Math.max(1, pointsPerSeries - 1)) *
+            (candidate.values.length - 1),
+        ),
+    );
+    return {
+      name: candidate.name,
+      values: indexes.map((index) => candidate.values[index] ?? 0),
+      categories: indexes.map(
+        (index) => candidate.categories[index] ?? String(index + 1),
+      ),
+    };
+  });
+  return {
+    ...chart,
+    series,
+    truncated: chart.truncated || sampled,
+  };
+}
+
+function renderPieChart(svg: SVGSVGElement, chart: XlsxChart): void {
+  const series = chart.series[0];
+  const values = series?.values.map((value) => Math.max(0, value)) ?? [];
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (!series || total <= 0) {
+    return;
+  }
+  let angle = -Math.PI / 2;
+  values.forEach((value, index) => {
+    if (value <= 0) {
+      return;
+    }
+    const nextAngle = angle + (value / total) * Math.PI * 2;
+    const start = polarPoint(160, 88, 70, angle);
+    const end = polarPoint(160, 88, 70, nextAngle);
+    const largeArc = nextAngle - angle > Math.PI ? 1 : 0;
+    const path = createSvgElement(svg.ownerDocument, "path", {
+      d: [
+        "M 160 88",
+        `L ${start.x} ${start.y}`,
+        `A 70 70 0 ${largeArc} 1 ${end.x} ${end.y}`,
+        "Z",
+      ].join(" "),
+      fill: chartSeriesColor(index),
+    });
+    appendSvgTitle(
+      path,
+      `${series.categories[index] ?? index + 1}: ${value}`,
+    );
+    svg.appendChild(path);
+    angle = nextAngle;
+  });
+}
+
+function polarPoint(
+  centerX: number,
+  centerY: number,
+  radius: number,
+  angle: number,
+): { x: number; y: number } {
+  return {
+    x: centerX + Math.cos(angle) * radius,
+    y: centerY + Math.sin(angle) * radius,
+  };
+}
+
+function appendSvgTitle(element: SVGElement, value: string): void {
+  const title = createSvgElement(element.ownerDocument, "title", {});
+  title.textContent = value;
+  element.appendChild(title);
+}
+
+function createSvgElement<K extends keyof SVGElementTagNameMap>(
+  document: Document,
+  name: K,
+  attributes: Record<string, string>,
+): SVGElementTagNameMap[K] {
+  const element = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    name,
+  );
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value);
+  }
+  return element;
+}
+
+function chartSeriesColor(index: number): string {
+  const colors = [
+    "#4472c4",
+    "#ed7d31",
+    "#70ad47",
+    "#ffc000",
+    "#5b9bd5",
+    "#a5a5a5",
+  ];
+  return colors[index % colors.length];
 }
 
 function yieldToWindow(targetWindow: Window): Promise<void> {

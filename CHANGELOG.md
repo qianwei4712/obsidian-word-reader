@@ -1,5 +1,80 @@
 # Changelog
 
+## 3.2.0 - 2026-07-30
+
+### English
+
+#### Added
+
+- Added legacy cell-comment parsing with author/text indicators in the virtual
+  grid and complete comment details beside the formula bar. Comments on blank
+  cells remain discoverable.
+- Added package-local raster image rendering for PNG, JPEG, GIF, and BMP
+  drawing anchors. Images use lazy decoding, bounded recyclable Blob URLs, and
+  never resolve external relationships.
+- Added simplified cached-data previews for bar, line, area, and pie charts,
+  with explicit fallback cards for unsupported chart types. Chart formulas are
+  never evaluated.
+- Added a conditional-formatting subset for numeric literal `cellIs` rules,
+  two/three-color scales, and data bars. Differential styles override only the
+  properties declared by the workbook.
+- Added rich-content counts to XLSX summary-note frontmatter and worksheet
+  overview rows.
+
+#### Security and performance
+
+- Replaced whole-worksheet XML materialization with cancellable streamed ZIP
+  decompression, incremental structural validation, row-at-a-time parsing, and
+  visible progress. Shared strings now use the same bounded streaming model.
+- Added fixed limits for rich XML parts, image bytes, comments, drawing
+  objects, chart series/points, mounted drawings, rendered chart points, image
+  URLs, and conditional-formatting rules.
+- Added a 20,000-row/80,000-cell dense benchmark. The release gate now proves
+  multi-chunk parsing, a bounded sheet-data buffer, cancellation, heap usage,
+  parse time, scrolling, and virtual-grid DOM budgets.
+- Completed the `.xlsm` compatibility review. Macro-enabled content types,
+  VBA, macro/dialog sheets, ActiveX, OLE, and script media remain rejected, so
+  `.xlsm` stays unregistered.
+
+#### Changed
+
+- Expanded the generated XLSX corpus and manual checklist for comments,
+  drawings, cached charts, conditional formatting, streamed parsing, rich
+  resource cleanup, and the documented `.xlsm` decision.
+- Updated version metadata, documentation, release checks, and release
+  packaging for `3.2.0`.
+
+### 中文
+
+#### 新增
+
+- 新增旧式单元格批注解析，在虚拟网格显示批注标记，并在公式栏旁显示完整作者
+  与正文；空白单元格上的批注同样可发现。
+- 新增 PNG、JPEG、GIF 和 BMP 包内图片渲染，保留绘图锚点，采用懒解码和有界、
+  可回收的 Blob URL，且绝不解析外部图片关系。
+- 新增柱状图、折线图、面积图和饼图的简化缓存数据预览；不支持的图表显示明确
+  占位卡，任何图表公式都不会求值。
+- 新增条件格式子集：数值常量 `cellIs` 规则、双色/三色色阶和数据条；差异样式
+  只覆盖工作簿明确声明的属性。
+- XLSX 摘要笔记 frontmatter 和工作表概览新增批注、图片、图表与条件格式统计。
+
+#### 安全与性能
+
+- 工作表不再整体物化 XML，改为可取消的 ZIP 流式解压、增量结构校验和逐行
+  解析，并显示加载进度；共享字符串也改用相同的有界流式模型。
+- 为丰富内容 XML、图片字节、批注、绘图对象、图表序列/数据点、已挂载绘图、
+  已渲染图表点、图片 URL 和条件格式规则增加固定上限。
+- 新增 20,000 行、80,000 单元格稠密基准；发布门禁验证多分片解析、工作表
+  数据缓冲上限、取消、堆内存、解析耗时、滚动和虚拟网格 DOM 预算。
+- 完成 `.xlsm` 兼容性评估。宏启用内容类型、VBA、宏/对话框工作表、ActiveX、
+  OLE 和脚本媒体继续被拒绝，因此 `.xlsm` 保持不注册。
+
+#### 变更
+
+- 扩展生成式 XLSX 样本和手动清单，覆盖批注、绘图、缓存图表、条件格式、
+  流式解析、丰富资源释放和 `.xlsm` 决策。
+- 更新 `3.2.0` 的版本元数据、文档、发布检查和发布包。
+
 ## 3.1.0 - 2026-07-29
 
 ### English

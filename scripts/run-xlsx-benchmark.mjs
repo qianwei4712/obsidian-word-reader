@@ -77,6 +77,9 @@ try {
       `scroll p95 ${result.scrollFrameP95Ms} ms, ` +
       `peak heap ${result.peakHeapMiB} MiB, ` +
       `${result.maximumDomNodes} max nodes, cancellation passed.`,
+      ` Dense streamed parse ${result.denseParseMs} ms / ` +
+      `${result.densePeakHeapMiB} MiB across ${result.streamedChunkCount} chunks, ` +
+      `${result.maximumSheetDataBufferKiB} KiB maximum worksheet-data buffer.`,
   );
 } finally {
   fs.rmSync(outputDir, { recursive: true, force: true });

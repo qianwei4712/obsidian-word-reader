@@ -11,6 +11,7 @@ import type {
   XlsxCellStyle,
   XlsxCellValue,
   XlsxColor,
+  XlsxDifferentialStyle,
   XlsxFillStyle,
   XlsxFontStyle,
 } from "./xlsxTypes";
@@ -72,6 +73,7 @@ const DEFAULT_STYLE: XlsxCellStyle = {
 export class XlsxStyleTable {
   constructor(
     private readonly styles: readonly XlsxCellStyle[],
+    private readonly differentialStyles: readonly XlsxDifferentialStyle[] = [],
   ) {}
 
   static empty(): XlsxStyleTable {
@@ -118,7 +120,10 @@ export class XlsxStyleTable {
           };
         })
       : [];
-    return new XlsxStyleTable(styles.length > 0 ? styles : [DEFAULT_STYLE]);
+    return new XlsxStyleTable(
+      styles.length > 0 ? styles : [DEFAULT_STYLE],
+      parseDifferentialStyles(firstChildNamed(root, "dxfs")),
+    );
   }
 
   get(styleId: number): XlsxCellStyle {
@@ -127,6 +132,16 @@ export class XlsxStyleTable {
 
   get size(): number {
     return this.styles.length;
+  }
+
+  getDifferentialStyle(
+    styleId: number,
+  ): XlsxDifferentialStyle | undefined {
+    return this.differentialStyles[styleId];
+  }
+
+  get differentialStyleCount(): number {
+    return this.differentialStyles.length;
   }
 }
 
@@ -209,6 +224,87 @@ function parseBorders(parent: Element | null): XlsxBorderStyle[] {
     top: parseBorderEdge(firstChildNamed(border, "top")),
     bottom: parseBorderEdge(firstChildNamed(border, "bottom")),
   }));
+}
+
+function parseDifferentialStyles(
+  parent: Element | null,
+): XlsxDifferentialStyle[] {
+  if (!parent) {
+    return [];
+  }
+  return childrenNamed(parent, "dxf").map((dxf) => {
+    const font = firstChildNamed(dxf, "font");
+    const fill = firstChildNamed(dxf, "fill");
+    const border = firstChildNamed(dxf, "border");
+    return {
+      font: font
+        ? {
+            name: attribute(firstChildNamed(font, "name"), "val") ?? undefined,
+            size: readOptionalNumber(firstChildNamed(font, "sz"), "val"),
+            bold: readOptionalStyleBoolean(firstChildNamed(font, "b")),
+            italic: readOptionalStyleBoolean(firstChildNamed(font, "i")),
+            underline: readOptionalStyleBoolean(
+              firstChildNamed(font, "u"),
+            ),
+            strike: readOptionalStyleBoolean(
+              firstChildNamed(font, "strike"),
+            ),
+            color: parseColor(firstChildNamed(font, "color")),
+          }
+        : undefined,
+      fill: fill
+        ? {
+            pattern:
+              attribute(
+                firstChildNamed(fill, "patternFill"),
+                "patternType",
+              ) ?? "none",
+            foreground: parseColor(
+              firstChildNamed(
+                firstChildNamed(fill, "patternFill"),
+                "fgColor",
+              ),
+            ),
+            background: parseColor(
+              firstChildNamed(
+                firstChildNamed(fill, "patternFill"),
+                "bgColor",
+              ),
+            ),
+          }
+        : undefined,
+      border: border
+        ? {
+            left: parseOptionalBorderEdge(
+              firstChildNamed(border, "left"),
+            ),
+            right: parseOptionalBorderEdge(
+              firstChildNamed(border, "right"),
+            ),
+            top: parseOptionalBorderEdge(firstChildNamed(border, "top")),
+            bottom: parseOptionalBorderEdge(
+              firstChildNamed(border, "bottom"),
+            ),
+          }
+        : undefined,
+    };
+  });
+}
+
+function parseOptionalBorderEdge(
+  element: Element | null,
+): XlsxBorderEdge | undefined {
+  return element ? parseBorderEdge(element) : undefined;
+}
+
+function readOptionalStyleBoolean(
+  element: Element | null,
+): boolean | undefined {
+  if (!element) {
+    return undefined;
+  }
+  const value = attribute(element, "val");
+  return value === "0" || value === "false" ? false : true;
 }
 
 function parseBorderEdge(edge: Element | null): XlsxBorderEdge {

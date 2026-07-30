@@ -18,6 +18,10 @@ export interface XlsxSheetSummary {
   rowCount: number;
   columnCount: number;
   populatedCellCount: number;
+  commentCount: number;
+  imageCount: number;
+  chartCount: number;
+  conditionalFormattingRuleCount: number;
   preview: readonly {
     reference: string;
     displayValue: string;
@@ -90,6 +94,11 @@ export async function collectXlsxWorkbookSummary(
       rowCount: worksheet.rowCount,
       columnCount: worksheet.columnCount,
       populatedCellCount: worksheet.populatedCellCount,
+      commentCount: worksheet.comments.length,
+      imageCount: worksheet.images.length,
+      chartCount: worksheet.charts.length,
+      conditionalFormattingRuleCount:
+        worksheet.conditionalFormattingRules.length,
       preview,
     });
     if (
@@ -127,6 +136,18 @@ export function buildXlsxSummaryNote(
         selected_range: selectedRange,
         sheet_count: workbook.sheets.length,
         named_range_count: workbook.definedNames.length,
+        comment_count: workbook.sheets.reduce(
+          (sum, sheet) => sum + sheet.commentCount,
+          0,
+        ),
+        image_count: workbook.sheets.reduce(
+          (sum, sheet) => sum + sheet.imageCount,
+          0,
+        ),
+        chart_count: workbook.sheets.reduce(
+          (sum, sheet) => sum + sheet.chartCount,
+          0,
+        ),
       },
     }),
     "",
@@ -145,6 +166,10 @@ export function buildXlsxSummaryNote(
         sheet.rowCount,
         sheet.columnCount,
         sheet.populatedCellCount,
+        sheet.commentCount,
+        sheet.imageCount,
+        sheet.chartCount,
+        sheet.conditionalFormattingRuleCount,
       )}`),
     "",
     `## ${noteText.namedRangesHeading}`,

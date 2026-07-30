@@ -51,6 +51,20 @@ Community directory and before publishing later releases.
 - [ ] Confirm XLSX formulas are cached-only, external workbook references and
   data connections are never fetched, and hyperlinks require a user click and
   confirmation.
+- [ ] Confirm legacy XLSX comments expose author/text for populated and blank
+  cells without editing, and modern threaded comments remain outside scope.
+- [ ] Confirm XLSX drawings load only package-local PNG/JPEG/GIF/BMP bytes,
+  external image relationships remain ignored, at most 12 drawings mount
+  together, and at most 8 Blob URLs remain live.
+- [ ] Confirm bar/line/area/pie previews use cached chart series only,
+  unsupported chart types show an explicit fallback, and external/formula
+  chart sources are never evaluated or fetched.
+- [ ] Confirm conditional formatting is bounded to literal numeric `cellIs`,
+  two-/three-color scales, and data bars, with at most 256 rules per sheet.
+- [ ] Confirm worksheet and shared-string XML parses in cancellable chunks,
+  reports progress, and does not retain complete dense-sheet `sheetData` XML.
+- [ ] Confirm the 20,000-row/80,000-cell dense benchmark stays within the
+  elapsed-time, peak-heap, XML-buffer, and virtual-grid budgets.
 - [ ] Confirm the XLSX grid mounts no more than 2,500 cells plus bounded
   headers, retains only visible/overscan/frozen ranges, and releases workbook
   caches after reload, file switch, and view close.
@@ -66,8 +80,10 @@ Community directory and before publishing later releases.
 - [ ] Confirm selected ranges copy as explicit TSV and complete Markdown
   tables under the 250,000-cell ceiling.
 - [ ] Confirm XLSX summary notes include worksheet structure, visibility,
-  supported names, the current selection, and at most 200 content preview
-  cells; existing same-name notes are not overwritten.
+  supported names, rich-content counts, the current selection, and at most
+  200 content preview cells; existing same-name notes are not overwritten.
+- [ ] Review `XLSM_COMPATIBILITY.md` and confirm `.xlsm` remains unregistered
+  after macro-enabled content type, VBA, ActiveX, OLE, and script-media tests.
 - [ ] Confirm PPTX search, text copy, speaker notes, and summary-note creation
   operate only on locally parsed presentation content.
 - [ ] Confirm presentation thumbnails mount only for visible and nearby
@@ -87,7 +103,7 @@ Community directory and before publishing later releases.
 
 ## GitHub release
 
-- [ ] Create a plain semantic-version tag such as `3.1.0`; do not add a `v`
+- [ ] Create a plain semantic-version tag such as `3.2.0`; do not add a `v`
   prefix.
 - [ ] Confirm the tag exactly matches `package.json`, `package-lock.json`,
   `manifest.json`, `versions.json`, and the latest `CHANGELOG.md` section.

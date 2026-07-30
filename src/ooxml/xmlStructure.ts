@@ -3,89 +3,174 @@ export function validateXmlStructure(
   path: string,
   expectedRootLocalName: string,
 ): void {
-  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) {
-    throw new Error(
-      `Invalid XML in ${path}: document type declarations are not allowed`,
-    );
+  const validator = new StreamingXmlStructureValidator(
+    path,
+    expectedRootLocalName,
+  );
+  validator.push(xml);
+  validator.finish();
+}
+
+export class StreamingXmlStructureValidator {
+  private readonly stack: string[] = [];
+  private buffer = "";
+  private rootName: string | null = null;
+  private finished = false;
+
+  constructor(
+    private readonly path: string,
+    private readonly expectedRootLocalName: string,
+  ) {}
+
+  push(chunk: string): void {
+    if (this.finished) {
+      throw new Error(
+        `Invalid XML in ${this.path}: data after validation finished`,
+      );
+    }
+    this.buffer += chunk;
+    this.process(false);
   }
 
-  const stack: string[] = [];
-  let rootName: string | null = null;
-  let offset = 0;
-  while (offset < xml.length) {
-    const openOffset = xml.indexOf("<", offset);
-    if (openOffset < 0) {
-      break;
+  finish(): void {
+    if (this.finished) {
+      return;
     }
-    if (stack.length === 0 && xml.slice(offset, openOffset).trim().length > 0) {
-      throw new Error(`Invalid XML in ${path}: text outside root element`);
+    this.process(true);
+    this.finished = true;
+    if (this.stack.length > 0) {
+      throw new Error(`Invalid XML in ${this.path}: unclosed element`);
     }
-    if (xml.startsWith("<!--", openOffset)) {
-      offset = findMarkupEnd(xml, openOffset + 4, "-->", path);
-      continue;
+    if (
+      this.rootName?.split(":").at(-1) !== this.expectedRootLocalName
+    ) {
+      throw new Error(
+        `Invalid XML in ${this.path}: expected ${this.expectedRootLocalName} root element`,
+      );
     }
-    if (xml.startsWith("<![CDATA[", openOffset)) {
-      offset = findMarkupEnd(xml, openOffset + 9, "]]>", path);
-      continue;
-    }
-    if (xml.startsWith("<?", openOffset)) {
-      offset = findMarkupEnd(xml, openOffset + 2, "?>", path);
-      continue;
-    }
-    if (xml.startsWith("<!", openOffset)) {
-      throw new Error(`Invalid XML in ${path}: unsupported declaration`);
-    }
+  }
 
-    const closeOffset = findTagEnd(xml, openOffset + 1, path);
-    const source = xml.slice(openOffset + 1, closeOffset).trim();
-    if (source.startsWith("/")) {
-      const name = readTagName(source.slice(1), path);
-      if (stack.pop() !== name) {
-        throw new Error(`Invalid XML in ${path}: mismatched closing tag`);
-      }
-    } else {
-      const selfClosing = source.endsWith("/");
-      const name = readTagName(source, path);
-      if (stack.length === 0) {
-        if (rootName !== null) {
-          throw new Error(`Invalid XML in ${path}: multiple root elements`);
+  private process(final: boolean): void {
+    let offset = 0;
+    while (offset < this.buffer.length) {
+      const openOffset = this.buffer.indexOf("<", offset);
+      if (openOffset < 0) {
+        const trailingText = this.buffer.slice(offset);
+        if (this.stack.length === 0 && trailingText.trim().length > 0) {
+          throw new Error(
+            `Invalid XML in ${this.path}: text outside root element`,
+          );
         }
-        rootName = name;
+        offset = this.buffer.length;
+        break;
       }
-      if (!selfClosing) {
-        stack.push(name);
+      if (
+        this.stack.length === 0 &&
+        this.buffer.slice(offset, openOffset).trim().length > 0
+      ) {
+        throw new Error(
+          `Invalid XML in ${this.path}: text outside root element`,
+        );
       }
+      const remaining = this.buffer.slice(openOffset);
+      if (
+        !final &&
+        ["<!--", "<![CDATA[", "<?"].some((marker) =>
+          marker.startsWith(remaining),
+        )
+      ) {
+        break;
+      }
+      if (this.buffer.startsWith("<!--", openOffset)) {
+        const endOffset = this.buffer.indexOf("-->", openOffset + 4);
+        if (endOffset < 0) {
+          if (!final) {
+            break;
+          }
+          throw new Error(`Invalid XML in ${this.path}: unclosed markup`);
+        }
+        offset = endOffset + 3;
+        continue;
+      }
+      if (this.buffer.startsWith("<![CDATA[", openOffset)) {
+        const endOffset = this.buffer.indexOf("]]>", openOffset + 9);
+        if (endOffset < 0) {
+          if (!final) {
+            break;
+          }
+          throw new Error(`Invalid XML in ${this.path}: unclosed markup`);
+        }
+        offset = endOffset + 3;
+        continue;
+      }
+      if (this.buffer.startsWith("<?", openOffset)) {
+        const endOffset = this.buffer.indexOf("?>", openOffset + 2);
+        if (endOffset < 0) {
+          if (!final) {
+            break;
+          }
+          throw new Error(`Invalid XML in ${this.path}: unclosed markup`);
+        }
+        offset = endOffset + 2;
+        continue;
+      }
+      if (this.buffer.startsWith("<!", openOffset)) {
+        throw new Error(
+          `Invalid XML in ${this.path}: unsupported declaration`,
+        );
+      }
+
+      const closeOffset = findTagEnd(
+        this.buffer,
+        openOffset + 1,
+      );
+      if (closeOffset < 0) {
+        if (!final) {
+          break;
+        }
+        throw new Error(`Invalid XML in ${this.path}: unclosed tag`);
+      }
+      const source = this.buffer.slice(openOffset + 1, closeOffset).trim();
+      if (source.startsWith("/")) {
+        const name = readTagName(source.slice(1), this.path);
+        if (this.stack.pop() !== name) {
+          throw new Error(
+            `Invalid XML in ${this.path}: mismatched closing tag`,
+          );
+        }
+      } else {
+        const selfClosing = source.endsWith("/");
+        const name = readTagName(source, this.path);
+        if (this.stack.length === 0) {
+          if (this.rootName !== null) {
+            throw new Error(
+              `Invalid XML in ${this.path}: multiple root elements`,
+            );
+          }
+          this.rootName = name;
+        }
+        if (!selfClosing) {
+          this.stack.push(name);
+        }
+      }
+      offset = closeOffset + 1;
     }
-    offset = closeOffset + 1;
-  }
-
-  if (stack.length === 0 && xml.slice(offset).trim().length > 0) {
-    throw new Error(`Invalid XML in ${path}: text outside root element`);
-  }
-  if (stack.length > 0) {
-    throw new Error(`Invalid XML in ${path}: unclosed element`);
-  }
-  if (rootName?.split(":").at(-1) !== expectedRootLocalName) {
-    throw new Error(
-      `Invalid XML in ${path}: expected ${expectedRootLocalName} root element`,
-    );
+    this.buffer = this.buffer.slice(offset);
+    if (final && this.buffer.length > 0) {
+      if (this.buffer.includes("<")) {
+        throw new Error(`Invalid XML in ${this.path}: unclosed tag`);
+      }
+      if (this.stack.length === 0 && this.buffer.trim().length > 0) {
+        throw new Error(
+          `Invalid XML in ${this.path}: text outside root element`,
+        );
+      }
+      this.buffer = "";
+    }
   }
 }
 
-function findMarkupEnd(
-  xml: string,
-  offset: number,
-  marker: string,
-  path: string,
-): number {
-  const endOffset = xml.indexOf(marker, offset);
-  if (endOffset < 0) {
-    throw new Error(`Invalid XML in ${path}: unclosed markup`);
-  }
-  return endOffset + marker.length;
-}
-
-function findTagEnd(xml: string, offset: number, path: string): number {
+function findTagEnd(xml: string, offset: number): number {
   let quote: string | null = null;
   for (let index = offset; index < xml.length; index += 1) {
     const character = xml[index];
@@ -101,7 +186,7 @@ function findTagEnd(xml: string, offset: number, path: string): number {
       return index;
     }
   }
-  throw new Error(`Invalid XML in ${path}: unclosed tag`);
+  return -1;
 }
 
 function readTagName(source: string, path: string): string {

@@ -170,8 +170,62 @@ if (
   ]) {
     expect(
       bundle.includes(marker),
-      `3.1.x production bundles must include ${feature}`,
+      `3.1+ production bundles must include ${feature}`,
     );
+  }
+}
+
+if (releaseMajor === 3 && releaseMinor >= 2) {
+  expect(
+    hasFile("XLSM_COMPATIBILITY.md"),
+    "3.2+ releases must include the reviewed XLSM compatibility matrix",
+  );
+
+  if (hasFile("src/xlsx/XlsxAdapter.ts")) {
+    const xlsxAdapter = fs.readFileSync(
+      path.join(rootDir, "src/xlsx/XlsxAdapter.ts"),
+      "utf8",
+    );
+    expect(
+      !/["']xlsm["']/.test(xlsxAdapter),
+      "3.2+ releases must keep .xlsm out of the public XLSX adapter",
+    );
+  } else {
+    failures.push("src/xlsx/XlsxAdapter.ts must exist");
+  }
+
+  if (hasFile("dist/main.js")) {
+    const bundle = fs.readFileSync(path.join(rootDir, "dist/main.js"), "utf8");
+    for (const [marker, feature] of [
+      ["Worksheet image", "package-local worksheet image previews"],
+      [
+        "This chart type is not included in the read-only preview subset.",
+        "cached common-chart previews with an unsupported fallback",
+      ],
+      [
+        "maximumSheetDataBufferCharacters",
+        "streamed worksheet buffer diagnostics",
+      ],
+    ]) {
+      expect(
+        bundle.includes(marker),
+        `3.2+ production bundles must include ${feature}`,
+      );
+    }
+  }
+
+  if (hasFile("dist/styles.css")) {
+    const styles = fs.readFileSync(path.join(rootDir, "dist/styles.css"), "utf8");
+    for (const [marker, feature] of [
+      [".xlsx-reader-drawing", "worksheet drawings"],
+      [".xlsx-reader-cell.has-comment", "cell comment markers"],
+      [".xlsx-reader-data-bar", "conditional-format data bars"],
+    ]) {
+      expect(
+        styles.includes(marker),
+        `3.2+ production styles must include ${feature}`,
+      );
+    }
   }
 }
 

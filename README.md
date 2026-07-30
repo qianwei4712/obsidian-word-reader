@@ -120,9 +120,16 @@ Requires Obsidian Desktop 1.12.7 or newer.
   capped at 250,000 cells.
 - Inspect the selected cell's complete stored formula text and
   workbook-cached result in the read-only formula bar.
+- Read legacy cell-comment authors and complete text from the formula bar.
+  Comment markers remain discoverable even when the commented cell is blank.
+- Preview package-local PNG, JPEG, GIF, and BMP drawings at their worksheet
+  anchors. Common bar, line, area, and pie charts use only workbook-cached
+  series data and show an explicit fallback for unsupported chart types.
+- Preserve a bounded subset of numeric conditional formatting: literal
+  `cellIs` rules, two-/three-color scales, and data bars.
 - Create a same-name spreadsheet summary note containing sheet dimensions and
-  visibility, named ranges, the current selection, and up to 200 displayed
-  cell previews collected from workbook content.
+  visibility, named ranges, rich-content counts, the current selection, and up
+  to 200 displayed cell previews collected from workbook content.
 - Workbook hyperlinks open only after an explicit click and confirmation.
   External workbook references and data connections are never fetched.
 - The active worksheet, zoom/fit preference, and scroll position are restored
@@ -229,9 +236,13 @@ Available settings:
   reloaded, switched, or closed.
 - XLSX worksheets use a 2,500-cell mount ceiling with finite row/column
   overscan. Frozen panes remain visible without materializing the full sheet.
+- Worksheet and shared-string XML is decompressed and validated in chunks.
+  Loading reports progress, dense worksheets do not retain the complete
+  `sheetData` XML, and parsing can be cancelled between chunks and rows.
 - Worksheet parsing, switching, workbook-wide search, summary collection, and
-  scheduled grid rendering are cancellable; package caches are bounded and
-  released on reload, file switch, and view close.
+  scheduled grid rendering are cancellable. Package caches, mounted drawings,
+  chart sample counts, and image Blob URLs have fixed bounds and are released
+  on reload, sheet/file switch, and view close.
 - Word content is rendered into a temporary buffer before replacing the visible preview.
 - Long documents commit rendered pages and build navigation in cancellable chunks so the interface can update between batches.
 - Long previews defer off-screen page painting until pages approach the viewport.
@@ -304,9 +315,9 @@ the plugin opens it without overwriting content.
 
 Spreadsheet notes use `type: spreadsheet-note` and `reader_format: xlsx`,
 record the current worksheet and selection, list worksheet dimensions,
-visibility, and supported named ranges, and include at most 200 displayed-value
-preview cells. Existing same-name Markdown files are opened without being
-overwritten.
+visibility, supported named ranges, and comment/image/chart/conditional-rule
+counts, and include at most 200 displayed-value preview cells. Existing
+same-name Markdown files are opened without being overwritten.
 
 ## Installation
 
@@ -446,8 +457,9 @@ CI and release workflows use Node.js 20.19.0.
 - This is not an Office editor.
 - The plugin never saves changes back to `.docx`, `.pptx`, or `.xlsx`.
 - Legacy `.xls` files are not rendered directly, and `.xlsm` is not
-  registered. Pivot tables, slicers, full chart fidelity, comments, images,
-  and complex conditional formatting are outside the 3.1.0 XLSX scope.
+  registered. Modern threaded comments, floating-object editing, pivot tables,
+  slicers, pixel-perfect chart fidelity, and complex conditional formatting
+  are outside the 3.2.0 XLSX scope.
 - Legacy `.doc` files are not rendered directly, but the plugin shows external-open and conversion guidance.
 - Complex Word layouts may not render exactly like Microsoft Word.
 - PPTX animation, transitions, audio/video playback, macros, editing, charts,
@@ -478,6 +490,11 @@ This plugin is designed with security as a top priority:
   external package relationships are ignored instead of being loaded.
 - **Safe XLSX formulas**: Formula text and cached results are displayed without
   running macros, external formula code, or recalculation.
+- **Safe XLSX rich content**: Images are restricted to package-local safe
+  raster formats; chart previews use cached series only. External drawing,
+  chart, and workbook relationships are never resolved. The reviewed
+  [XLSM compatibility matrix](XLSM_COMPATIBILITY.md) keeps `.xlsm`
+  unregistered.
 - **Sandboxed rendering**: Office content is rendered into structural DOM
   containers with no script execution context.
 - **Desktop-only**: The plugin requires desktop Obsidian because it uses Electron APIs for image clipboard operations and file dialogs. This is declared in `manifest.json` as `isDesktopOnly: true`.

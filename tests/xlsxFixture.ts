@@ -22,6 +22,8 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
   <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
   <Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>
+  <Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>
+  <Override PartName="/xl/comments1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>
   <Override PartName="/xl/connections.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml"/>
 </Types>`,
   );
@@ -110,6 +112,12 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
     <xf numFmtId="10" fontId="0" fillId="0" borderId="0"/>
     <xf numFmtId="0" fontId="1" fillId="1" borderId="1"><alignment horizontal="center" wrapText="1"/></xf>
   </cellXfs>
+  <dxfs count="1">
+    <dxf>
+      <font><b/><color rgb="FFFFFFFF"/></font>
+      <fill><patternFill patternType="solid"><fgColor rgb="FFC00000"/></patternFill></fill>
+    </dxf>
+  </dxfs>
 </styleSheet>`,
   );
   zip.file(
@@ -139,6 +147,8 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
       <c r="E2"><f>SUM(B2,1)</f><v>12346.678</v></c>
       <c r="F2"><f t="shared" si="1"/><v>99</v></c>
     </row>
+    <row r="3"><c r="B3"><v>-5</v></c><c r="C3"><v>0.5</v></c></row>
+    <row r="4"><c r="B4"><v>50</v></c><c r="C4"><v>1</v></c></row>
     <row r="100000"><c r="Z100000" t="inlineStr"><is><t>Sparse tail</t></is></c></row>
   </sheetData>
   <mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>
@@ -146,6 +156,13 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
     <hyperlink ref="C2" r:id="rIdHyperlink" tooltip="External documentation"/>
     <hyperlink ref="E2" location="'Hidden data'!A1"/>
   </hyperlinks>
+  <conditionalFormatting sqref="B2:B4">
+    <cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan" stopIfTrue="1"><formula>10000</formula></cfRule>
+    <cfRule type="colorScale" priority="2"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FFF8696B"/><color rgb="FF63BE7B"/></colorScale></cfRule>
+  </conditionalFormatting>
+  <conditionalFormatting sqref="C2:C4">
+    <cfRule type="dataBar" priority="3"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF5B9BD5"/></dataBar></cfRule>
+  </conditionalFormatting>
   <drawing r:id="rIdDrawing"/>
 </worksheet>`,
   );
@@ -162,6 +179,11 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
         "rIdDrawing",
         `${OFFICE_RELATIONSHIP}/drawing`,
         "../drawings/drawing1.xml",
+      ],
+      [
+        "rIdComments",
+        `${OFFICE_RELATIONSHIP}/comments`,
+        "../comments1.xml",
       ],
     ]),
   );
@@ -189,6 +211,16 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
     </xdr:pic>
     <xdr:clientData/>
   </xdr:oneCellAnchor>
+  <xdr:twoCellAnchor>
+    <xdr:from><xdr:col>6</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>4</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+    <xdr:to><xdr:col>10</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>12</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+    <xdr:graphicFrame>
+      <xdr:nvGraphicFramePr><xdr:cNvPr id="3" name="Sales chart"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
+      <xdr:xfrm/>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId2"/></a:graphicData></a:graphic>
+    </xdr:graphicFrame>
+    <xdr:clientData/>
+  </xdr:twoCellAnchor>
 </xdr:wsDr>`,
   );
   zip.file(
@@ -199,9 +231,39 @@ export async function createRichXlsx(): Promise<ArrayBuffer> {
         `${OFFICE_RELATIONSHIP}/image`,
         "../media/image1.png",
       ],
+      [
+        "rId2",
+        `${OFFICE_RELATIONSHIP}/chart`,
+        "../charts/chart1.xml",
+      ],
     ]),
   );
   zip.file("xl/media/image1.png", onePixelPng());
+  zip.file(
+    "xl/charts/chart1.xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly sales</a:t></a:r></a:p></c:rich></c:tx></c:title>
+    <c:plotArea><c:barChart><c:ser>
+      <c:tx><c:strRef><c:strCache><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx>
+      <c:cat><c:strRef><c:strCache><c:pt idx="0"><c:v>Q1</c:v></c:pt><c:pt idx="1"><c:v>Q2</c:v></c:pt><c:pt idx="2"><c:v>Q3</c:v></c:pt></c:strCache></c:strRef></c:cat>
+      <c:val><c:numRef><c:numCache><c:pt idx="0"><c:v>10</c:v></c:pt><c:pt idx="1"><c:v>20</c:v></c:pt><c:pt idx="2"><c:v>15</c:v></c:pt></c:numCache></c:numRef></c:val>
+    </c:ser></c:barChart></c:plotArea>
+  </c:chart>
+</c:chartSpace>`,
+  );
+  zip.file(
+    "xl/comments1.xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <authors><author>Ada</author></authors>
+  <commentList>
+    <comment ref="B2" authorId="0"><text><r><t>Review cached revenue before publishing.</t></r></text></comment>
+    <comment ref="G3" authorId="0"><text><r><t>Blank cells keep comment markers.</t></r></text></comment>
+  </commentList>
+</comments>`,
+  );
   zip.file(
     "xl/connections.xml",
     `<?xml version="1.0"?><connections xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><connection id="1" name="Ignored"/></connections>`,
@@ -224,6 +286,45 @@ export async function addOoxmlEntry(
 ): Promise<ArrayBuffer> {
   const zip = await JSZip.loadAsync(buffer);
   zip.file(path, content);
+  return zip.generateAsync({
+    type: "arraybuffer",
+    compression: "DEFLATE",
+  });
+}
+
+export async function createLargeDenseXlsx(
+  rowCount = 20_000,
+  columnCount = 4,
+): Promise<ArrayBuffer> {
+  if (
+    !Number.isInteger(rowCount) ||
+    rowCount < 1 ||
+    !Number.isInteger(columnCount) ||
+    columnCount < 1 ||
+    columnCount > 26
+  ) {
+    throw new RangeError("Dense XLSX fixture dimensions are out of range.");
+  }
+  const zip = await JSZip.loadAsync(await createRichXlsx());
+  const rows: string[] = [];
+  for (let row = 1; row <= rowCount; row += 1) {
+    const cells: string[] = [];
+    for (let column = 0; column < columnCount; column += 1) {
+      const reference = `${String.fromCharCode(65 + column)}${row}`;
+      cells.push(`<c r="${reference}"><v>${row + column}</v></c>`);
+    }
+    rows.push(`<row r="${row}">${cells.join("")}</row>`);
+  }
+  const finalColumn = String.fromCharCode(64 + columnCount);
+  zip.file(
+    "xl/worksheets/sheet1.xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:${finalColumn}${rowCount}"/>
+  <sheetFormatPr defaultColWidth="9" defaultRowHeight="15"/>
+  <sheetData>${rows.join("")}</sheetData>
+</worksheet>`,
+  );
   return zip.generateAsync({
     type: "arraybuffer",
     compression: "DEFLATE",

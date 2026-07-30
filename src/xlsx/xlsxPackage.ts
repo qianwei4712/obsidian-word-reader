@@ -13,18 +13,26 @@ import {
   resolveInternalRelationship,
   type OoxmlRelationship,
 } from "../ooxml/relationships";
-import { validateXmlStructure } from "../ooxml/xmlStructure";
+import {
+  StreamingXmlStructureValidator,
+} from "../ooxml/xmlStructure";
 import {
   attribute,
   descendantsNamed,
+  firstChildNamed,
   firstDescendantNamed,
   parseXml,
   textContent,
 } from "../pptx/xml";
 import { LruCache } from "../reader/lruCache";
+import { parseXlsxChart } from "./xlsxCharts";
+import { parseXlsxComments } from "./xlsxComments";
 import { parseXlsxDefinedNameTarget } from "./xlsxDefinedNames";
 import { XlsxStyleTable } from "./xlsxStyles";
 import type {
+  XlsxChart,
+  XlsxDrawingAnchor,
+  XlsxDrawingPosition,
   XlsxDefinedName,
   XlsxImage,
   XlsxPackageDiagnostics,
@@ -33,14 +41,20 @@ import type {
 } from "./xlsxTypes";
 import {
   decodeXmlText,
-  parseXlsxWorksheet,
   XlsxWorksheet,
   XlsxWorksheetCancelledError,
+  XlsxWorksheetStreamParser,
 } from "./xlsxWorksheet";
 
 const WORKBOOK_PATH = "xl/workbook.xml";
 const WORKSHEET_CACHE_CAPACITY = 2;
 const IMAGE_CACHE_CAPACITY = 8;
+const MAX_XLSX_IMAGE_BYTES = 16 * 1024 * 1024;
+const MAX_XLSX_DRAWING_XML_BYTES = 8 * 1024 * 1024;
+const MAX_XLSX_CHART_XML_BYTES = 8 * 1024 * 1024;
+const MAX_XLSX_COMMENTS_XML_BYTES = 16 * 1024 * 1024;
+const MAX_XLSX_IMAGES_PER_SHEET = 512;
+const MAX_XLSX_CHARTS_PER_SHEET = 128;
 const SAFE_IMAGE_MIME_TYPES = new Map([
   ["bmp", "image/bmp"],
   ["gif", "image/gif"],
@@ -56,6 +70,7 @@ export interface XlsxLoadOptions {
 
 export interface XlsxWorksheetLoadOptions {
   isCancelled?: () => boolean;
+  onProgress?: (percent: number) => void;
 }
 
 export class XlsxPackageError extends Error {
@@ -240,7 +255,10 @@ export class XlsxPackage {
   }
 
   async getImageBinary(path: string): Promise<Uint8Array | null> {
-    if (!safeImageMimeType(path)) {
+    if (
+      !safeImageMimeType(path) ||
+      !this.isPartWithinLimit(path, MAX_XLSX_IMAGE_BYTES)
+    ) {
       return null;
     }
     return this.imageCache.getOrCreate(path, () => {
@@ -274,53 +292,106 @@ export class XlsxPackage {
     options: XlsxWorksheetLoadOptions,
   ): Promise<XlsxWorksheet> {
     checkCancelled(options.isCancelled);
-    const [xml, sharedStrings, relationships] = await Promise.all([
-      readZipText(this.zip, descriptor.path),
-      this.getSharedStrings(),
+    const [sharedStrings, relationships] = await Promise.all([
+      this.getSharedStrings(options.isCancelled),
       readRelationships(this.zip, descriptor.path),
     ]);
     checkCancelled(options.isCancelled);
     this.diagnostics.ignoredExternalRelationships += Array.from(
       relationships.values(),
     ).filter((relationship) => relationship.external).length;
-    const images = await this.readWorksheetImages(
-      descriptor.path,
-      xml,
-      relationships,
-      options.isCancelled,
-    );
-    checkCancelled(options.isCancelled);
-    return parseXlsxWorksheet(xml, {
+    const parser = new XlsxWorksheetStreamParser({
       descriptor,
       styles: this.styles,
       sharedStrings,
       relationships,
-      images,
       date1904: this.date1904,
       isCancelled: options.isCancelled,
     });
+    const worksheetEntry = this.zip.file(descriptor.path);
+    if (!worksheetEntry) {
+      throw new XlsxPackageError(
+        "damaged",
+        `The XLSX package is missing ${descriptor.path}.`,
+      );
+    }
+    await streamZipText(
+      worksheetEntry,
+      (chunk) => parser.push(chunk),
+      options.isCancelled,
+      options.onProgress,
+    );
+    const metadataXml = parser.completeInput();
+    const drawings = await this.readWorksheetDrawings(
+      descriptor.path,
+      metadataXml,
+      relationships,
+      options.isCancelled,
+    );
+    const comments = await this.readWorksheetComments(
+      descriptor.path,
+      relationships,
+      options.isCancelled,
+    );
+    checkCancelled(options.isCancelled);
+    return parser.finish({
+      images: drawings.images,
+      charts: drawings.charts,
+      comments,
+    });
   }
 
-  private getSharedStrings(): Promise<readonly string[]> {
+  private getSharedStrings(
+    isCancelled?: () => boolean,
+  ): Promise<readonly string[]> {
     if (!this.sharedStringsPath) {
       return Promise.resolve([]);
     }
-    this.sharedStringsPromise ??= readZipText(
-      this.zip,
-      this.sharedStringsPath,
-    ).then((xml) => parseSharedStrings(xml, this.sharedStringsPath ?? ""));
+    if (this.sharedStringsPromise) {
+      return this.sharedStringsPromise;
+    }
+    const path = this.sharedStringsPath;
+    const entry = this.zip.file(path);
+    if (!entry) {
+      return Promise.reject(
+        new XlsxPackageError(
+          "damaged",
+          `The XLSX package is missing ${path}.`,
+        ),
+      );
+    }
+    const parser = new XlsxSharedStringsStreamParser(path);
+    const pending = streamZipText(
+      entry,
+      (chunk) => parser.push(chunk),
+      isCancelled,
+      undefined,
+    ).then(() => parser.finish());
+    this.sharedStringsPromise = pending;
+    void pending.catch(() => {
+      if (this.sharedStringsPromise === pending) {
+        this.sharedStringsPromise = null;
+      }
+    });
     return this.sharedStringsPromise;
   }
 
-  private async readWorksheetImages(
+  private async readWorksheetDrawings(
     worksheetPath: string,
     worksheetXml: string,
     worksheetRelationships: ReadonlyMap<string, OoxmlRelationship>,
     isCancelled: (() => boolean) | undefined,
-  ): Promise<XlsxImage[]> {
+  ): Promise<{ images: XlsxImage[]; charts: XlsxChart[] }> {
     const drawingRelationshipIds = readDrawingRelationshipIds(worksheetXml);
     const images: XlsxImage[] = [];
+    const charts: XlsxChart[] = [];
     for (const relationshipId of drawingRelationshipIds) {
+      if (
+        images.length >= MAX_XLSX_IMAGES_PER_SHEET &&
+        charts.length >= MAX_XLSX_CHARTS_PER_SHEET
+      ) {
+        break;
+      }
       checkCancelled(isCancelled);
       const drawingRelationship = worksheetRelationships.get(relationshipId);
       const drawingPath = resolveInternalRelationship(
@@ -334,19 +405,81 @@ export class XlsxPackage {
       if (!drawingEntry) {
         continue;
       }
+      if (
+        !this.isPartWithinLimit(
+          drawingPath,
+          MAX_XLSX_DRAWING_XML_BYTES,
+        )
+      ) {
+        continue;
+      }
       const [drawingXml, drawingRelationships] = await Promise.all([
         drawingEntry.async("string"),
         readRelationships(this.zip, drawingPath),
       ]);
+      const drawingObjects = await parseDrawingObjects(
+        this.zip,
+        drawingPath,
+        drawingXml,
+        drawingRelationships,
+        isCancelled,
+        (path, maximumBytes) =>
+          this.isPartWithinLimit(path, maximumBytes),
+      );
       images.push(
-        ...parseDrawingImages(
-          drawingPath,
-          drawingXml,
-          drawingRelationships,
+        ...drawingObjects.images.slice(
+          0,
+          MAX_XLSX_IMAGES_PER_SHEET - images.length,
+        ),
+      );
+      charts.push(
+        ...drawingObjects.charts.slice(
+          0,
+          MAX_XLSX_CHARTS_PER_SHEET - charts.length,
         ),
       );
     }
-    return images;
+    return { images, charts };
+  }
+
+  private async readWorksheetComments(
+    worksheetPath: string,
+    relationships: ReadonlyMap<string, OoxmlRelationship>,
+    isCancelled: (() => boolean) | undefined,
+  ) {
+    const commentsPath = findInternalPartPath(
+      worksheetPath,
+      relationships,
+      "/comments",
+    );
+    if (
+      !commentsPath ||
+      !this.zip.file(commentsPath) ||
+      !this.isPartWithinLimit(
+        commentsPath,
+        MAX_XLSX_COMMENTS_XML_BYTES,
+      )
+    ) {
+      return [];
+    }
+    checkCancelled(isCancelled);
+    const comments = parseXlsxComments(
+      await readZipText(this.zip, commentsPath),
+      commentsPath,
+    );
+    checkCancelled(isCancelled);
+    return comments;
+  }
+
+  private isPartWithinLimit(path: string, maximumBytes: number): boolean {
+    const entry = this.zipSummary.entries.find(
+      (candidate) => candidate.name === path,
+    );
+    return Boolean(
+      entry &&
+      entry.uncompressedBytes >= 0 &&
+      entry.uncompressedBytes <= maximumBytes,
+    );
   }
 }
 
@@ -406,33 +539,79 @@ function parseOptionalSheetIndex(
 }
 
 export function parseSharedStrings(xml: string, path: string): string[] {
-  validateXmlStructure(xml, path, "sst");
-  const strings: string[] = [];
-  const itemPattern =
-    /<(?:[A-Za-z_][\w.-]*:)?si\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?si\s*>/gi;
-  for (const item of xml.matchAll(itemPattern)) {
-    const fragments: string[] = [];
-    const textPattern =
-      /<(?:[A-Za-z_][\w.-]*:)?t\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?t\s*>/gi;
-    for (const text of item[1].matchAll(textPattern)) {
-      fragments.push(decodeXmlText(text[1].replace(/<[^>]*>/g, "")));
-    }
-    strings.push(fragments.join(""));
-  }
-  return strings;
+  const parser = new XlsxSharedStringsStreamParser(path);
+  parser.push(xml);
+  return parser.finish();
 }
 
-function parseDrawingImages(
+class XlsxSharedStringsStreamParser {
+  private readonly validator: StreamingXmlStructureValidator;
+  private readonly strings: string[] = [];
+  private buffer = "";
+  private finished = false;
+
+  constructor(private readonly path: string) {
+    this.validator = new StreamingXmlStructureValidator(path, "sst");
+  }
+
+  push(chunk: string): void {
+    if (this.finished) {
+      throw new Error("XLSX shared-string parser has already finished.");
+    }
+    this.validator.push(chunk);
+    this.buffer += chunk;
+    const itemPattern =
+      /<(?:[A-Za-z_][\w.-]*:)?si\b[^>]*?\/>|<(?:[A-Za-z_][\w.-]*:)?si\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?si\s*>/gi;
+    let consumed = 0;
+    for (const item of this.buffer.matchAll(itemPattern)) {
+      consumed = (item.index ?? 0) + item[0].length;
+      this.strings.push(parseSharedStringItem(item[1] ?? ""));
+    }
+    if (consumed > 0) {
+      this.buffer = this.buffer.slice(consumed);
+    }
+  }
+
+  finish(): string[] {
+    if (this.finished) {
+      throw new Error("XLSX shared-string parser has already finished.");
+    }
+    this.finished = true;
+    this.validator.finish();
+    return this.strings;
+  }
+}
+
+function parseSharedStringItem(xml: string): string {
+  const fragments: string[] = [];
+  const textPattern =
+    /<(?:[A-Za-z_][\w.-]*:)?t\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z_][\w.-]*:)?t\s*>/gi;
+  for (const text of xml.matchAll(textPattern)) {
+    fragments.push(decodeXmlText(text[1].replace(/<[^>]*>/g, "")));
+  }
+  return fragments.join("");
+}
+
+async function parseDrawingObjects(
+  zip: JSZip,
   drawingPath: string,
   xml: string,
   relationships: ReadonlyMap<string, OoxmlRelationship>,
-): XlsxImage[] {
+  isCancelled: (() => boolean) | undefined,
+  isPartWithinLimit: (path: string, maximumBytes: number) => boolean,
+): Promise<{ images: XlsxImage[]; charts: XlsxChart[] }> {
   const document = parsePackageXml(xml, drawingPath);
   const images: XlsxImage[] = [];
+  const charts: XlsxChart[] = [];
   for (const anchor of [
     ...descendantsNamed(document.documentElement, "twoCellAnchor"),
     ...descendantsNamed(document.documentElement, "oneCellAnchor"),
   ]) {
+    checkCancelled(isCancelled);
+    const drawingAnchor = parseDrawingAnchor(anchor);
+    if (!drawingAnchor) {
+      continue;
+    }
     const blip = firstDescendantNamed(anchor, "blip");
     const relationshipId = attribute(blip, "embed");
     const relationship = relationshipId
@@ -440,36 +619,127 @@ function parseDrawingImages(
       : undefined;
     const imagePath = resolveInternalRelationship(drawingPath, relationship);
     const mimeType = imagePath ? safeImageMimeType(imagePath) : null;
-    if (!imagePath || !mimeType || !relationship?.type.endsWith("/image")) {
-      continue;
+    if (
+      images.length < MAX_XLSX_IMAGES_PER_SHEET &&
+      imagePath &&
+      mimeType &&
+      relationship?.type.endsWith("/image") &&
+      zip.file(imagePath) &&
+      isPartWithinLimit(imagePath, MAX_XLSX_IMAGE_BYTES)
+    ) {
+      const properties = firstDescendantNamed(anchor, "cNvPr");
+      images.push({
+        path: imagePath,
+        mimeType,
+        row: drawingAnchor.from.row,
+        column: drawingAnchor.from.column,
+        anchor: drawingAnchor,
+        name: attribute(properties, "name") ?? undefined,
+        description: attribute(properties, "descr") ?? undefined,
+      });
     }
-    const from = firstDescendantNamed(anchor, "from");
-    const column = Number(textContent(firstDescendantNamed(from, "col")));
-    const row = Number(textContent(firstDescendantNamed(from, "row")));
-    const properties = firstDescendantNamed(anchor, "cNvPr");
-    images.push({
-      path: imagePath,
-      mimeType,
-      row: Number.isInteger(row) ? row : 0,
-      column: Number.isInteger(column) ? column : 0,
-      name: attribute(properties, "name") ?? undefined,
-      description: attribute(properties, "descr") ?? undefined,
-    });
+    const chartElement = firstDescendantNamed(anchor, "chart");
+    const chartRelationshipId = attribute(chartElement, "id");
+    const chartRelationship = chartRelationshipId
+      ? relationships.get(chartRelationshipId)
+      : undefined;
+    const chartPath = resolveInternalRelationship(
+      drawingPath,
+      chartRelationship,
+    );
+    if (
+      charts.length < MAX_XLSX_CHARTS_PER_SHEET &&
+      chartPath &&
+      chartRelationship?.type.endsWith("/chart") &&
+      zip.file(chartPath) &&
+      isPartWithinLimit(chartPath, MAX_XLSX_CHART_XML_BYTES)
+    ) {
+      charts.push(
+        parseXlsxChart(
+          await readZipText(zip, chartPath),
+          chartPath,
+          drawingAnchor,
+        ),
+      );
+    }
   }
-  return images;
+  return { images, charts };
+}
+
+function parseDrawingAnchor(element: Element): XlsxDrawingAnchor | null {
+  const from = parseDrawingPosition(firstChildNamed(element, "from"));
+  if (!from) {
+    return null;
+  }
+  const to = parseDrawingPosition(firstChildNamed(element, "to"));
+  const extent = firstChildNamed(element, "ext");
+  const width = Number(attribute(extent, "cx"));
+  const height = Number(attribute(extent, "cy"));
+  return {
+    from,
+    to: to ?? undefined,
+    widthPx:
+      Number.isFinite(width) && width > 0
+        ? emuToPixels(width)
+        : undefined,
+    heightPx:
+      Number.isFinite(height) && height > 0
+        ? emuToPixels(height)
+        : undefined,
+  };
+}
+
+function parseDrawingPosition(
+  element: Element | null,
+): XlsxDrawingPosition | null {
+  if (!element) {
+    return null;
+  }
+  const row = Number(textContent(firstChildNamed(element, "row")));
+  const column = Number(textContent(firstChildNamed(element, "col")));
+  const rowOffset = Number(
+    textContent(firstChildNamed(element, "rowOff")),
+  );
+  const columnOffset = Number(
+    textContent(firstChildNamed(element, "colOff")),
+  );
+  if (
+    !Number.isInteger(row) ||
+    row < 0 ||
+    !Number.isInteger(column) ||
+    column < 0
+  ) {
+    return null;
+  }
+  return {
+    row,
+    column,
+    rowOffsetPx:
+      Number.isFinite(rowOffset) && rowOffset > 0
+        ? emuToPixels(rowOffset)
+        : 0,
+    columnOffsetPx:
+      Number.isFinite(columnOffset) && columnOffset > 0
+        ? emuToPixels(columnOffset)
+        : 0,
+  };
+}
+
+function emuToPixels(value: number): number {
+  return value / 9_525;
 }
 
 function readDrawingRelationshipIds(xml: string): string[] {
-  const ids: string[] = [];
+  const ids = new Set<string>();
   const pattern =
     /<(?:[A-Za-z_][\w.-]*:)?drawing\b([^>]*?)\/?>/gi;
   for (const match of xml.matchAll(pattern)) {
     const id = /\br:id\s*=\s*["']([^"']+)["']/i.exec(match[1])?.[1];
     if (id) {
-      ids.push(id);
+      ids.add(id);
     }
   }
-  return ids;
+  return Array.from(ids);
 }
 
 function safeImageMimeType(path: string): string | null {
@@ -519,6 +789,57 @@ async function readZipText(zip: JSZip, path: string): Promise<string> {
     );
   }
   return entry.async("string");
+}
+
+async function streamZipText(
+  entry: JSZip.JSZipObject,
+  onChunk: (chunk: string) => void,
+  isCancelled: (() => boolean) | undefined,
+  onProgress: ((percent: number) => void) | undefined,
+): Promise<void> {
+  const streamable = entry as JSZip.JSZipObject & {
+    internalStream(
+      type: "string",
+    ): JSZip.JSZipStreamHelper<string>;
+  };
+  if (typeof streamable.internalStream !== "function") {
+    onChunk(await entry.async("string"));
+    onProgress?.(100);
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const stream = streamable.internalStream("string");
+    let settled = false;
+    const rejectOnce = (error: unknown): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      stream.pause();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+    stream.on("data", (chunk, metadata) => {
+      if (settled) {
+        return;
+      }
+      try {
+        checkCancelled(isCancelled);
+        onChunk(chunk);
+        onProgress?.(metadata.percent);
+      } catch (error) {
+        rejectOnce(error);
+      }
+    });
+    stream.on("error", rejectOnce);
+    stream.on("end", () => {
+      if (!settled) {
+        settled = true;
+        onProgress?.(100);
+        resolve();
+      }
+    });
+    stream.resume();
+  });
 }
 
 function parsePackageXml(xml: string, path: string): Document {

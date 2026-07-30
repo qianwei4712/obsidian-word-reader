@@ -2,6 +2,7 @@ import type {
   XlsxBorderEdge,
   XlsxCellStyle,
   XlsxColor,
+  XlsxDifferentialStyle,
 } from "./xlsxTypes";
 
 export type XlsxCssProperties = Partial<
@@ -115,6 +116,71 @@ export function applyXlsxCellStyle(
   style: XlsxCellStyle,
 ): void {
   Object.assign(element.style, xlsxCellStyleToCss(style));
+}
+
+export function xlsxDifferentialStyleToCss(
+  style: XlsxDifferentialStyle | undefined,
+): XlsxCssProperties {
+  if (!style) {
+    return {};
+  }
+  const css: XlsxCssProperties = {};
+  if (style.font) {
+    const decorations: string[] = [];
+    if (style.font.underline) {
+      decorations.push("underline");
+    }
+    if (style.font.strike) {
+      decorations.push("line-through");
+    }
+    if (style.font.bold !== undefined) {
+      css.fontWeight = style.font.bold ? "700" : "400";
+    }
+    if (style.font.italic !== undefined) {
+      css.fontStyle = style.font.italic ? "italic" : "normal";
+    }
+    if (
+      style.font.underline !== undefined ||
+      style.font.strike !== undefined
+    ) {
+      css.textDecoration = decorations.join(" ") || "none";
+    }
+    const color = xlsxColorToCss(style.font.color);
+    if (color) {
+      css.color = color;
+    }
+    if (style.font.name) {
+      css.fontFamily = style.font.name;
+    }
+    if (
+      style.font.size !== undefined &&
+      Number.isFinite(style.font.size) &&
+      style.font.size > 0
+    ) {
+      css.fontSize = `${Math.min(style.font.size, 96)}pt`;
+    }
+  }
+  if (style.fill?.pattern === "solid") {
+    const color = xlsxColorToCss(style.fill.foreground);
+    if (color) {
+      css.backgroundColor = color;
+    }
+  }
+  if (style.border) {
+    if (style.border.left) {
+      css.borderLeft = borderEdgeToCss(style.border.left);
+    }
+    if (style.border.right) {
+      css.borderRight = borderEdgeToCss(style.border.right);
+    }
+    if (style.border.top) {
+      css.borderTop = borderEdgeToCss(style.border.top);
+    }
+    if (style.border.bottom) {
+      css.borderBottom = borderEdgeToCss(style.border.bottom);
+    }
+  }
+  return css;
 }
 
 export function xlsxColorToCss(color: XlsxColor | undefined): string | null {

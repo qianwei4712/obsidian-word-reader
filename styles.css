@@ -944,7 +944,9 @@
 
 .xlsx-reader-formula-bar {
   display: grid;
-  grid-template-columns: minmax(92px, 140px) auto minmax(180px, 1fr) auto auto auto;
+  grid-template-columns:
+    minmax(92px, 140px) auto minmax(180px, 1fr) auto
+    minmax(140px, 260px) auto auto;
   align-items: center;
   gap: 8px;
   min-height: 44px;
@@ -955,7 +957,8 @@
 
 .xlsx-reader-name-box,
 .xlsx-reader-formula-value,
-.xlsx-reader-cached-value {
+.xlsx-reader-cached-value,
+.xlsx-reader-comment-detail {
   min-width: 0;
   padding: 4px 8px;
   border: 1px solid var(--background-modifier-border);
@@ -995,9 +998,21 @@
 }
 
 .xlsx-reader-cached-value:empty,
+.xlsx-reader-comment-detail[hidden],
 .xlsx-reader-formula-safety[hidden],
 .xlsx-reader-formula-bar > button[hidden] {
   display: none;
+}
+
+.xlsx-reader-comment-detail {
+  max-width: 260px;
+  color: var(--text-normal);
+  border-color: color-mix(
+    in srgb,
+    var(--color-red) 45%,
+    var(--background-modifier-border)
+  );
+  font-family: var(--font-interface);
 }
 
 .xlsx-reader-formula-safety {
@@ -1126,6 +1141,8 @@
 }
 
 .xlsx-reader-cell-content {
+  position: relative;
+  z-index: 2;
   display: inline-block;
   max-width: 100%;
   overflow: hidden;
@@ -1136,14 +1153,38 @@
 
 .xlsx-reader-cell.has-formula::after {
   position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 0;
+  height: 0;
+  border-right: 5px solid var(--interactive-accent);
+  border-top: 5px solid transparent;
+  content: "";
+  opacity: 0.55;
+}
+
+.xlsx-reader-cell.has-comment::before {
+  position: absolute;
   top: 1px;
   right: 1px;
   width: 0;
   height: 0;
-  border-top: 5px solid var(--interactive-accent);
+  border-top: 7px solid var(--color-red);
   border-left: 5px solid transparent;
   content: "";
-  opacity: 0.55;
+  opacity: 0.9;
+}
+
+.xlsx-reader-data-bar {
+  position: absolute;
+  z-index: 1;
+  top: 3px;
+  bottom: 3px;
+  left: 1px;
+  min-width: 1px;
+  border-radius: 1px;
+  opacity: 0.36;
+  pointer-events: none;
 }
 
 .xlsx-reader-cell.has-hyperlink {
@@ -1166,6 +1207,102 @@
 .xlsx-reader-cell.is-selection-focus {
   z-index: 6 !important;
   box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
+.xlsx-reader-drawing {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.xlsx-reader-drawing:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.xlsx-reader-drawing-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.xlsx-reader-drawing-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.xlsx-reader-chart {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 6px;
+}
+
+.xlsx-reader-chart-title {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xlsx-reader-chart-title.is-truncated::after {
+  color: var(--text-muted);
+  content: " …";
+}
+
+.xlsx-reader-chart-plot {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.xlsx-reader-chart-axis {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+}
+
+.xlsx-reader-chart-area {
+  opacity: 0.28;
+}
+
+.xlsx-reader-chart-legend {
+  display: flex;
+  min-height: 18px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.xlsx-reader-chart-legend span::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--xlsx-chart-series-color);
+  content: "";
+}
+
+.xlsx-reader-chart-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
 }
 
 .xlsx-reader-sheet-tabs {
@@ -1269,6 +1406,7 @@
   }
 
   .xlsx-reader-cached-value,
+  .xlsx-reader-comment-detail,
   .xlsx-reader-formula-safety {
     display: none;
   }

@@ -52,6 +52,12 @@ export interface XlsxCellStyle {
   alignment: XlsxAlignmentStyle;
 }
 
+export interface XlsxDifferentialStyle {
+  font?: Partial<XlsxFontStyle>;
+  fill?: Partial<XlsxFillStyle>;
+  border?: Partial<XlsxBorderStyle>;
+}
+
 export interface XlsxFormula {
   text: string;
   cachedValue: XlsxCellValue;
@@ -73,9 +79,101 @@ export interface XlsxImage {
   mimeType: string;
   row: number;
   column: number;
+  anchor: XlsxDrawingAnchor;
   name?: string;
   description?: string;
 }
+
+export interface XlsxDrawingPosition {
+  row: number;
+  column: number;
+  rowOffsetPx: number;
+  columnOffsetPx: number;
+}
+
+export interface XlsxDrawingAnchor {
+  from: XlsxDrawingPosition;
+  to?: XlsxDrawingPosition;
+  widthPx?: number;
+  heightPx?: number;
+}
+
+export interface XlsxComment {
+  ref: string;
+  row: number;
+  column: number;
+  author: string;
+  text: string;
+}
+
+export type XlsxChartKind =
+  | "area"
+  | "bar"
+  | "line"
+  | "pie"
+  | "unsupported";
+
+export interface XlsxChartSeries {
+  name: string;
+  categories: readonly string[];
+  values: readonly number[];
+}
+
+export interface XlsxChart {
+  path: string;
+  kind: XlsxChartKind;
+  title: string;
+  anchor: XlsxDrawingAnchor;
+  series: readonly XlsxChartSeries[];
+  truncated: boolean;
+}
+
+export interface XlsxConditionalValue {
+  type: "min" | "max" | "num" | "percent" | "percentile";
+  value?: number;
+}
+
+export interface XlsxConditionalFormattingRuleBase {
+  priority: number;
+  ranges: readonly XlsxMergeRange[];
+  stopIfTrue: boolean;
+}
+
+export interface XlsxCellIsRule
+extends XlsxConditionalFormattingRuleBase {
+  type: "cellIs";
+  operator:
+    | "between"
+    | "notBetween"
+    | "equal"
+    | "notEqual"
+    | "greaterThan"
+    | "lessThan"
+    | "greaterThanOrEqual"
+    | "lessThanOrEqual";
+  values: readonly number[];
+  style?: XlsxDifferentialStyle;
+}
+
+export interface XlsxColorScaleRule
+extends XlsxConditionalFormattingRuleBase {
+  type: "colorScale";
+  thresholds: readonly XlsxConditionalValue[];
+  colors: readonly XlsxColor[];
+}
+
+export interface XlsxDataBarRule
+extends XlsxConditionalFormattingRuleBase {
+  type: "dataBar";
+  minimum: XlsxConditionalValue;
+  maximum: XlsxConditionalValue;
+  color: XlsxColor;
+}
+
+export type XlsxConditionalFormattingRule =
+  | XlsxCellIsRule
+  | XlsxColorScaleRule
+  | XlsxDataBarRule;
 
 export type XlsxCellValue =
   | string
@@ -129,4 +227,11 @@ export interface XlsxPackageDiagnostics {
   ignoredExternalRelationships: number;
   ignoredDataConnections: number;
   formulaCalculation: "cached-only";
+}
+
+export interface XlsxWorksheetParseDiagnostics {
+  mode: "streamed";
+  inputChunks: number;
+  maximumSheetDataBufferCharacters: number;
+  metadataCharacters: number;
 }

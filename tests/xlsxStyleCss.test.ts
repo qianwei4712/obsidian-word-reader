@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   xlsxCellStyleToCss,
   xlsxColorToCss,
+  xlsxDifferentialStyleToCss,
 } from "../src/xlsx/xlsxStyleCss";
 import { XlsxPackage } from "../src/xlsx/xlsxPackage";
 import { createRichXlsx } from "./xlsxFixture";
@@ -28,4 +29,24 @@ void test("XLSX colors reject malformed RGB and resolve bounded themes", () => {
   assert.equal(xlsxColorToCss({ rgb: "FF112233" }), "#112233");
   assert.equal(xlsxColorToCss({ theme: 4 }), "#4472c4");
   assert.equal(xlsxColorToCss({ theme: 100 }), null);
+});
+
+void test("XLSX differential styles override only declared properties", () => {
+  assert.deepEqual(
+    xlsxDifferentialStyleToCss({
+      font: {
+        bold: true,
+        color: { rgb: "FFFFFFFF" },
+      },
+      fill: {
+        pattern: "solid",
+        foreground: { rgb: "FFC00000" },
+      },
+    }),
+    {
+      fontWeight: "700",
+      color: "#ffffff",
+      backgroundColor: "#c00000",
+    },
+  );
 });

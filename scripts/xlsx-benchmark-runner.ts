@@ -4,7 +4,10 @@ import { performance } from "node:perf_hooks";
 import { XlsxPackage } from "../src/xlsx/xlsxPackage";
 import { XlsxVirtualGrid } from "../src/xlsx/xlsxVirtualGrid";
 import { XlsxWorksheetCancelledError } from "../src/xlsx/xlsxWorksheet";
-import { createRichXlsx } from "../tests/xlsxFixture";
+import {
+  createLargeDenseXlsx,
+  createRichXlsx,
+} from "../tests/xlsxFixture";
 
 interface XlsxBenchmarkResult {
   fixture: string;
@@ -15,6 +18,13 @@ interface XlsxBenchmarkResult {
   cancellationPassed: boolean;
   populatedCells: number;
   rowCount: number;
+  denseParseMs: number;
+  densePeakHeapMiB: number;
+  denseRows: number;
+  densePopulatedCells: number;
+  streamedChunkCount: number;
+  maximumSheetDataBufferKiB: number;
+  streamedParsingPassed: boolean;
 }
 
 void runBenchmark().catch((error: unknown) => {
@@ -80,6 +90,25 @@ async function runBenchmark(): Promise<void> {
   }
   sampleHeap();
 
+  workbook.clearCaches();
+  const denseBuffer = await createLargeDenseXlsx();
+  runGarbageCollection();
+  const denseBaselineHeap = process.memoryUsage().heapUsed;
+  let densePeakHeap = denseBaselineHeap;
+  const sampleDenseHeap = (): void => {
+    densePeakHeap = Math.max(
+      densePeakHeap,
+      process.memoryUsage().heapUsed,
+    );
+  };
+  const denseParseStart = performance.now();
+  const denseWorkbook = await XlsxPackage.load(denseBuffer);
+  sampleDenseHeap();
+  const denseWorksheet = await denseWorkbook.getWorksheet(0);
+  sampleDenseHeap();
+  const denseParseMs = performance.now() - denseParseStart;
+  denseWorkbook.clearCaches();
+
   frameDurations.sort((left, right) => left - right);
   const percentileIndex = Math.floor(frameDurations.length * 0.95);
   const result: XlsxBenchmarkResult = {
@@ -91,6 +120,21 @@ async function runBenchmark(): Promise<void> {
     cancellationPassed,
     populatedCells: worksheet.populatedCellCount,
     rowCount: worksheet.rowCount,
+    denseParseMs: round(denseParseMs),
+    densePeakHeapMiB: round(
+      (densePeakHeap - denseBaselineHeap) / (1024 * 1024),
+    ),
+    denseRows: denseWorksheet.rowCount,
+    densePopulatedCells: denseWorksheet.populatedCellCount,
+    streamedChunkCount: denseWorksheet.parseDiagnostics.inputChunks,
+    maximumSheetDataBufferKiB: round(
+      denseWorksheet.parseDiagnostics.maximumSheetDataBufferCharacters /
+        1024,
+    ),
+    streamedParsingPassed:
+      denseWorksheet.parseDiagnostics.inputChunks > 1 &&
+      denseWorksheet.parseDiagnostics.maximumSheetDataBufferCharacters <
+        256 * 1024,
   };
 
   console.log(`XLSX_BENCHMARK_JSON=${JSON.stringify(result)}`);

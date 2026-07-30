@@ -46,7 +46,7 @@ void test("XlsxPackage parses safe workbook structure and rich cell data", async
   const sheet = await workbook.getWorksheet(0);
   assert.equal(sheet.rowCount, 100_000);
   assert.equal(sheet.columnCount, 26);
-  assert.equal(sheet.populatedCellCount, 8);
+  assert.equal(sheet.populatedCellCount, 12);
   assert.deepEqual(sheet.frozenPane, {
     rows: 1,
     columns: 1,
@@ -60,6 +60,37 @@ void test("XlsxPackage parses safe workbook structure and rich cell data", async
   assert.equal(sheet.getCell(1, 1)?.displayValue, "12,345.68");
   assert.equal(sheet.getCell(1, 2)?.displayValue, "12.50%");
   assert.equal(sheet.getCell(99_999, 25)?.value, "Sparse tail");
+  assert.deepEqual(sheet.getComment(1, 1), {
+    ref: "B2",
+    row: 1,
+    column: 1,
+    author: "Ada",
+    text: "Review cached revenue before publishing.",
+  });
+  assert.equal(sheet.getCell(2, 6), undefined);
+  assert.deepEqual(sheet.getComment(2, 6), {
+    ref: "G3",
+    row: 2,
+    column: 6,
+    author: "Ada",
+    text: "Blank cells keep comment markers.",
+  });
+  assert.equal(sheet.conditionalFormattingRules.length, 3);
+  assert.deepEqual(sheet.getConditionalPresentation(1, 1)?.css, {
+    fontWeight: "700",
+    color: "#ffffff",
+    backgroundColor: "#c00000",
+  });
+  assert.equal(
+    sheet.getConditionalPresentation(2, 1)?.css.backgroundColor,
+    "#f8696b",
+  );
+  assert.ok(
+    Math.abs(
+      (sheet.getConditionalPresentation(2, 2)?.dataBar?.fraction ?? 0) -
+        3 / 7,
+    ) < 0.0001,
+  );
 });
 
 void test("XLSX formulas remain cached-only and links are metadata only", async () => {
@@ -89,8 +120,48 @@ void test("XLSX image metadata and raster bytes stay package-local", async () =>
     mimeType: "image/png",
     row: 4,
     column: 3,
+    anchor: {
+      from: {
+        row: 4,
+        column: 3,
+        rowOffsetPx: 0,
+        columnOffsetPx: 0,
+      },
+      to: undefined,
+      widthPx: 100,
+      heightPx: 100,
+    },
     name: "Sample image",
     description: "One pixel fixture",
+  });
+  assert.deepEqual(sheet.charts[0], {
+    path: "xl/charts/chart1.xml",
+    kind: "bar",
+    title: "Quarterly sales",
+    anchor: {
+      from: {
+        row: 4,
+        column: 6,
+        rowOffsetPx: 0,
+        columnOffsetPx: 0,
+      },
+      to: {
+        row: 12,
+        column: 10,
+        rowOffsetPx: 0,
+        columnOffsetPx: 0,
+      },
+      widthPx: undefined,
+      heightPx: undefined,
+    },
+    series: [
+      {
+        name: "Revenue",
+        categories: ["Q1", "Q2", "Q3"],
+        values: [10, 20, 15],
+      },
+    ],
+    truncated: false,
   });
   const image = await workbook.getImageBinary(sheet.images[0].path);
   assert.equal(image?.[0], 0x89);
@@ -106,10 +177,24 @@ void test("XLSX worksheet parsing can be cancelled without caching a result", as
   assert.equal((await workbook.getWorksheet(0)).rowCount, 100_000);
 });
 
+void test("XLSX worksheets report streamed decompression progress", async () => {
+  const workbook = await XlsxPackage.load(await createRichXlsx());
+  const progress: number[] = [];
+  await workbook.getWorksheet(0, {
+    onProgress: (percent) => progress.push(percent),
+  });
+  assert.ok(progress.length > 0);
+  assert.equal(progress.at(-1), 100);
+  assert.ok(progress.every((percent) => percent >= 0 && percent <= 100));
+});
+
 void test("XLSX packages reject macros, OLE objects, and script media", async () => {
   const base = await createRichXlsx();
   const cases: Array<[string, string | Uint8Array, OoxmlPolicyError["kind"]]> = [
     ["xl/vbaProject.bin", Uint8Array.from([1]), "active-content"],
+    ["xl/macroSheets/sheet1.xml", "<worksheet/>", "active-content"],
+    ["xl/dialogSheets/sheet1.xml", "<dialogsheet/>", "active-content"],
+    ["xl/activeX/activeX1.xml", "<activeX/>", "active-content"],
     ["xl/embeddings/oleObject1.bin", Uint8Array.from([1]), "ole-object"],
     ["xl/media/active.svg", "<svg><script/></svg>", "script-media"],
   ];
@@ -121,6 +206,23 @@ void test("XLSX packages reject macros, OLE objects, and script media", async ()
         error instanceof OoxmlPolicyError && error.kind === kind,
     );
   }
+});
+
+void test("XLSM macro-enabled content types remain rejected", async () => {
+  const macroEnabled = await addOoxmlEntry(
+    await createRichXlsx(),
+    "[Content_Types].xml",
+    `<?xml version="1.0"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.ms-excel.sheet.macroEnabled.main+xml"/>
+</Types>`,
+  );
+  await assert.rejects(
+    () => XlsxPackage.load(macroEnabled),
+    (error: unknown) =>
+      error instanceof OoxmlPolicyError &&
+      error.kind === "active-content",
+  );
 });
 
 void test("XlsxPackage rejects missing workbook parts and encrypted containers", async () => {

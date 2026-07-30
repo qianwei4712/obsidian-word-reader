@@ -168,6 +168,36 @@ network or execution boundary:
 - Cancel workbook search and summary collection during reload, worksheet/file
   switching, and view close; continue clearing bounded package caches.
 
+## 3.2.0 XLSX Rich Content and Large Workbook Scope
+
+The 3.2.0 line adds bounded rich-content previews and removes full-worksheet
+XML retention from the large-workbook path:
+
+- Parse legacy cell-comment authors and complete rich text, expose comment
+  markers for populated and blank cells, and show the selected comment in the
+  read-only formula bar.
+- Render package-local PNG/JPEG/GIF/BMP images with one-cell or two-cell
+  anchors. Image bytes, mounted drawings, and recyclable Blob URLs all have
+  fixed limits; external image relationships remain ignored.
+- Render simplified bar, line, area, and pie previews from workbook-cached
+  series only. Unsupported chart types show an explicit fallback, formulas are
+  not recalculated, and external chart data is never fetched.
+- Apply literal numeric `cellIs` rules, two-/three-color scales, and data bars.
+  Parse no more than 256 conditional-formatting rules per worksheet, and let
+  differential styles override only properties declared by the rule.
+- Decompress and validate worksheet and shared-string XML in chunks, parse
+  worksheet rows incrementally, report loading progress, and cancel between
+  chunks and bounded row batches without retaining complete `sheetData` XML.
+- Keep no more than 12 worksheet drawings mounted, sample no more than 48
+  rendered chart points, and release rich-content resources on reload,
+  worksheet/file switch, and view close.
+- Benchmark at least 20,000 dense rows and 80,000 cells, including elapsed
+  parse time, peak heap, input-chunk count, maximum worksheet-data buffer,
+  cancellation, and virtual-grid DOM budgets.
+- Keep `.xlsm` unregistered after reviewing macro-enabled content types, VBA,
+  macro/dialog sheets, ActiveX, OLE, script media, external relationships, and
+  cached values in `XLSM_COMPATIBILITY.md`.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:
@@ -256,9 +286,27 @@ Run this checklist before publishing a stable release:
     the separate formula-copy action and confirm formula cells begin with `=`.
   - Confirm the formula bar shows complete stored formula text and cached
     values without recalculating the workbook.
+  - Open legacy comments by different authors, including a comment on a blank
+    cell. Confirm the grid marker and formula-bar detail show the complete
+    author and text without editing the workbook.
+  - Open package-local PNG/JPEG/GIF/BMP drawings with one-cell and two-cell
+    anchors. Confirm external image relationships never load, no more than 12
+    drawings mount together, and Blob URLs are released after sheet/file
+    switching and view close.
+  - Open cached bar, line, area, and pie charts. Confirm cached labels/values
+    render locally, unsupported chart types show a fallback, and formula or
+    external chart sources are never evaluated or fetched.
+  - Confirm literal numeric `cellIs`, two-/three-color-scale, and data-bar
+    rules affect only matching cells, while unsupported or malformed rules
+    remain inert.
+  - Open the generated 20,000-row/80,000-cell dense workbook. Confirm loading
+    progress advances, parsing can be cancelled between chunks, scrolling
+    remains virtualized, and the performance check reports a bounded
+    worksheet-data buffer and heap.
   - Create an XLSX summary note and confirm it contains worksheet dimensions,
-    visibility, named ranges, the current selection, and bounded workbook
-    previews. Confirm an existing same-name note opens without being replaced.
+    visibility, named ranges, rich-content counts, the current selection, and
+    bounded workbook previews. Confirm an existing same-name note opens
+    without being replaced.
   - Click an internal or safe external hyperlink, cancel the confirmation, and
     confirm nothing opens. Confirm `javascript:`, `file:`, external-workbook,
     and data-connection targets never load.
@@ -353,8 +401,8 @@ Not supported:
 - Password-protected or encrypted PowerPoint presentations.
 - Password-protected or encrypted Excel workbooks.
 - Direct rendering of legacy `.xls`, and registration of `.xlsm`.
-- XLSX pivot tables, slicers, full chart fidelity, comments, images, and
-  complex conditional formatting.
+- XLSX modern threaded comments, floating-object editing, pivot tables,
+  slicers, pixel-perfect chart fidelity, and complex conditional formatting.
 - PPTX animation, transitions, audio/video playback, macros, editing, charts,
   SmartArt, SVG/GIF/WebP media, and pixel-perfect PowerPoint rendering.
 - Perfect Microsoft Word layout fidelity for complex documents.
@@ -503,6 +551,27 @@ Not supported:
 - 重新加载、切表、切文件和关闭视图时取消工作簿搜索与摘要收集，并继续清空
   有界包缓存。
 
+### 3.2.0 XLSX 丰富内容与大工作簿范围
+
+3.2.0 增加有界的丰富内容预览，并从大工作簿路径中移除完整工作表 XML 保留：
+
+- 解析旧式单元格批注的作者和完整富文本，为有值及空白批注单元格显示标记，并
+  在只读公式栏中显示所选批注。
+- 使用单单元格或双单元格锚点渲染包内 PNG/JPEG/GIF/BMP 图片；图片字节、
+  挂载绘图和可回收 Blob URL 都有固定上限，外部图片关系继续忽略。
+- 仅使用工作簿缓存序列简化渲染柱状图、折线图、面积图和饼图；不支持的图表
+  显示明确占位，不重算公式，也不抓取外部图表数据。
+- 应用数值常量 `cellIs` 规则、双色/三色色阶和数据条；每张工作表最多解析
+  256 条条件格式规则，差异样式只覆盖规则明确声明的属性。
+- 分片解压和校验工作表及共享字符串 XML，逐行增量解析工作表、报告加载进度，
+  并可在分片与有界行批次之间取消，不保留完整 `sheetData` XML。
+- 同屏最多挂载 12 个工作表绘图，单图最多抽样渲染 48 个点；重新加载、切表、
+  切文件和关闭视图时释放丰富内容资源。
+- 稠密基准至少覆盖 20,000 行和 80,000 个单元格，记录解析耗时、峰值堆、
+  输入分片数、最大工作表数据缓冲、取消结果和虚拟网格 DOM 预算。
+- 在 `XLSM_COMPATIBILITY.md` 中评估启用宏的内容类型、VBA、宏/对话框工作表、
+  ActiveX、OLE、脚本媒体、外部关系和缓存值后，继续保持 `.xlsm` 不注册。
+
 ### 支持边界
 
 支持：
@@ -515,7 +584,8 @@ Not supported:
 - `.pptx` 按需缩略图挂载、协作取消渲染、生成资源清理和隐私安全渲染诊断。
 - `.xlsx` 工作表切换、冻结窗格、合并单元格、行列尺寸、基础样式与格式、
   公式缓存、名称框/命名区域、工作簿级搜索、隐藏表提示、缩放、TSV/Markdown
-  选区复制、摘要笔记和确认后超链接的本地只读虚拟网格。
+  选区复制、旧式批注、包内光栅图片、常见图表缓存预览、数值条件格式子集、
+  摘要笔记和确认后超链接的本地只读虚拟网格。
 - 从已渲染 DOCX 内容复制纯文本和 Markdown。
 - `.doc` 检测、外部打开和转换说明。
 - `.xls` 检测、外部打开和 `.xlsx` 转换说明。
@@ -529,7 +599,8 @@ Not supported:
 - 密码保护或加密 PowerPoint 演示文稿。
 - 密码保护或加密 Excel 工作簿。
 - 直接渲染旧版 `.xls`，以及注册 `.xlsm`。
-- XLSX 数据透视表、切片器、完整图表还原、批注、图片和复杂条件格式。
+- XLSX 现代线程批注、浮动对象编辑、数据透视表、切片器、像素级图表还原和
+  复杂条件格式。
 - PPTX 动画、切换效果、音视频播放、宏、编辑、图表、SmartArt、
   SVG/GIF/WebP 媒体和 PowerPoint 像素级还原。
 - 复杂 Word 排版与 Microsoft Word 完全一致。
