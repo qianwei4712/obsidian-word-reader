@@ -1,0 +1,28 @@
+{
+  "format": "pptx",
+  "fixture": "generated-1000-slide-pptx",
+  "description": "PPTX package, 1,000-slide metadata parse, first-readable content, search, navigation virtualization, scroll calculation, heap, DOM and package-cache budget. Timing and heap gates use the p95 of five isolated processes.",
+  "maximums": {
+    "p95.packageLoadMs": 1000,
+    "p95.parseMs": 2500,
+    "p95.firstReadableMs": 1250,
+    "p95.searchMs": 100,
+    "p95.navigationMs": 50,
+    "p95.scrollFrameP95Ms": 20,
+    "p95.peakHeapMiB": 128,
+    "p95.maximumDomNodes": 3000,
+    "p95.cacheEntries": 1148,
+    "p95.cacheAfterCleanup": 0
+  },
+  "minimums": {
+    "median.contentUnits": 1000,
+    "median.searchMatches": 1
+  },
+  "requirements": {
+    "checks.firstReadablePassed": true,
+    "checks.navigationPassed": true,
+    "checks.cacheWithinLimit": true,
+    "checks.cancellationPassed": true,
+    "checks.cleanupPassed": true
+  }
+}

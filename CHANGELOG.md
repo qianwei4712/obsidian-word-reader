@@ -1,5 +1,53 @@
 # Changelog
 
+## 3.3.0 - 2026-08-02
+
+### English
+
+#### Added
+
+- Added unified DOCX, PPTX, and XLSX performance baselines for package load,
+  parse, first readable content, search, navigation, scrolling, peak heap, DOM,
+  cache bounds, cancellation, cleanup, production bundle, and release zip.
+- Added five-run isolated-process sampling with raw results, median and p95
+  aggregates, format/stage budget failures, full machine-readable JSON, a
+  compact CI trend point, and a Markdown job summary.
+- Added a manual Obsidian Desktop calibration worksheet for activation, long
+  tasks, actual DOM, heap, and resources remaining after file close.
+- Added one privacy-safe runtime performance-diagnostic schema to successful
+  DOCX, PPTX, and XLSX sessions. It excludes document content, speaker notes,
+  cell values, internal XML, and absolute vault paths.
+
+#### Changed
+
+- CI now publishes performance results and trend points as 90-day artifacts
+  and adds the benchmark table to the job summary.
+- PPTX package metadata is included in cache diagnostics and all package caches
+  are explicitly cleared on replacement or close.
+- Preserved the existing XLSX first-window, scroll, heap, DOM, dense-parse, and
+  streamed-buffer budgets, the `500 KiB` production bundle limit, and the
+  `8 MiB` release zip limit.
+
+### 中文
+
+#### 新增
+
+- 为 DOCX、PPTX 和 XLSX 建立统一性能基线，覆盖包加载、解析、首个可读内容、
+  搜索、导航、滚动、峰值堆、DOM、缓存上限、取消、清理、生产 bundle 和发布包。
+- 每种格式在独立进程中运行五次，保留原始结果、中位数和 P95；预算失败可定位到
+  格式、阶段与指标，并输出完整机器可读 JSON、精简 CI 趋势点和 Markdown 摘要。
+- 增加 Obsidian Desktop 手动校准表，记录激活、长任务、实际 DOM、堆内存和文件
+  关闭后的剩余资源。
+- DOCX、PPTX 和 XLSX 成功会话统一使用隐私安全的运行时性能诊断 schema；诊断
+  不包含正文、演讲者备注、单元格值、内部 XML 或 vault 绝对路径。
+
+#### 变更
+
+- CI 将性能结果和趋势点保存为 90 天产物，并把基准表写入任务摘要。
+- PPTX 缓存诊断纳入元数据缓存；替换或关闭演示文稿时显式清空全部包缓存。
+- 保留现有 XLSX 首屏、滚动、堆、DOM、稠密解析和流式缓冲预算，以及
+  `500 KiB` 生产 bundle 与 `8 MiB` 发布包上限。
+
 ## 3.2.0 - 2026-07-30
 
 ### English

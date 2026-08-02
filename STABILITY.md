@@ -198,6 +198,25 @@ XML retention from the large-workbook path:
   macro/dialog sheets, ActiveX, OLE, script media, external relationships, and
   cached values in `XLSM_COMPATIBILITY.md`.
 
+## 3.3.0 Performance Baseline and Observability Scope
+
+- `npm run performance:check` measures DOCX, PPTX, and XLSX in five isolated
+  processes and reports every raw sample plus median and p95 aggregates.
+- Every format records package load, parse, first readable content, search,
+  navigation, scroll, peak heap, DOM, cache bounds, cancellation, and cleanup.
+- XLSX retains the 3.2.0 first-window, scroll, heap, DOM, dense-parse, and
+  streamed-buffer limits. Production `main.js` remains at most `500 KiB`; the
+  three-file release zip remains at most `8 MiB`.
+- CI uploads the full JSON result, a compact trend point, and a Markdown job
+  summary. Budget failures identify the format, aggregate, stage/metric,
+  observed value, and threshold.
+- DOCX, PPTX, and XLSX expose the same Obsidian Desktop performance-diagnostic
+  schema. It contains numeric timing/resource observations only and excludes
+  document content, notes, cell values, internal XML, and absolute vault paths.
+- Node.js gates are calibrated with the manual Obsidian Desktop worksheet in
+  `benchmarks/OBSIDIAN_DESKTOP_BASELINE.md`, including activation, long tasks,
+  actual DOM, and resources remaining after close.
+
 ## Manual Test Checklist
 
 Run this checklist before publishing a stable release:

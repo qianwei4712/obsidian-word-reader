@@ -8,8 +8,9 @@ Community directory and before publishing later releases.
 - [ ] Run `npm ci` from a clean checkout.
 - [ ] Run `npm run check`.
 - [ ] Run `npm run release`.
-- [ ] Confirm `npm run performance:check` reports `dist/main.js` at or below
-  500 KiB.
+- [ ] Confirm `npm run performance:check` passes DOCX, PPTX, and XLSX budgets,
+  reports `dist/main.js` at or below 500 KiB and the release zip at or below
+  8 MiB, and writes the machine-readable CI trend artifacts.
 - [ ] Run `node scripts/release-check.mjs --tag X.Y.Z`.
 - [ ] Confirm all commands finish without warnings or errors.
 - [ ] Confirm `release/obsidian-word-reader-X.Y.Z.zip` contains only

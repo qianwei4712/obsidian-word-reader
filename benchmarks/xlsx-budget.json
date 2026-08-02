@@ -1,0 +1,35 @@
+{
+  "format": "xlsx",
+  "fixture": "generated-100000-row-sparse-and-20000-row-dense-xlsx",
+  "description": "XLSX sparse first-window and virtual-grid workload plus the 20,000-row/80,000-cell streamed dense parse. Existing 3.2.0 budgets remain unchanged and all timing and heap gates use the p95 of five isolated processes.",
+  "maximums": {
+    "p95.packageLoadMs": 2000,
+    "p95.parseMs": 2000,
+    "p95.firstReadableMs": 2000,
+    "p95.searchMs": 1000,
+    "p95.navigationMs": 100,
+    "p95.scrollFrameP95Ms": 20,
+    "p95.peakHeapMiB": 192,
+    "p95.maximumDomNodes": 3000,
+    "p95.cacheEntries": 10,
+    "p95.cacheAfterCleanup": 0,
+    "p95.denseParseMs": 3000,
+    "p95.densePeakHeapMiB": 192,
+    "p95.maximumSheetDataBufferKiB": 256
+  },
+  "minimums": {
+    "median.contentUnits": 100000,
+    "median.searchMatches": 1,
+    "median.denseRows": 20000,
+    "median.densePopulatedCells": 80000,
+    "median.streamedChunkCount": 2
+  },
+  "requirements": {
+    "checks.firstReadablePassed": true,
+    "checks.navigationPassed": true,
+    "checks.cacheWithinLimit": true,
+    "checks.cancellationPassed": true,
+    "checks.cleanupPassed": true,
+    "checks.streamedParsingPassed": true
+  }
+}

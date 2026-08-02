@@ -1,0 +1,28 @@
+{
+  "format": "docx",
+  "fixture": "generated-100-page-docx",
+  "description": "DOCX package, structural parse, first-readable content, search, navigation, scroll calculation, heap, DOM and lifecycle budget. Timing and heap gates use the p95 of five isolated processes.",
+  "maximums": {
+    "p95.packageLoadMs": 250,
+    "p95.parseMs": 250,
+    "p95.firstReadableMs": 500,
+    "p95.searchMs": 50,
+    "p95.navigationMs": 50,
+    "p95.scrollFrameP95Ms": 20,
+    "p95.peakHeapMiB": 64,
+    "p95.maximumDomNodes": 2000,
+    "p95.cacheEntries": 1,
+    "p95.cacheAfterCleanup": 0
+  },
+  "minimums": {
+    "median.contentUnits": 100,
+    "median.searchMatches": 1
+  },
+  "requirements": {
+    "checks.firstReadablePassed": true,
+    "checks.navigationPassed": true,
+    "checks.cacheWithinLimit": true,
+    "checks.cancellationPassed": true,
+    "checks.cleanupPassed": true
+  }
+}

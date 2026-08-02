@@ -28,3 +28,20 @@ jobs:
 
       - name: Check
         run: npm run check
+
+      - name: Add performance summary
+        if: ${{ always() && hashFiles('benchmark-results/performance-summary.md') != '' }}
+        shell: bash
+        run: cat benchmark-results/performance-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload performance trend point
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: office-reader-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            benchmark-results/performance.latest.json
+            benchmark-results/performance-trend.json
+            benchmark-results/performance-summary.md
+          if-no-files-found: warn
+          retention-days: 90

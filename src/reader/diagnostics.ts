@@ -10,7 +10,7 @@ export interface ReaderDiagnosticReport<Details = Record<string, unknown>> {
   product: "Office Reader";
   schemaVersion: 1;
   format: ReaderFormat;
-  kind: "error" | "render";
+  kind: "error" | "render" | "performance";
   file: {
     name: string;
     sizeBytes: number;
@@ -44,7 +44,7 @@ export function createReaderDiagnostics<Category extends string>(
 
 export function createReaderDiagnosticReport<Details>(
   format: ReaderFormat,
-  kind: "error" | "render",
+  kind: "error" | "render" | "performance",
   file: ReaderDiagnosticFile,
   summary: string,
   details: Details,

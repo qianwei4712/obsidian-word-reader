@@ -11,6 +11,11 @@ import { openExternalFile } from "../commands/openExternal";
 import type WordReaderPlugin from "../main";
 import type { ReaderCapability } from "../reader/capabilities";
 import { ReaderLifecycle } from "../reader/lifecycle";
+import { formatReaderDiagnosticReport } from "../reader/diagnostics";
+import {
+  createReaderPerformanceDiagnosticReport,
+  ReaderPerformanceTracker,
+} from "../reader/performanceDiagnostics";
 import type { ReaderViewState } from "../reader/readingState";
 import type { ReaderSession } from "../reader/session";
 import { OfficeReaderShell } from "../reader/shell";
@@ -151,6 +156,10 @@ export class XlsxSession extends FileView implements ReaderSession {
     Promise<string | null>
   >();
   private imageResourceGeneration = 0;
+  private readonly performanceTracker = new ReaderPerformanceTracker();
+  private performanceLoadStartedAt: number | null = null;
+  private firstReadableRecorded = false;
+  private maximumDomNodes = 0;
   private readonly readerStatus = new ReaderStatusController((status) => {
     this.renderStatus(status);
   });
@@ -225,6 +234,42 @@ export class XlsxSession extends FileView implements ReaderSession {
   async reload(): Promise<void> {
     if (this.file) {
       await this.loadWorkbook(this.file);
+    }
+  }
+
+  async copyDiagnostics(): Promise<void> {
+    const file = this.file;
+    const workbook = this.workbook;
+    if (!file || !workbook) {
+      return;
+    }
+    const cache = workbook.getCacheDiagnostics();
+    const report = createReaderPerformanceDiagnosticReport(
+      "xlsx",
+      {
+        name: file.name,
+        size: file.stat.size,
+        mtime: file.stat.mtime,
+      },
+      this.performanceTracker.snapshot({
+        domNodes: this.maximumDomNodes,
+        cacheEntries: cache.worksheets + cache.images,
+        cacheLimit: cache.worksheetLimit + cache.imageLimit,
+        retainedResources:
+          this.imageObjectUrls.size + this.pendingImageObjectUrls.size,
+      }),
+    );
+    try {
+      await navigator.clipboard.writeText(
+        formatReaderDiagnosticReport(report),
+      );
+      new Notice(this.plugin.text.notices.copiedDiagnostics);
+    } catch (error) {
+      new Notice(
+        this.plugin.text.notices.couldNotCopyDiagnostics(
+          getErrorMessage(error),
+        ),
+      );
     }
   }
 
@@ -615,7 +660,17 @@ export class XlsxSession extends FileView implements ReaderSession {
   }
 
   private async loadWorkbook(file: TFile): Promise<void> {
+    const previousToken = this.loadLifecycle.currentToken;
+    this.performanceTracker.reset();
+    this.performanceLoadStartedAt = performance.now();
+    this.firstReadableRecorded = false;
+    this.maximumDomNodes = 0;
     const token = this.loadLifecycle.begin();
+    if (previousToken > 0) {
+      this.performanceTracker.recordCancellation(
+        !this.loadLifecycle.isCurrent(previousToken),
+      );
+    }
     this.sheetLifecycle.cancel();
     this.searchLifecycle.cancel();
     this.summaryLifecycle.cancel();
@@ -634,7 +689,12 @@ export class XlsxSession extends FileView implements ReaderSession {
 
     this.setStatus(this.text.status.reading(file.name), false, true);
     try {
+      const packageLoadStartedAt = performance.now();
       const workbook = await this.adapter.open(this.app, file);
+      this.performanceTracker.recordTiming(
+        "packageLoadMs",
+        performance.now() - packageLoadStartedAt,
+      );
       if (!this.loadLifecycle.isCurrent(token)) {
         workbook.clearCaches();
         return;
@@ -686,6 +746,7 @@ export class XlsxSession extends FileView implements ReaderSession {
     let lastReportedProgress = -1;
 
     try {
+      const parseStartedAt = performance.now();
       const worksheet = await workbook.getWorksheet(index, {
         isCancelled: () =>
           !this.sheetLifecycle.isCurrent(token) ||
@@ -716,6 +777,10 @@ export class XlsxSession extends FileView implements ReaderSession {
         return;
       }
       this.worksheet = worksheet;
+      this.performanceTracker.recordTiming(
+        "parseMs",
+        performance.now() - parseStartedAt,
+      );
       this.virtualGrid = new XlsxVirtualGrid(worksheet);
       this.selectionAnchor = { row: 0, column: 0 };
       this.selectionFocus = { row: 0, column: 0 };
@@ -734,6 +799,7 @@ export class XlsxSession extends FileView implements ReaderSession {
       this.refreshSearchResultKeys();
     } catch (error) {
       if (error instanceof XlsxWorksheetCancelledError) {
+        this.performanceTracker.recordCancellation(true);
         return;
       }
       if (
@@ -766,6 +832,10 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.clearWorksheet();
     this.sheetTabsEl?.empty();
     this.nameSuggestionsEl?.empty();
+    this.performanceTracker.recordCleanup(
+      this.imageObjectUrls.size === 0 &&
+        this.pendingImageObjectUrls.size === 0,
+    );
   }
 
   private renderSheetTabs(): void {
@@ -874,7 +944,22 @@ export class XlsxSession extends FileView implements ReaderSession {
     }
     this.renderFrameId = this.contentEl.win.requestAnimationFrame(() => {
       this.renderFrameId = null;
+      const startedAt = performance.now();
       this.renderGrid();
+      const durationMs = performance.now() - startedAt;
+      this.performanceTracker.recordScrollFrame(durationMs);
+      this.maximumDomNodes = Math.max(
+        this.maximumDomNodes,
+        this.rootEl?.querySelectorAll("*").length ?? 0,
+      );
+      if (!this.firstReadableRecorded && this.worksheet) {
+        this.performanceTracker.recordTiming(
+          "firstReadableMs",
+          performance.now() -
+            (this.performanceLoadStartedAt ?? performance.now()),
+        );
+        this.firstReadableRecorded = true;
+      }
     });
   }
 
@@ -1781,6 +1866,7 @@ export class XlsxSession extends FileView implements ReaderSession {
       this.setReadyStatus();
       return;
     }
+    const searchStartedAt = performance.now();
     try {
       const results = await searchXlsxWorkbook(
         workbook,
@@ -1807,6 +1893,7 @@ export class XlsxSession extends FileView implements ReaderSession {
         !this.searchLifecycle.isCurrent(token) ||
         this.workbook !== workbook
       ) {
+        this.performanceTracker.recordCancellation(true);
         return;
       }
       this.searchResults = results;
@@ -1815,6 +1902,7 @@ export class XlsxSession extends FileView implements ReaderSession {
         error instanceof XlsxSearchCancelledError ||
         error instanceof XlsxWorksheetCancelledError
       ) {
+        this.performanceTracker.recordCancellation(true);
         return;
       }
       throw error;
@@ -1824,9 +1912,14 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.updateSearchCount();
     this.scheduleGridRender();
     this.setReadyStatus();
+    this.performanceTracker.recordTiming(
+      "searchMs",
+      performance.now() - searchStartedAt,
+    );
   }
 
   private async goToSearchResult(direction: -1 | 1): Promise<void> {
+    const navigationStartedAt = performance.now();
     if (this.searchResults.length === 0) {
       return;
     }
@@ -1852,6 +1945,10 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.updateFormulaBar();
     this.updateSearchCount();
     this.scheduleGridRender();
+    this.performanceTracker.recordTiming(
+      "navigationMs",
+      performance.now() - navigationStartedAt,
+    );
   }
 
   private refreshSearchResultKeys(): void {

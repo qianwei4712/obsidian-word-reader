@@ -29,6 +29,11 @@ import {
   formatWordDiagnostics,
 } from "./docxErrors";
 import { ReaderLifecycle } from "../reader/lifecycle";
+import { formatReaderDiagnosticReport } from "../reader/diagnostics";
+import {
+  createReaderPerformanceDiagnosticReport,
+  ReaderPerformanceTracker,
+} from "../reader/performanceDiagnostics";
 import {
   buildReaderOutline,
   getVisibleOutlineId,
@@ -135,6 +140,8 @@ export class DocxSession extends FileView implements ReaderSession {
   private outlineVisible = false;
   private searchQuery = "";
   private lastDiagnosticsText: string | null = null;
+  private readonly performanceTracker = new ReaderPerformanceTracker();
+  private maximumDomNodes = 0;
 
   constructor(leaf: WorkspaceLeaf, plugin: WordReaderPlugin) {
     super(leaf);
@@ -222,6 +229,31 @@ export class DocxSession extends FileView implements ReaderSession {
   async copyDiagnostics(): Promise<void> {
     if (this.lastDiagnosticsText) {
       await this.writeDiagnostics(this.lastDiagnosticsText);
+      return;
+    }
+    if (this.file && this.documentEl) {
+      const cacheEntries = [
+        this.buffer,
+        this.textSearchIndex,
+        this.extractedPlainText,
+        this.extractedMarkdown,
+      ].filter((value) => value !== null).length;
+      await this.writeDiagnostics(formatReaderDiagnosticReport(
+        createReaderPerformanceDiagnosticReport(
+          "docx",
+          {
+            name: this.file.name,
+            size: this.file.stat.size,
+            mtime: this.file.stat.mtime,
+          },
+          this.performanceTracker.snapshot({
+            domNodes: this.maximumDomNodes,
+            cacheEntries,
+            cacheLimit: 4,
+            retainedResources: this.documentResources.size,
+          }),
+        ),
+      ));
     }
   }
 
@@ -502,8 +534,16 @@ export class DocxSession extends FileView implements ReaderSession {
   ): Promise<void> {
     this.ensureLayout();
 
+    const previousToken = this.renderLifecycle.currentToken;
     const token = this.renderLifecycle.begin();
     const loadStartedAt = performance.now();
+    this.performanceTracker.reset();
+    if (previousToken > 0) {
+      this.performanceTracker.recordCancellation(
+        !this.renderLifecycle.isCurrent(previousToken),
+      );
+    }
+    this.maximumDomNodes = 0;
     this.cancelSearchWork();
     this.clearSearchHighlightsState();
     this.updateSearchState();
@@ -562,9 +602,11 @@ export class DocxSession extends FileView implements ReaderSession {
       }
 
       this.buffer = buffer;
+      const readDurationMs = performance.now() - readStartedAt;
+      this.performanceTracker.recordTiming("packageLoadMs", readDurationMs);
       await this.renderCurrentBuffer(token, renderKey, {
         loadStartedAt,
-        readDurationMs: performance.now() - readStartedAt,
+        readDurationMs,
       });
     } catch (error) {
       if (!this.renderLifecycle.isCurrent(token)) {
@@ -620,6 +662,7 @@ export class DocxSession extends FileView implements ReaderSession {
       const rendererStartedAt = performance.now();
       await renderDocx(this.buffer, renderTargetEl);
       const rendererDurationMs = performance.now() - rendererStartedAt;
+      this.performanceTracker.recordTiming("parseMs", rendererDurationMs);
       const analysis = analyzeRenderedDocument(renderTargetEl);
       renderedBlobUrls = analysis.blobUrls;
       const { imageCount, pageCount } = analysis;
@@ -635,6 +678,10 @@ export class DocxSession extends FileView implements ReaderSession {
       }
 
       const commitDurationMs = performance.now() - commitStartedAt;
+      this.performanceTracker.recordTiming(
+        "firstReadableMs",
+        performance.now() - (timings?.loadStartedAt ?? rendererStartedAt),
+      );
       this.textSearchIndex = analysis.textSearchIndex;
       this.documentHeadings = analysis.headings;
       this.renderedDocumentKey = renderKey;
@@ -653,6 +700,10 @@ export class DocxSession extends FileView implements ReaderSession {
       const outlineStartedAt = performance.now();
       await this.updateOutline(token);
       const outlineDurationMs = performance.now() - outlineStartedAt;
+      this.performanceTracker.recordTiming(
+        "navigationMs",
+        outlineDurationMs,
+      );
 
       if (!this.renderLifecycle.isCurrent(token)) {
         return;
@@ -661,6 +712,10 @@ export class DocxSession extends FileView implements ReaderSession {
       await this.restoreScrollPosition(token);
       this.scheduleSearchHighlights();
       this.setStatus(this.text.status.preview(this.file.name));
+      this.maximumDomNodes = Math.max(
+        this.maximumDomNodes,
+        this.documentEl.querySelectorAll("*").length,
+      );
       logRenderPerformance({
         fileName: this.file.name,
         fileSizeBytes: this.file.stat.size,
@@ -959,8 +1014,12 @@ export class DocxSession extends FileView implements ReaderSession {
     const scrollWindow = this.scrollEl?.win ?? window;
     this.scrollFrameId = scrollWindow.requestAnimationFrame(() => {
       this.scrollFrameId = null;
+      const startedAt = performance.now();
       this.saveReadingState();
       this.updateCurrentSection();
+      this.performanceTracker.recordScrollFrame(
+        performance.now() - startedAt,
+      );
     });
   }
 
@@ -1295,6 +1354,7 @@ export class DocxSession extends FileView implements ReaderSession {
       return;
     }
 
+    const searchStartedAt = performance.now();
     const matches = await this.textSearchIndex.find(query, {
       shouldContinue,
       yieldControl: yieldToBrowser,
@@ -1318,9 +1378,14 @@ export class DocxSession extends FileView implements ReaderSession {
 
     this.installSearchHighlights();
     this.updateSearchState({ scrollToCurrent: this.currentSearchIndex >= 0 });
+    this.performanceTracker.recordTiming(
+      "searchMs",
+      performance.now() - searchStartedAt,
+    );
   }
 
   private navigateSearch(direction: number): void {
+    const navigationStartedAt = performance.now();
     const matchCount = this.searchMatchRanges.length;
     if (matchCount === 0) {
       this.scheduleSearchHighlights();
@@ -1332,6 +1397,10 @@ export class DocxSession extends FileView implements ReaderSession {
         ? 0
         : (this.currentSearchIndex + direction + matchCount) % matchCount;
     this.updateSearchState({ scrollToCurrent: true });
+    this.performanceTracker.recordTiming(
+      "navigationMs",
+      performance.now() - navigationStartedAt,
+    );
   }
 
   private updateSearchState(options?: { scrollToCurrent?: boolean }): void {
@@ -1493,6 +1562,7 @@ export class DocxSession extends FileView implements ReaderSession {
     this.pendingRenderKey = null;
     this.clearSearchHighlightsState();
     this.documentResources.releaseActive();
+    this.performanceTracker.recordCleanup(this.documentResources.size === 0);
   }
 
   private clearRenderedDocument(): void {
@@ -1501,6 +1571,7 @@ export class DocxSession extends FileView implements ReaderSession {
     this.documentResources.releaseActive();
     this.documentEl?.empty();
     this.documentEl?.removeClass("is-long-document");
+    this.performanceTracker.recordCleanup(this.documentResources.size === 0);
     this.outlineListEl?.empty();
     this.outlineItems = [];
     this.documentHeadings = [];

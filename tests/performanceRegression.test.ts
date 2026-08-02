@@ -23,6 +23,16 @@ void test("200-slide PPTX metadata indexing stays within cache budgets", async (
   assert.ok(
     cache.relationshipEntries <= cache.limits.relationshipEntries,
   );
+  assert.ok(cache.metadataEntries <= cache.limits.metadataEntries);
+  presentation.clearCaches();
+  assert.deepEqual(presentation.getCacheDiagnostics(), {
+    xmlEntries: 0,
+    relationshipEntries: 0,
+    slideContextEntries: 0,
+    binaryEntries: 0,
+    metadataEntries: 0,
+    limits: cache.limits,
+  });
 });
 
 void test("1,000-slide PPTX uses a bounded navigation window", async () => {

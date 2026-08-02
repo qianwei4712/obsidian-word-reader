@@ -66,11 +66,13 @@ export interface PptxCacheDiagnostics {
   relationshipEntries: number;
   slideContextEntries: number;
   binaryEntries: number;
+  metadataEntries: number;
   limits: {
     xmlEntries: number;
     relationshipEntries: number;
     slideContextEntries: number;
     binaryEntries: number;
+    metadataEntries: number;
   };
 }
 
@@ -358,13 +360,23 @@ export class PptxPackage {
       relationshipEntries: this.relationshipCache.size,
       slideContextEntries: this.slideContextCache.size,
       binaryEntries: this.binaryCache.size,
+      metadataEntries: this.metadataCache.size,
       limits: {
         xmlEntries: this.xmlCache.capacity,
         relationshipEntries: this.relationshipCache.capacity,
         slideContextEntries: this.slideContextCache.capacity,
         binaryEntries: this.binaryCache.capacity,
+        metadataEntries: this.slideCount,
       },
     };
+  }
+
+  clearCaches(): void {
+    this.xmlCache.clear();
+    this.relationshipCache.clear();
+    this.slideContextCache.clear();
+    this.binaryCache.clear();
+    this.metadataCache.clear();
   }
 
   getImageMimeType(path: string): string | null {

@@ -26,8 +26,9 @@ Requires Obsidian Desktop 1.12.7 or newer.
   zoom, fit to window, fullscreen reading, and external open.
 - Search presentation titles, slide text, tables, and speaker notes; copy the
   current slide text and view speaker notes without leaving Obsidian.
-- Copy privacy-safe PPTX render diagnostics for compatibility reports without
-  including document content, speaker notes, or absolute vault paths.
+- Copy one privacy-safe performance-diagnostic schema for DOCX, PPTX, and XLSX
+  without including document content, speaker notes, cell values, internal XML,
+  or absolute vault paths.
 - Render headings, paragraphs, lists, tables, images, and page breaks where supported by `docx-preview`.
 - Keep the original Word file unchanged.
 - Follow Obsidian light and dark themes for the Word preview surface. Complex Word documents with explicit colors may still affect the final rendered appearance.
@@ -94,8 +95,8 @@ Requires Obsidian Desktop 1.12.7 or newer.
 - Show or hide the current slide's speaker notes.
 - Create a same-name presentation summary note with the current slide and
   numbered references for every slide.
-- Copy render diagnostics from the toolbar or command palette when reporting a
-  presentation compatibility or performance issue.
+- Copy performance diagnostics from the toolbar or command palette when
+  reporting an Office compatibility or performance issue.
 - The current slide, zoom, fit mode, scroll position, navigation visibility,
   and speaker-note visibility are restored per file.
 
@@ -205,14 +206,20 @@ Available settings:
   format, diagnostic kind, file name, size, modification time, a privacy-safe
   summary, and bounded format metrics. Raw renderer errors, document content,
   internal XML, and absolute vault paths are excluded.
-- Successful PPTX previews also expose copyable JSON render diagnostics with
-  package sizes, slide dimensions, object counts, generated-resource counts,
-  explicit font families, and render duration. Document text, speaker notes,
-  internal XML, and absolute vault paths are excluded.
+- Successful DOCX, PPTX, and XLSX previews expose the same JSON performance
+  snapshot with package/parse/first-readable/search/navigation/scroll timings,
+  peak heap when Chromium exposes it, actual DOM, bounded-cache, retained
+  resource, cancellation, and cleanup observations. Document text, speaker
+  notes, cell values, internal XML, and absolute vault paths are excluded.
 - Large file warnings include the file size and use the configured threshold from settings.
 
 ## Performance and Stability
 
+- `npm run performance:check` executes five isolated DOCX, PPTX, and XLSX
+  samples, gates p95 regressions by format and stage, and writes full JSON,
+  compact CI trend JSON, and a Markdown summary under `benchmark-results/`.
+  CI uploads these artifacts for cross-run comparison. The manual Obsidian
+  Desktop calibration worksheet is in `benchmarks/`.
 - A shared reader shell plus `OfficeReaderAdapter`, `ReaderSession`, and
   `ReaderCapabilities` contracts keep toolbars, status, errors, diagnostics,
   and cleanup behavior consistent. DOCX, PPTX, and XLSX rendering logic lives in

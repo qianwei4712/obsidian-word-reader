@@ -26,6 +26,7 @@ implements OfficeReaderAdapter<XlsxPackage, XlsxWorksheet> {
     copyMarkdown: true,
     summaryNote: true,
     openExternal: true,
+    diagnostics: true,
   });
 
   supports(file: Pick<TFile, "extension">): boolean {

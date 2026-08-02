@@ -7,6 +7,14 @@ export class RetainedResourceRegistry {
     private readonly releaseResource: (resource: string) => void,
   ) {}
 
+  get size(): number {
+    return new Set([
+      ...this.activeResources,
+      ...this.retainedResources.keys(),
+      ...this.pendingReleases,
+    ]).size;
+  }
+
   replace(resources: Iterable<string>): void {
     this.releaseActive();
     this.activeResources = new Set(resources);

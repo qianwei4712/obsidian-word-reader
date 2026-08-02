@@ -11,7 +11,6 @@ import { createNoteFromPptx } from "../commands/createNoteFromPptx";
 import { openExternalFile } from "../commands/openExternal";
 import {
   createPptxErrorDiagnosticReport,
-  createPptxDiagnosticReport,
   formatPptxDiagnosticReport,
 } from "./pptxDiagnostics";
 import { PptxPackage } from "./pptxPackage";
@@ -32,6 +31,11 @@ import {
 } from "./pptxRenderer";
 import { PptxTaskQueue } from "./pptxTaskQueue";
 import { ReaderLifecycle } from "../reader/lifecycle";
+import { formatReaderDiagnosticReport } from "../reader/diagnostics";
+import {
+  createReaderPerformanceDiagnosticReport,
+  ReaderPerformanceTracker,
+} from "../reader/performanceDiagnostics";
 import type { ReaderViewState } from "../reader/readingState";
 import {
   releaseResources,
@@ -136,6 +140,10 @@ export class PptxSession extends FileView implements ReaderSession {
   private renderedHeight = 0;
   private currentRenderDiagnostics: PptxRenderDiagnostics | null = null;
   private lastErrorDiagnostics: string | null = null;
+  private readonly performanceTracker = new ReaderPerformanceTracker();
+  private performanceLoadStartedAt: number | null = null;
+  private firstReadableRecorded = false;
+  private maximumDomNodes = 0;
   private readonly loadLifecycle = new ReaderLifecycle();
   private readonly slideLifecycle = new ReaderLifecycle();
   private readonly thumbnailLifecycle = new ReaderLifecycle();
@@ -285,29 +293,40 @@ export class PptxSession extends FileView implements ReaderSession {
   async copyRenderDiagnostics(): Promise<void> {
     const file = this.file;
     const presentation = this.presentation;
-    const render = this.currentRenderDiagnostics;
     if (!file) {
       new Notice(this.text.notices.noRenderDiagnostics);
       return;
     }
     let formatted = this.lastErrorDiagnostics;
-    if (presentation && render) {
+    if (presentation) {
       const entries = [...this.navigationEntries.values()];
-      formatted = formatPptxDiagnosticReport(
-        createPptxDiagnosticReport(
-          file,
-          presentation,
-          this.currentSlideIndex,
-          render,
+      const cache = presentation.getCacheDiagnostics();
+      const thumbnailResources = entries.reduce(
+        (count, entry) => count + entry.resources.size,
+        0,
+      );
+      formatted = formatReaderDiagnosticReport(
+        createReaderPerformanceDiagnosticReport(
+          "pptx",
           {
-            mounted: entries.filter((entry) => entry.mounted).length,
-            rendered: entries.filter((entry) => entry.rendered).length,
-            rendering: entries.filter((entry) => entry.rendering).length,
-            resourceCount: entries.reduce(
-              (count, entry) => count + entry.resources.size,
-              0,
-            ),
+            name: file.name,
+            size: file.stat.size,
+            mtime: file.stat.mtime,
           },
+          this.performanceTracker.snapshot({
+            domNodes: this.maximumDomNodes,
+            cacheEntries: cache.xmlEntries
+              + cache.relationshipEntries
+              + cache.slideContextEntries
+              + cache.binaryEntries
+              + cache.metadataEntries,
+            cacheLimit: cache.limits.xmlEntries
+              + cache.limits.relationshipEntries
+              + cache.limits.slideContextEntries
+              + cache.limits.binaryEntries
+              + cache.limits.metadataEntries,
+            retainedResources: this.slideResources.size + thumbnailResources,
+          }),
         ),
       );
     }
@@ -705,7 +724,17 @@ export class PptxSession extends FileView implements ReaderSession {
   }
 
   private async loadPresentation(file: TFile): Promise<void> {
+    const previousToken = this.loadLifecycle.currentToken;
+    this.performanceTracker.reset();
+    this.performanceLoadStartedAt = performance.now();
+    this.firstReadableRecorded = false;
+    this.maximumDomNodes = 0;
     const token = this.loadLifecycle.begin();
+    if (previousToken > 0) {
+      this.performanceTracker.recordCancellation(
+        !this.loadLifecycle.isCurrent(previousToken),
+      );
+    }
     this.slideLifecycle.cancel();
     this.thumbnailLifecycle.cancel();
     this.releasePresentation();
@@ -714,8 +743,15 @@ export class PptxSession extends FileView implements ReaderSession {
     this.setStatus(this.text.status.reading(file.name), false, true);
 
     try {
+      const packageLoadStartedAt = performance.now();
       const presentation = await this.adapter.open(this.app, file);
+      this.performanceTracker.recordTiming(
+        "packageLoadMs",
+        performance.now() - packageLoadStartedAt,
+      );
       if (!this.loadLifecycle.isCurrent(token)) {
+        presentation.clearCaches();
+        this.performanceTracker.recordCancellation(true);
         return;
       }
       this.presentation = presentation;
@@ -733,6 +769,7 @@ export class PptxSession extends FileView implements ReaderSession {
       this.buildNavigationList();
       this.updateNotes();
       this.updateNavigationControls();
+      const metadataStartedAt = performance.now();
       this.metadataPromise = presentation.indexSlideMetadata({
         concurrency: 4,
         priorityIndex: this.currentSlideIndex,
@@ -746,7 +783,27 @@ export class PptxSession extends FileView implements ReaderSession {
           this.scheduleMetadataUiRefresh();
         },
       });
+      void this.metadataPromise.then(
+        () => {
+          if (
+            this.loadLifecycle.isCurrent(token) &&
+            this.presentation === presentation
+          ) {
+            this.performanceTracker.recordTiming(
+              "parseMs",
+              performance.now() - metadataStartedAt,
+            );
+          }
+        },
+        () => undefined,
+      );
       void this.metadataPromise.catch((error: unknown) => {
+        if (
+          error instanceof Error &&
+          error.name === "PptxMetadataCancelledError"
+        ) {
+          this.performanceTracker.recordCancellation(true);
+        }
         if (
           this.loadLifecycle.isCurrent(token) &&
           this.presentation === presentation &&
@@ -770,6 +827,7 @@ export class PptxSession extends FileView implements ReaderSession {
   }
 
   private async goToSlide(index: number): Promise<void> {
+    const navigationStartedAt = performance.now();
     if (!this.presentation) {
       return;
     }
@@ -787,6 +845,10 @@ export class PptxSession extends FileView implements ReaderSession {
     this.saveReadingState();
     void this.loadMetadataForSlide(nextIndex);
     await this.renderCurrentSlide({ restoreScroll: true });
+    this.performanceTracker.recordTiming(
+      "navigationMs",
+      performance.now() - navigationStartedAt,
+    );
   }
 
   private async renderCurrentSlide(
@@ -844,6 +906,18 @@ export class PptxSession extends FileView implements ReaderSession {
       this.renderedHeight = rendered.height;
       this.currentRenderDiagnostics = rendered.diagnostics;
       this.canvasEl.appendChild(rendered.element);
+      this.maximumDomNodes = Math.max(
+        this.maximumDomNodes,
+        this.rootEl?.querySelectorAll("*").length ?? 0,
+      );
+      if (!this.firstReadableRecorded) {
+        this.performanceTracker.recordTiming(
+          "firstReadableMs",
+          performance.now() -
+            (this.performanceLoadStartedAt ?? performance.now()),
+        );
+        this.firstReadableRecorded = true;
+      }
       logPptxRenderPerformance(
         file.name,
         index,
@@ -862,6 +936,7 @@ export class PptxSession extends FileView implements ReaderSession {
       );
     } catch (error) {
       if (error instanceof PptxRenderCancelledError) {
+        this.performanceTracker.recordCancellation(true);
         return;
       }
       if (
@@ -908,6 +983,7 @@ export class PptxSession extends FileView implements ReaderSession {
   }
 
   private applyNavigationSearch(resetScroll = true): void {
+    const searchStartedAt = performance.now();
     const results = this.searchIndex.search(
       this.searchQuery,
       this.allSlideIndices,
@@ -932,6 +1008,10 @@ export class PptxSession extends FileView implements ReaderSession {
       this.slideListEl.scrollTop = 0;
     }
     this.renderNavigationWindow();
+    this.performanceTracker.recordTiming(
+      "searchMs",
+      performance.now() - searchStartedAt,
+    );
   }
 
   private scheduleNavigationWindowRender(): void {
@@ -941,7 +1021,11 @@ export class PptxSession extends FileView implements ReaderSession {
     const renderWindow = this.slideListEl.win;
     this.navigationRenderFrameId = renderWindow.requestAnimationFrame(() => {
       this.navigationRenderFrameId = null;
+      const startedAt = performance.now();
       this.renderNavigationWindow();
+      this.performanceTracker.recordScrollFrame(
+        performance.now() - startedAt,
+      );
     });
   }
 
@@ -1645,6 +1729,7 @@ export class PptxSession extends FileView implements ReaderSession {
     this.thumbnailQueue.clear();
     this.cancelNavigationWork();
     this.releaseThumbnailResources();
+    this.presentation?.clearCaches();
     this.presentation = null;
     this.metadataPromise = null;
     this.slideMetadata = [];
@@ -1660,6 +1745,7 @@ export class PptxSession extends FileView implements ReaderSession {
     this.applyNavigationSearch();
     this.updateNotes();
     this.updateNavigationControls();
+    this.performanceTracker.recordCleanup(this.slideResources.size === 0);
   }
 
   private releaseThumbnailResources(): void {
