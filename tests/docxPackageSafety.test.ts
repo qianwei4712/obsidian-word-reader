@@ -27,3 +27,34 @@ void test("DocxAdapter rejects active, OLE, and script-capable parts", async () 
     );
   }
 });
+
+void test("DocxAdapter allows SVG media when the option is enabled", async () => {
+  const base = await createLargeDocx(1);
+  const buffer = await addOoxmlEntry(
+    base,
+    "word/media/remote.svg",
+    Uint8Array.from([1]),
+  );
+  await assert.doesNotReject(() =>
+    validateDocxPackage(buffer, { allowSvgMedia: true }),
+  );
+  await assert.rejects(
+    () => validateDocxPackage(buffer, { allowSvgMedia: false }),
+    (error: unknown) =>
+      error instanceof OoxmlPolicyError && error.kind === "script-media",
+  );
+});
+
+void test("DocxAdapter keeps blocking other script media with SVG allowed", async () => {
+  const base = await createLargeDocx(1);
+  const buffer = await addOoxmlEntry(
+    base,
+    "word/media/remote.html",
+    Uint8Array.from([1]),
+  );
+  await assert.rejects(
+    () => validateDocxPackage(buffer, { allowSvgMedia: true }),
+    (error: unknown) =>
+      error instanceof OoxmlPolicyError && error.kind === "script-media",
+  );
+});

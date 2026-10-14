@@ -16,6 +16,7 @@ import {
 import {
   enforceOoxmlPackagePolicy,
   OoxmlPolicyError,
+  type OoxmlPackagePolicyOptions,
 } from "../ooxml/packagePolicy";
 import { loadOoxmlZip } from "../ooxml/jszipReader";
 import {
@@ -168,6 +169,7 @@ export class PptxPackage {
   static async load(
     buffer: ArrayBuffer,
     limits: ZipSafetyLimits = DEFAULT_PPTX_ZIP_LIMITS,
+    options: OoxmlPackagePolicyOptions = {},
   ): Promise<PptxPackage> {
     const zipSummary = validateZipSafety(buffer, limits);
     let zip: JSZip;
@@ -189,7 +191,7 @@ export class PptxPackage {
       );
     }
     try {
-      await enforceOoxmlPackagePolicy(zip, "pptx");
+      await enforceOoxmlPackagePolicy(zip, "pptx", options);
     } catch (error) {
       if (error instanceof OoxmlPolicyError) {
         throw new PptxPackageError("unsupported", error.message);

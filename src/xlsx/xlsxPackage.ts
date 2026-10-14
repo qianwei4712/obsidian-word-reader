@@ -67,6 +67,8 @@ const SAFE_IMAGE_MIME_TYPES = new Map([
 export interface XlsxLoadOptions {
   limits?: ZipSafetyLimits;
   isCancelled?: () => boolean;
+  /** Allow `.svg` media entries inside the package (opt-in). */
+  allowSvgMedia?: boolean;
 }
 
 export interface XlsxWorksheetLoadOptions {
@@ -142,7 +144,9 @@ export class XlsxPackage {
 
     ensureRequiredEntry(zip, "[Content_Types].xml");
     ensureRequiredEntry(zip, WORKBOOK_PATH);
-    await enforceOoxmlPackagePolicy(zip, "xlsx");
+    await enforceOoxmlPackagePolicy(zip, "xlsx", {
+      allowSvgMedia: options.allowSvgMedia,
+    });
     checkCancelled(options.isCancelled);
 
     const workbook = parsePackageXml(

@@ -12,6 +12,16 @@ export class OoxmlPolicyError extends Error {
   }
 }
 
+export interface OoxmlPackagePolicyOptions {
+  /**
+   * Allow `.svg` entries inside media folders. SVG is a standard OOXML image
+   * format embedded by Word 2016+ and Pandoc, and the renderer loads it
+   * through `<img>`, which does not execute scripts. All other
+   * script-capable media extensions remain blocked.
+   */
+  allowSvgMedia?: boolean;
+}
+
 const SCRIPT_MEDIA_EXTENSIONS = new Set([
   "bat",
   "cmd",
@@ -37,6 +47,7 @@ const SCRIPT_MEDIA_EXTENSIONS = new Set([
 export async function enforceOoxmlPackagePolicy(
   zip: JSZip,
   format: OoxmlFormat,
+  options: OoxmlPackagePolicyOptions = {},
 ): Promise<void> {
   const names = Object.keys(zip.files);
   for (const name of names) {
@@ -62,10 +73,13 @@ export async function enforceOoxmlPackagePolicy(
       );
     }
     const extension = lowerName.split(".").at(-1);
+    const allowSvgMedia =
+      options.allowSvgMedia === true && extension === "svg";
     if (
       lowerName.includes("/media/") &&
       extension &&
-      SCRIPT_MEDIA_EXTENSIONS.has(extension)
+      SCRIPT_MEDIA_EXTENSIONS.has(extension) &&
+      !allowSvgMedia
     ) {
       throw new OoxmlPolicyError(
         "script-media",

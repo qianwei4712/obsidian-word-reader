@@ -8,6 +8,14 @@ export interface ReaderTextExtraction {
   markdown?: string;
 }
 
+export interface ReaderOpenOptions {
+  /**
+   * Allow `.svg` media entries inside the package. Off by default; see
+   * `OoxmlPackagePolicyOptions.allowSvgMedia`.
+   */
+  allowSvgMedia?: boolean;
+}
+
 export interface OfficeReaderAdapter<OpenedDocument, TextSource> {
   readonly format: ReaderFormat;
   readonly viewType: string;
@@ -15,7 +23,11 @@ export interface OfficeReaderAdapter<OpenedDocument, TextSource> {
   readonly capabilities: ReaderCapabilities;
 
   supports(file: Pick<TFile, "extension">): boolean;
-  open(app: App, file: TFile): Promise<OpenedDocument>;
+  open(
+    app: App,
+    file: TFile,
+    options?: ReaderOpenOptions,
+  ): Promise<OpenedDocument>;
   extractText(source: TextSource): ReaderTextExtraction;
 }
 

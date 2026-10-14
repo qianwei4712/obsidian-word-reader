@@ -808,7 +808,9 @@ export class PptxSession extends FileView implements ReaderSession {
 
     try {
       const packageLoadStartedAt = performance.now();
-      const presentation = await this.adapter.open(this.app, file);
+      const presentation = await this.adapter.open(this.app, file, {
+        allowSvgMedia: this.plugin.settings.common.allowSvgMedia,
+      });
       this.performanceTracker.recordTiming(
         "packageLoadMs",
         performance.now() - packageLoadStartedAt,

@@ -16,6 +16,8 @@ export interface WordReaderText {
     showOutlineDesc: string;
     imagePreviewName: string;
     imagePreviewDesc: string;
+    allowSvgMediaName: string;
+    allowSvgMediaDesc: string;
     largeFileWarningName: string;
     largeFileWarningDesc: string;
     externalOpeningName: string;
@@ -170,6 +172,9 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
       imagePreviewName: "Image preview",
       imagePreviewDesc:
         "Allow clicking rendered Word images to open a larger preview.",
+      allowSvgMediaName: "Allow SVG media",
+      allowSvgMediaDesc:
+        "Allow previewing documents that embed SVG images (Word 2016+ and Pandoc export these). SVG renders through <img>, which does not execute scripts; all other script-capable media stays blocked.",
       largeFileWarningName: "Large file warning",
       largeFileWarningDesc:
         "Show a rendering warning when a Word file is larger than this size in MB.",
@@ -352,6 +357,9 @@ const WORD_READER_TEXT: Record<WordReaderLanguage, WordReaderText> = {
       showOutlineDesc: "打开 Word 预览时默认显示可点击的标题大纲。",
       imagePreviewName: "图片预览",
       imagePreviewDesc: "允许点击 Word 中渲染出的图片并打开更大的预览。",
+      allowSvgMediaName: "允许 SVG 媒体",
+      allowSvgMediaDesc:
+        "允许预览内嵌 SVG 图片的文档（Word 2016+ 与 Pandoc 导出常见）。SVG 经 <img> 渲染，不会执行脚本；其他可携带脚本的媒体仍会被拦截。",
       largeFileWarningName: "大文件提醒",
       largeFileWarningDesc:
         "当 Word 文件大于此大小时显示渲染提醒，单位为 MB。",

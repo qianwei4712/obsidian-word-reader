@@ -20,6 +20,8 @@ export interface CommonReaderSettings {
   language: WordReaderLanguage;
   defaultZoomPercent: number;
   largeFileWarningMb: number;
+  /** Allow `.svg` media entries inside Office packages (opt-in). */
+  allowSvgMedia: boolean;
 }
 
 export interface DocxReaderSettings {
@@ -61,6 +63,7 @@ export const DEFAULT_OFFICE_READER_SETTINGS: OfficeReaderSettings = {
     language: DEFAULT_SETTINGS.language,
     defaultZoomPercent: DEFAULT_SETTINGS.defaultZoomPercent,
     largeFileWarningMb: DEFAULT_SETTINGS.largeFileWarningMb,
+    allowSvgMedia: false,
   },
   docx: {
     defaultFitWidth: DEFAULT_SETTINGS.defaultFitWidth,
@@ -146,6 +149,10 @@ export function normalizeOfficeReaderSettings(
         MIN_LARGE_FILE_WARNING_MB,
         MAX_LARGE_FILE_WARNING_MB,
         DEFAULT_OFFICE_READER_SETTINGS.common.largeFileWarningMb,
+      ),
+      allowSvgMedia: readBoolean(
+        common.allowSvgMedia,
+        DEFAULT_OFFICE_READER_SETTINGS.common.allowSvgMedia,
       ),
     },
     docx: {

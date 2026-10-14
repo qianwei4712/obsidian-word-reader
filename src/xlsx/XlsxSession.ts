@@ -756,7 +756,9 @@ export class XlsxSession extends FileView implements ReaderSession {
     this.setStatus(this.text.status.reading(file.name), false, true);
     try {
       const packageLoadStartedAt = performance.now();
-      const workbook = await this.adapter.open(this.app, file);
+      const workbook = await this.adapter.open(this.app, file, {
+        allowSvgMedia: this.plugin.settings.common.allowSvgMedia,
+      });
       this.performanceTracker.recordTiming(
         "packageLoadMs",
         performance.now() - packageLoadStartedAt,

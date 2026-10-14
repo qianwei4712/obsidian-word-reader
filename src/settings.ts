@@ -115,6 +115,16 @@ export class WordReaderSettingTab extends PluginSettingTab {
         },
       },
       {
+        name: text.allowSvgMediaName,
+        desc: text.allowSvgMediaDesc,
+        control: {
+          type: "toggle",
+          key: "common.allowSvgMedia",
+          defaultValue:
+            DEFAULT_OFFICE_READER_SETTINGS.common.allowSvgMedia,
+        },
+      },
+      {
         name: text.largeFileWarningName,
         desc: text.largeFileWarningDesc,
         control: {
@@ -219,6 +229,17 @@ export class WordReaderSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
+      .setName(text.allowSvgMediaName)
+      .setDesc(text.allowSvgMediaDesc)
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.common.allowSvgMedia)
+          .onChange(async (value) => {
+            await this.setControlValue("common.allowSvgMedia", value);
+          });
+      });
+
+    new Setting(containerEl)
       .setName(text.largeFileWarningName)
       .setDesc(text.largeFileWarningDesc)
       .addText((input) => {
@@ -277,6 +298,8 @@ function getSettingValue(
       return settings.xlsx.defaultFitWidth;
     case "docx.enableImagePreview":
       return settings.docx.enableImagePreview;
+    case "common.allowSvgMedia":
+      return settings.common.allowSvgMedia;
     case "common.largeFileWarningMb":
       return settings.common.largeFileWarningMb;
     default:
@@ -315,6 +338,9 @@ function updateSetting(
       break;
     case "docx.enableImagePreview":
       next.docx.enableImagePreview = Boolean(value);
+      break;
+    case "common.allowSvgMedia":
+      next.common.allowSvgMedia = Boolean(value);
       break;
     case "common.largeFileWarningMb":
       next.common.largeFileWarningMb = Number(value);

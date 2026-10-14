@@ -3,6 +3,7 @@ import type { App, TFile } from "obsidian";
 import {
   supportsReaderFile,
   type OfficeReaderAdapter,
+  type ReaderOpenOptions,
   type ReaderTextExtraction,
 } from "../reader/adapters";
 import { defineReaderCapabilities } from "../reader/capabilities";
@@ -33,9 +34,15 @@ implements OfficeReaderAdapter<XlsxPackage, XlsxWorksheet> {
     return supportsReaderFile(this.extensions, file);
   }
 
-  async open(app: App, file: TFile): Promise<XlsxPackage> {
+  async open(
+    app: App,
+    file: TFile,
+    options?: ReaderOpenOptions,
+  ): Promise<XlsxPackage> {
     const buffer = await app.vault.readBinary(file);
-    return XlsxPackage.load(buffer);
+    return XlsxPackage.load(buffer, {
+      allowSvgMedia: options?.allowSvgMedia,
+    });
   }
 
   extractText(source: XlsxWorksheet): ReaderTextExtraction {

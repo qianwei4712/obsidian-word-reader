@@ -32,6 +32,7 @@ void test("migrateSettings converts flat data to the versioned format schema", (
       language: "en",
       defaultZoomPercent: 135,
       largeFileWarningMb: 64,
+      allowSvgMedia: false,
     },
     docx: {
       defaultFitWidth: true,

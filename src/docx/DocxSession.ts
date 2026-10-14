@@ -651,7 +651,9 @@ export class DocxSession extends FileView implements ReaderSession {
       }
 
       const readStartedAt = performance.now();
-      const buffer = await this.adapter.open(this.app, file);
+      const buffer = await this.adapter.open(this.app, file, {
+        allowSvgMedia: this.plugin.settings.common.allowSvgMedia,
+      });
       if (!this.isLoadCurrent(token)) {
         return;
       }

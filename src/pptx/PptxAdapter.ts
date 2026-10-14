@@ -3,6 +3,7 @@ import type { App, TFile } from "obsidian";
 import {
   supportsReaderFile,
   type OfficeReaderAdapter,
+  type ReaderOpenOptions,
   type ReaderTextExtraction,
 } from "../reader/adapters";
 import { defineReaderCapabilities } from "../reader/capabilities";
@@ -38,9 +39,13 @@ implements OfficeReaderAdapter<PptxPackage, PptxSlideMetadata> {
     return supportsReaderFile(this.extensions, file);
   }
 
-  async open(app: App, file: TFile): Promise<PptxPackage> {
+  async open(
+    app: App,
+    file: TFile,
+    options?: ReaderOpenOptions,
+  ): Promise<PptxPackage> {
     const buffer = await app.vault.readBinary(file);
-    return PptxPackage.load(buffer);
+    return PptxPackage.load(buffer, undefined, options);
   }
 
   extractText(source: PptxSlideMetadata): ReaderTextExtraction {

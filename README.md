@@ -186,6 +186,9 @@ Available settings:
 - Whether newly opened worksheets should fit the grid width by default.
 - Whether the outline is visible by default.
 - Whether rendered images can be clicked for larger preview.
+- Whether documents that embed SVG media may be previewed. SVG renders through
+  `<img>` and does not execute scripts; other script-capable media stays
+  blocked. Off by default.
 - Large file warning threshold in MB.
 - External opening note. The plugin uses the operating system default
   application for source Office files.
